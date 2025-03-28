@@ -1,2 +1,7 @@
-# sudostake_contracts_near
-SudoStake smart contracts implementation for NEAR protocol.
+# SudoStake NEAR
+
+## Build contracts
+```
+cd contracts/factory && cargo near build non-reproducible-wasm --locked
+cd contracts/vault && cargo near build non-reproducible-wasm --locked
+```
