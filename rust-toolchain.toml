@@ -1,0 +1,4 @@
+[toolchain]
+channel = "stable"     # Use stable Rust, or specify a specific version like "1.76.0"
+components = [ "rustfmt", "clippy" ]  # Useful tools for formatting and linting
+targets = [ "wasm32-unknown-unknown" ]  # Target for compiling WebAssembly (WASM)
