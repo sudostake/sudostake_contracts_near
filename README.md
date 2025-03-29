@@ -1,13 +1,16 @@
 # SudoStake NEAR
 
-## Build contracts independently
-```
-cd contracts/factory && cargo near build non-reproducible-wasm --locked
-cd contracts/vault && cargo near build non-reproducible-wasm --locked
-```
-
-## Build all contract
+## Build all contracts
 ```
 chmod +x build.sh
 ./build.sh
+```
+
+## Test all contracts
+```
+# Standard test
+cargo test --release
+
+# To see logs in console
+cargo test -- --nocapture
 ```

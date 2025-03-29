@@ -12,6 +12,7 @@ near-sdk = { workspace = true }
 [dev-dependencies]
 near-workspaces = { workspace = true }
 tokio = { workspace = true }
+serde_json = { workspace = true }
 
 [lib]
 crate-type = ["cdylib"]

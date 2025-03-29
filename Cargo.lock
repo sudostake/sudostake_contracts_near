@@ -928,6 +928,7 @@ dependencies = [
  "borsh-derive",
  "near-sdk",
  "near-workspaces",
+ "serde_json",
  "tokio",
 ]
 
