@@ -9,8 +9,6 @@ chmod +x build.sh
 ## Test all contracts
 ```
 # Standard test
-cargo test --release
-
-# To see logs in console
-cargo test -- --nocapture
+chmod +x test.sh
+./test.sh
 ```
