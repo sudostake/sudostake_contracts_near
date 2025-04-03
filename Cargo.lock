@@ -924,6 +924,7 @@ dependencies = [
 name = "factory"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh",
  "borsh-derive",
  "near-sdk",
