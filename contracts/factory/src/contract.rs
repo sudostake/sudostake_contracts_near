@@ -39,6 +39,22 @@ impl FactoryContract {
     }
 
     #[allow(dead_code)]
+    pub fn set_vault_creation_fee(&mut self, new_fee: NearToken) {
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.owner,
+            "Only the factory owner can update the vault creation fee"
+        );
+
+        self.vault_minting_fee = new_fee;
+
+        env::log_str(&format!(
+            "Vault creation fee updated to: {} yoctoNEAR",
+            new_fee.as_yoctonear()
+        ));
+    }
+
+    #[allow(dead_code)]
     pub fn set_vault_code(&mut self, code: Vec<u8>) -> Vec<u8> {
         assert_eq!(
             env::predecessor_account_id(),

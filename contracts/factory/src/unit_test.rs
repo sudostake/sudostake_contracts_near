@@ -111,4 +111,45 @@ mod tests {
         let small_code = vec![1, 2, 3, 4, 5]; // much less than 1KB
         contract.set_vault_code(small_code);
     }
+
+    #[test]
+    fn test_set_vault_creation_fee_by_owner() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+        let initial_fee = NearToken::from_near(1);
+        let new_fee = NearToken::from_near(2);
+
+        let context = VMContextBuilder::new()
+            .predecessor_account_id(owner.clone())
+            .build();
+        testing_env!(context);
+
+        let mut contract = FactoryContract::new(owner.clone(), initial_fee);
+        assert_eq!(contract.vault_minting_fee, initial_fee);
+
+        contract.set_vault_creation_fee(new_fee.clone());
+        assert_eq!(contract.vault_minting_fee, new_fee);
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the factory owner can update the vault creation fee")]
+    fn test_set_vault_creation_fee_by_non_owner_should_fail() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+        let attacker: AccountId = "not-owner.near".parse().unwrap();
+        let initial_fee = NearToken::from_near(1);
+        let new_fee = NearToken::from_near(2);
+
+        let context = VMContextBuilder::new()
+            .predecessor_account_id(owner.clone())
+            .build();
+        testing_env!(context);
+
+        let mut contract = FactoryContract::new(owner.clone(), initial_fee);
+
+        let context = VMContextBuilder::new()
+            .predecessor_account_id(attacker.clone())
+            .build();
+        testing_env!(context);
+
+        contract.set_vault_creation_fee(new_fee);
+    }
 }

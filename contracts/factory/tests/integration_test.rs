@@ -65,3 +65,38 @@ async fn test_set_vault_code() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn test_set_vault_creation_fee() -> anyhow::Result<()> {
+    use near_workspaces::types::NearToken;
+
+    let worker = workspaces::sandbox().await?;
+    let owner = worker.root_account()?;
+
+    // Deploy factory contract
+    let wasm = std::fs::read(FACTORY_WASM_PATH)?;
+    let factory: Contract = owner.deploy(&wasm).await?.into_result()?;
+
+    // Initialize factory contract
+    factory
+        .call("new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": NearToken::from_near(1),
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Call set_vault_creation_fee
+    let _ = factory
+        .call("set_vault_creation_fee")
+        .args_json(serde_json::json!({
+            "new_fee": NearToken::from_near(2),
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    Ok(())
+}
