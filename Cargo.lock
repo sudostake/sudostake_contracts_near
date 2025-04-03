@@ -927,9 +927,11 @@ dependencies = [
  "anyhow",
  "borsh",
  "borsh-derive",
+ "hex",
  "near-sdk",
  "near-workspaces",
  "serde_json",
+ "sha2",
  "tokio",
 ]
 
