@@ -1,8 +1,14 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
-use near_sdk::NearToken;
-use near_sdk::{env, near_bindgen, AccountId};
+use near_sdk::{env, near_bindgen, AccountId, Promise};
+use near_sdk::{Gas, NearToken};
 use sha2::{Digest, Sha256};
+
+const GAS_FOR_VAULT_INIT: Gas = Gas::from_tgas(100);
+
+// NEAR costs (yoctoNEAR)
+const STORAGE_COST_PER_BYTE: u128 = 100_000_000_000_000_000_000; // 0.0001 NEAR
+const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 
 #[near_bindgen]
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -90,5 +96,72 @@ impl FactoryContract {
         ));
 
         hash
+    }
+
+    #[payable]
+    #[allow(dead_code)]
+    pub fn mint_vault(&mut self) -> Promise {
+        // Get the caller and the attached deposit
+        let caller = env::predecessor_account_id();
+        let deposit = env::attached_deposit();
+
+        // Ensure vault code has been uploaded
+        assert!(self.latest_vault_version > 0, "No vault code uploaded");
+
+        // Ensure the minting fee has been configured
+        let required_fee = self.vault_minting_fee.as_yoctonear();
+        assert!(required_fee > 0, "Vault creation fee has not been set");
+
+        // Ensure the attached deposit matches the required fee exactly
+        assert_eq!(
+            deposit.as_yoctonear(),
+            required_fee,
+            "Must attach exactly the vault minting fee"
+        );
+
+        // Load the vault code from state
+        let vault_code = self
+            .vault_code_versions
+            .get(&self.latest_vault_hash)
+            .expect("Vault code missing");
+
+        // Estimate deployment cost based on WASM size and protocol storage pricing
+        let wasm_bytes = vault_code.len() as u128;
+        let deploy_cost = wasm_bytes * STORAGE_COST_PER_BYTE;
+        let transfer_amount = deploy_cost + STORAGE_BUFFER;
+
+        // Ensure the attached fee is sufficient for storage transfer
+        assert!(
+            required_fee >= transfer_amount,
+            "Vault minting fee is too low to cover deployment"
+        );
+
+        // Generate a vault subaccount name
+        let index = self.vault_counter;
+        let vault_account_id = format!("vault-{}.{}", index, env::current_account_id());
+        let vault_account: AccountId = vault_account_id.parse().expect("Invalid account ID");
+
+        // Increment counter to prevent collisions
+        self.vault_counter += 1;
+
+        // Prepare init arguments for the vault contract
+        let json_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
+            "owner": caller,
+            "index": index,
+            "version": self.latest_vault_version
+        }))
+        .unwrap();
+
+        // Create the subaccount, deploy code, and call the init method
+        Promise::new(vault_account)
+            .create_account()
+            .transfer(NearToken::from_yoctonear(transfer_amount))
+            .deploy_contract(vault_code)
+            .function_call(
+                "new".to_string(),
+                json_args,
+                NearToken::from_yoctonear(0),
+                GAS_FOR_VAULT_INIT,
+            )
     }
 }
