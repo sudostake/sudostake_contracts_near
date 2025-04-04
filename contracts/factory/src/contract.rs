@@ -164,5 +164,42 @@ impl FactoryContract {
             )
     }
 
-    // TODO implement
+    #[allow(dead_code)]
+    pub fn withdraw_balance(
+        &mut self,
+        amount: NearToken,
+        to_address: Option<AccountId>,
+    ) -> Promise {
+        // Ensure only the factory owner can call this method
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.owner,
+            "Only the factory owner can withdraw balance"
+        );
+
+        // Use the provided recipient, or default to the factory owner
+        let recipient = to_address.unwrap_or_else(|| self.owner.clone());
+
+        // Get the total balance held by the factory contract (in yoctoNEAR)
+        let total_balance: u128 = env::account_balance().as_yoctonear();
+
+        // Compute required storage reserve (in yoctoNEAR)
+        let storage_cost: u128 =
+            env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
+
+        // Subtract reserve to get available amount
+        let available_balance = total_balance.saturating_sub(storage_cost);
+
+        // Convert requested withdrawal amount to yoctoNEAR
+        let amount_yocto = amount.as_yoctonear();
+
+        // Ensure requested amount does not exceed safe withdrawal
+        assert!(
+            amount_yocto <= available_balance,
+            "Requested amount exceeds available withdrawable balance"
+        );
+
+        // Transfer amount to the recipient
+        Promise::new(recipient).transfer(amount)
+    }
 }
