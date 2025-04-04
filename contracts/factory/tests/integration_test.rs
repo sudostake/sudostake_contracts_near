@@ -1,4 +1,4 @@
-use near_sdk::{Gas, NearToken};
+use near_sdk::{env, Gas, NearToken};
 use near_workspaces::types::CryptoHash;
 use near_workspaces::{self as workspaces, network::Sandbox, Account, Contract, Worker};
 use serde_json::json;
@@ -7,7 +7,6 @@ const FACTORY_WASM_PATH: &str = "../../res/factory.wasm";
 const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
 
 // NEAR costs (yoctoNEAR)
-const STORAGE_COST_PER_BYTE: u128 = 100_000_000_000_000_000_000; // 0.0001 NEAR
 const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 
 #[tokio::test]
@@ -119,7 +118,7 @@ async fn test_mint_vault_success() -> anyhow::Result<()> {
     // Load vault.wasm and calculate required minting fee
     let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
     let wasm_bytes = vault_wasm.len() as u128;
-    let deploy_cost = wasm_bytes * STORAGE_COST_PER_BYTE;
+    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
     let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
     let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
 

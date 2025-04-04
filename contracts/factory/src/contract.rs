@@ -7,7 +7,6 @@ use sha2::{Digest, Sha256};
 const GAS_FOR_VAULT_INIT: Gas = Gas::from_tgas(100);
 
 // NEAR costs (yoctoNEAR)
-const STORAGE_COST_PER_BYTE: u128 = 100_000_000_000_000_000_000; // 0.0001 NEAR
 const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 
 #[near_bindgen]
@@ -127,7 +126,7 @@ impl FactoryContract {
 
         // Estimate deployment cost based on WASM size and protocol storage pricing
         let wasm_bytes = vault_code.len() as u128;
-        let deploy_cost = wasm_bytes * STORAGE_COST_PER_BYTE;
+        let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
         let transfer_amount = deploy_cost + STORAGE_BUFFER;
 
         // Ensure the attached fee is sufficient for storage transfer
@@ -164,4 +163,6 @@ impl FactoryContract {
                 GAS_FOR_VAULT_INIT,
             )
     }
+
+    // TODO implement
 }
