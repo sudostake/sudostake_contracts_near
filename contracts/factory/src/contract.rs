@@ -1,13 +1,21 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
+use near_sdk::serde::Serialize;
 use near_sdk::{env, near_bindgen, AccountId, Promise};
 use near_sdk::{Gas, NearToken};
 use sha2::{Digest, Sha256};
 
-const GAS_FOR_VAULT_INIT: Gas = Gas::from_tgas(100);
-
 // NEAR costs (yoctoNEAR)
 const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
+const GAS_FOR_VAULT_INIT: Gas = Gas::from_tgas(100);
+
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct FactoryViewState {
+    pub vault_minting_fee: NearToken,
+    pub vault_counter: u64,
+    pub latest_vault_version: u64,
+}
 
 #[near_bindgen]
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -231,5 +239,14 @@ impl FactoryContract {
     #[allow(dead_code)]
     pub fn storage_byte_cost(&self) -> NearToken {
         env::storage_byte_cost()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_contract_state(&self) -> FactoryViewState {
+        FactoryViewState {
+            vault_minting_fee: self.vault_minting_fee,
+            vault_counter: self.vault_counter,
+            latest_vault_version: self.latest_vault_version,
+        }
     }
 }
