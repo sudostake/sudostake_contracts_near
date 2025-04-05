@@ -203,3 +203,11 @@ impl FactoryContract {
         Promise::new(recipient).transfer(amount)
     }
 }
+
+#[near_bindgen]
+impl FactoryContract {
+    #[allow(dead_code)]
+    pub fn storage_byte_cost(&self) -> NearToken {
+        env::storage_byte_cost()
+    }
+}
