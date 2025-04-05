@@ -202,6 +202,28 @@ impl FactoryContract {
         // Transfer amount to the recipient
         Promise::new(recipient).transfer(amount)
     }
+
+    #[allow(dead_code)]
+    pub fn transfer_ownership(&mut self, new_owner: AccountId) {
+        // Ensure only the current factory owner can transfer ownership
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.owner,
+            "Only the factory owner can transfer ownership"
+        );
+
+        // Prevent transferring to the same owner
+        assert_ne!(
+            new_owner, self.owner,
+            "New owner must be different from the current owner"
+        );
+
+        // Update owner state
+        self.owner = new_owner.clone();
+
+        // Emit a log for tracking
+        env::log_str(&format!("Ownership transferred to {}", new_owner));
+    }
 }
 
 #[near_bindgen]
