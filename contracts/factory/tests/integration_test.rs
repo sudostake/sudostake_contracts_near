@@ -172,3 +172,233 @@ async fn test_mint_vault_success() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
+    // Set up sandbox and create independent accounts
+    let worker = near_workspaces::sandbox().await?;
+    let owner = worker.dev_create_account().await?;
+    let user = worker.dev_create_account().await?;
+    let factory = worker.dev_create_account().await?;
+
+    // Deploy factory contract
+    let factory_contract = factory
+        .deploy(&std::fs::read(FACTORY_WASM_PATH)?)
+        .await?
+        .into_result()?;
+
+    // Initialize factory with 3 NEAR minting fee
+    owner
+        .call(factory_contract.id(), "new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000)
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Upload vault code (>1KB) using owner
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    assert!(vault_wasm.len() > 1024);
+    owner
+        .call(factory_contract.id(), "set_vault_code")
+        .args_json(serde_json::json!({ "code": vault_wasm }))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Mint vault from user with full 3 NEAR fee
+    user.call(factory_contract.id(), "mint_vault")
+        .deposit(NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Record balance before withdrawal
+    let balance_before = owner.view_account().await?.balance;
+
+    // Withdraw 1 NEAR back to the owner
+    owner
+        .call(factory_contract.id(), "withdraw_balance")
+        .args_json(serde_json::json!({
+            "amount": NearToken::from_yoctonear(1_000_000_000_000_000_000_000_000),
+            "to_address": null
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Record balance after withdrawal
+    let balance_after = owner.view_account().await?.balance;
+
+    // Confirm owner's balance increased
+    assert!(
+        balance_after > balance_before,
+        "Owner should have received withdrawal after vault mint"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
+    // Create sandbox and accounts
+    let worker = near_workspaces::sandbox().await?;
+    let owner = worker.dev_create_account().await?;
+    let user = worker.dev_create_account().await?;
+    let receiver = worker.dev_create_account().await?;
+    let factory = worker.dev_create_account().await?;
+
+    // Deploy factory contract
+    let factory_contract = factory
+        .deploy(&std::fs::read(FACTORY_WASM_PATH)?)
+        .await?
+        .into_result()?;
+
+    // Initialize factory
+    owner
+        .call(factory_contract.id(), "new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000)
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Upload vault code
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    owner
+        .call(factory_contract.id(), "set_vault_code")
+        .args_json(serde_json::json!({ "code": vault_wasm }))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // User mints a vault (simulates income to factory)
+    user.call(factory_contract.id(), "mint_vault")
+        .deposit(NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Record balance before
+    let balance_before = receiver.view_account().await?.balance;
+
+    // Owner withdraws 1 NEAR to third-party (receiver)
+    owner
+        .call(factory_contract.id(), "withdraw_balance")
+        .args_json(serde_json::json!({
+            "amount": NearToken::from_yoctonear(1_000_000_000_000_000_000_000_000),
+            "to_address": receiver.id(),
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let balance_after = receiver.view_account().await?.balance;
+
+    // Confirm receiver's balance increased
+    assert!(
+        balance_after > balance_before,
+        "Receiver should have received third-party withdrawal"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Result<()> {
+    // Set up sandbox environment and accounts
+    let worker = near_workspaces::sandbox().await?;
+    let owner = worker.dev_create_account().await?;
+    let user = worker.dev_create_account().await?;
+    let factory_account = worker.dev_create_account().await?;
+
+    // Deploy and initialize the factory contract
+    let factory_contract = factory_account
+        .deploy(&std::fs::read(FACTORY_WASM_PATH)?)
+        .await?
+        .into_result()?;
+
+    owner
+        .call(factory_contract.id(), "new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": NearToken::from_near(3)
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Upload vault code to the factory
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    owner
+        .call(factory_contract.id(), "set_vault_code")
+        .args_json(serde_json::json!({ "code": vault_wasm }))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // User mints a vault (this funds the factory account)
+    user.call(factory_contract.id(), "mint_vault")
+        .deposit(NearToken::from_near(3))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Query factory account state before withdrawal
+    let factory_account_info = worker.view_account(factory_contract.id()).await?;
+    let balance_before = factory_account_info.balance.as_yoctonear();
+    let storage_usage = factory_account_info.storage_usage;
+
+    // Fetch dynamic storage byte cost from contract
+    let storage_byte_cost: NearToken = factory_contract
+        .view("storage_byte_cost")
+        .args_json(serde_json::json!({}))
+        .await?
+        .json()?;
+
+    let storage_cost = storage_usage as u128 * storage_byte_cost.as_yoctonear();
+    let withdraw_amount = NearToken::from_yoctonear(balance_before - storage_cost);
+
+    // Capture owner balance before withdrawal
+    let owner_balance_before = owner.view_account().await?.balance;
+
+    // Perform withdrawal to owner account
+    owner
+        .call(factory_contract.id(), "withdraw_balance")
+        .args_json(serde_json::json!({
+            "amount": withdraw_amount,
+            "to_address": null
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Validate post-withdrawal balances
+    let factory_balance_after = worker.view_account(factory_contract.id()).await?.balance;
+    let owner_balance_after = owner.view_account().await?.balance;
+
+    assert!(
+        factory_balance_after.as_yoctonear() >= storage_cost,
+        "Factory should retain at least the required storage cost"
+    );
+
+    assert!(
+        owner_balance_after > owner_balance_before,
+        "Owner balance should increase after withdrawal"
+    );
+
+    Ok(())
+}
