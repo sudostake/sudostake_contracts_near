@@ -243,3 +243,73 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
+    // Create sandbox and accounts
+    let worker = near_workspaces::sandbox().await?;
+    let owner = worker.dev_create_account().await?;
+    let user = worker.dev_create_account().await?;
+    let receiver = worker.dev_create_account().await?;
+    let factory = worker.dev_create_account().await?;
+
+    // Deploy factory contract
+    let factory_contract = factory
+        .deploy(&std::fs::read(FACTORY_WASM_PATH)?)
+        .await?
+        .into_result()?;
+
+    // Initialize factory
+    owner
+        .call(factory_contract.id(), "new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000)
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Upload vault code
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    owner
+        .call(factory_contract.id(), "set_vault_code")
+        .args_json(serde_json::json!({ "code": vault_wasm }))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // User mints a vault (simulates income to factory)
+    user.call(factory_contract.id(), "mint_vault")
+        .deposit(NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Record balance before
+    let balance_before = receiver.view_account().await?.balance;
+
+    // Owner withdraws 1 NEAR to third-party (receiver)
+    owner
+        .call(factory_contract.id(), "withdraw_balance")
+        .args_json(serde_json::json!({
+            "amount": NearToken::from_yoctonear(1_000_000_000_000_000_000_000_000),
+            "to_address": receiver.id(),
+        }))
+        .max_gas()
+        .transact()
+        .await?
+        .into_result()?;
+
+    let balance_after = receiver.view_account().await?.balance;
+
+    // Confirm receiver's balance increased
+    assert!(
+        balance_after > balance_before,
+        "Receiver should have received third-party withdrawal"
+    );
+
+    Ok(())
+}
