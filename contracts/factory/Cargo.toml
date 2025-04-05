@@ -10,6 +10,7 @@ borsh-derive = { workspace = true }
 near-sdk = { workspace = true }
 sha2 = "0.10"
 hex = "0.4"
+common = { path = "../../common" }
 
 [dev-dependencies]
 near-workspaces = { workspace = true }

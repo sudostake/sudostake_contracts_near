@@ -61,10 +61,13 @@ impl FactoryContract {
 
         self.vault_minting_fee = new_fee;
 
-        env::log_str(&format!(
-            "Vault creation fee updated to: {} yoctoNEAR",
-            new_fee.as_yoctonear()
-        ));
+        // Emit log
+        log_event!(
+            "vault_creation_fee_updated",
+            near_sdk::serde_json::json!({
+               "new_fee": new_fee.as_yoctonear().to_string()
+            })
+        );
     }
 
     #[allow(dead_code)]
@@ -95,12 +98,14 @@ impl FactoryContract {
         self.latest_vault_hash = hash.clone();
 
         // Emit log
-        env::log_str(&format!(
-            "Vault code v{} uploaded ({} bytes), hash: {}",
-            self.latest_vault_version,
-            code.len(),
-            hex::encode(&hash)
-        ));
+        log_event!(
+            "vault_code_uploaded",
+            near_sdk::serde_json::json!({
+                "version": self.latest_vault_version,
+                "hash": hex::encode(&hash),
+                "size": code.len()
+            })
+        );
 
         hash
     }
@@ -150,6 +155,17 @@ impl FactoryContract {
 
         // Increment counter to prevent collisions
         self.vault_counter += 1;
+
+        // Emit log
+        log_event!(
+            "vault_minted",
+            near_sdk::serde_json::json!({
+                "owner": caller,
+                "vault_id": vault_account,
+                "version": self.latest_vault_version,
+                "index": index
+            })
+        );
 
         // Prepare init arguments for the vault contract
         let json_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
@@ -227,10 +243,17 @@ impl FactoryContract {
         );
 
         // Update owner state
+        let old_owner = self.owner.clone();
         self.owner = new_owner.clone();
 
-        // Emit a log for tracking
-        env::log_str(&format!("Ownership transferred to {}", new_owner));
+        // Emit log
+        log_event!(
+            "ownership_transferred",
+            near_sdk::serde_json::json!({
+                "old_owner": old_owner,
+                "new_owner": new_owner
+            })
+        );
     }
 }
 
