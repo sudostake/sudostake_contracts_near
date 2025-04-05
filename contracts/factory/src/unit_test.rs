@@ -438,4 +438,64 @@ mod tests {
         // Attempt to withdraw more than allowed should panic
         let _ = contract.withdraw_balance(amount.clone(), None);
     }
+
+    #[test]
+    fn test_transfer_ownership_success() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+        let new_owner: AccountId = "alice.near".parse().unwrap();
+
+        // Step 1: Set up context as the original owner
+        let mut context = VMContextBuilder::new();
+        context.predecessor_account_id(owner.clone());
+        testing_env!(context.build());
+
+        // Step 2: Deploy the contract with the original owner
+        let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
+
+        // Step 3: Transfer ownership to new account
+        contract.transfer_ownership(new_owner.clone());
+
+        // Step 4: Verify that the ownership has changed
+        assert_eq!(contract.owner, new_owner, "Ownership should be transferred");
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the factory owner can transfer ownership")]
+    fn test_transfer_ownership_fails_if_not_owner() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+        let attacker: AccountId = "hacker.near".parse().unwrap();
+        let new_owner: AccountId = "alice.near".parse().unwrap();
+
+        // Step 1: Set up context as the owner and deploy the contract
+        let mut owner_context = VMContextBuilder::new();
+        owner_context.predecessor_account_id(owner.clone());
+        testing_env!(owner_context.build());
+
+        let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
+
+        // Step 2: Switch to attacker context to simulate unauthorized caller
+        let mut attacker_context = VMContextBuilder::new();
+        attacker_context.predecessor_account_id(attacker.clone());
+        testing_env!(attacker_context.build());
+
+        // Step 3: Attempt to transfer ownership — should panic
+        contract.transfer_ownership(new_owner);
+    }
+
+    #[test]
+    #[should_panic(expected = "New owner must be different from the current owner")]
+    fn test_transfer_ownership_fails_if_same_as_current() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+
+        // Step 1: Set up context as the owner
+        let mut context = VMContextBuilder::new();
+        context.predecessor_account_id(owner.clone());
+        testing_env!(context.build());
+
+        // Step 2: Deploy contract
+        let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
+
+        // Step 3: Attempt to transfer ownership to self — should panic
+        contract.transfer_ownership(owner);
+    }
 }
