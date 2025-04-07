@@ -1,72 +1,181 @@
-### 📦 Factory Contract
+# SudoStake Factory Contract (NEAR)
 
-A smart contract responsible for deploying versioned, immutable staking vaults as subaccounts on NEAR Protocol. It manages vault WASM uploads, versioning, and fee collection.
+This contract powers the creation and management of user-owned staking vaults on the NEAR blockchain. Each vault is deployed as a subaccount and initialized with the latest code and immutable metadata.
 
----
+Part of the [SudoStake Protocol](https://sudostake.com).
 
-### 🚀 Features
+&nbsp;
 
-- **Immutable Vault Deployment**: Mints smart contract subaccounts from pre-uploaded WASM.
-- **Vault Versioning**: Tracks vault code via SHA-256 hashes and versions.
-- **Dynamic Fee Control**: Factory owner can update minting fees.
-- **Secure Access Control**: Only owner can perform sensitive actions.
-- **Balance Management**: Owner can withdraw available contract funds.
-- **Event Logging**: Emits JSON-formatted logs for all key events.
+## Features
 
----
+- Upload and version vault contract code
+- Set and enforce vault creation fees
+- Mint new immutable vault contracts
+- Withdraw factory contract NEAR safely
+- Transfer ownership of the factory
+- Expose view methods for external tooling
 
-### ⚙️ Usage Overview
+&nbsp;
 
-#### Initialization
-```ts
-factory.new({ owner, vault_minting_fee });
+## Contract Methods
+&nbsp;
+
+### `new(owner: AccountId, vault_minting_fee: NearToken) -> Self`
+
+**Description**  
+Initializes the factory contract with an owner and an initial vault creation fee.
+
+**Access Control**  
+Callable only once, immediately after contract deployment.
+
+**Event JSON emitted**  
+_None_
+
+&nbsp;
+
+### `set_vault_code(code: Vec<u8>) -> Vec<u8>`
+
+**Description**  
+Uploads new WASM code for vault contracts and stores it by SHA-256 hash. Prevents duplicates.
+
+**Access Control**  
+Only callable by the factory `owner`.
+
+**Event JSON emitted**
+```json
+{
+  "event": "vault_code_uploaded",
+  "data": {
+    "version": 1,
+    "hash": "hex_sha256",
+    "size": 10240
+  }
+}
 ```
 
-#### Upload Vault Code
-```ts
-factory.set_vault_code({ code: Uint8Array }); // Must be >1KB
+&nbsp;
+
+### `set_vault_creation_fee(new_fee: NearToken)`
+
+**Description**  
+Sets the required fee (in yoctoNEAR) for vault creation.
+
+**Access Control**  
+Only callable by the factory `owner`.
+
+**Event JSON emitted**
+```json
+{
+  "event": "vault_creation_fee_updated",
+  "data": {
+    "new_fee": "1000000000000000000000000"
+  }
+}
 ```
 
-#### Mint Vault
-```ts
-factory.mint_vault(); // Must attach exact minting fee
+&nbsp;
+
+### `mint_vault() -> Promise`  
+(**payable**)
+
+**Description**  
+Creates a new vault smart contract as a subaccount (e.g., `vault-0.factory.near`). Vault is initialized with `owner`, `index`, and `version`.
+
+**Access Control**  
+Public — any user can call this with exact deposit = `vault_minting_fee`.
+
+**Event JSON emitted**
+```json
+{
+  "event": "vault_minted",
+  "data": {
+    "owner": "caller.near",
+    "vault_id": "vault-0.factory.near",
+    "version": 1,
+    "index": 0
+  }
+}
 ```
 
-#### Withdraw Balance
-```ts
-factory.withdraw_balance({ amount, to_address }); // `to_address` optional
+&nbsp;
+
+### `withdraw_balance(amount: NearToken, to_address: Option<AccountId>) -> Promise`
+
+**Description**  
+Withdraws available balance (excluding storage reserve) to a recipient.
+
+**Access Control**  
+Only callable by the factory `owner`.
+
+**Event JSON emitted**  
+_None_
+
+&nbsp;
+
+### `transfer_ownership(new_owner: AccountId)`
+
+**Description**  
+Transfers ownership of the contract to a new account.
+
+**Access Control**  
+Only callable by the current factory `owner`.
+
+**Event JSON emitted**
+```json
+{
+  "event": "ownership_transferred",
+  "data": {
+    "old_owner": "old.near",
+    "new_owner": "new.near"
+  }
+}
 ```
 
-#### Transfer Ownership
-```ts
-factory.transfer_ownership({ new_owner });
+&nbsp;
+
+&nbsp;
+
+## View Methods
+
+### `get_contract_state() -> FactoryViewState`
+
+**Description**  
+Returns the current state of the contract:
+
+```json
+{
+  "vault_minting_fee": "1000000000000000000000000",
+  "vault_counter": 3,
+  "latest_vault_version": 1
+}
 ```
 
----
+**Access Control**  
+Public
 
-### 📡 View Methods
+&nbsp;
 
-- `get_contract_state()` → `{ vault_minting_fee, vault_counter, latest_vault_version }`
-- `storage_byte_cost()` → `NearToken` (dynamic per protocol)
+### `storage_byte_cost() -> NearToken`
 
----
+**Description**  
+Returns the protocol-defined storage cost per byte.
 
-### 🔐 Access Control
+**Access Control**  
+Public
 
-- `owner` can upload vault code, update fees, withdraw balance, and transfer ownership.
-- `mint_vault()` is public but enforces exact fee and valid vault code.
+&nbsp;
 
----
+## Storage and Deployment Notes
 
-### 📁 Contract Structure
+- Minting fee must cover:
+  - `WASM size × env::storage_byte_cost()`
+  - Plus a storage buffer of 0.01 NEAR
+- Vault subaccounts are named: `vault-<index>.factory.near`
+- Contract prevents duplicate code uploads using SHA-256 hash
 
-- `factory.wasm`: Deployable WASM contract
-- `vault.wasm`: Code uploaded by factory and used for sub-deployments
-- `res/`: Optimized WASM outputs
+&nbsp;
 
----
+## License
 
-### 🧪 Testing
-
-- Fully covered by **unit** and **integration** tests.
-- Uses [`near-sdk`](https://crates.io/crates/near-sdk) and [`near-workspaces`](https://github.com/near/near-workspaces-rs)
+MIT License  
+© [Muhammed Ali](https://github.com/CodeMuhammed)
