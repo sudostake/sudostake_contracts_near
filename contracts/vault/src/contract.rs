@@ -3,7 +3,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
-use near_sdk::{assert_one_yocto, Gas, NearToken, Promise};
+use near_sdk::{assert_one_yocto, EpochHeight, Gas, NearToken, Promise};
 use near_sdk::{
     collections::{UnorderedSet, Vector},
     env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault,
@@ -13,13 +13,13 @@ const GAS_FOR_WITHDRAW_ALL: Gas = Gas::from_tgas(20);
 const GAS_FOR_VIEW_CALL: Gas = Gas::from_tgas(20);
 const GAS_FOR_CALLBACK: Gas = Gas::from_tgas(20);
 const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(50);
-
-const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
+/// 0.1 NEAR
+pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct UnstakeEntry {
     pub amount: u128,
-    pub timestamp: u64,
+    pub epoch_height: EpochHeight,
 }
 
 #[derive(BorshStorageKey, BorshSerialize)]
@@ -228,7 +228,7 @@ impl Vault {
     }
 
     // Removes unstake entries that were claimed via withdraw_all
-    fn reconcile_unstake_entries(&mut self, validator: &AccountId, mut withdrawn: u128) {
+    pub fn reconcile_unstake_entries(&mut self, validator: &AccountId, mut withdrawn: u128) {
         if let Some(queue) = self.unstake_entries.get(validator) {
             let mut new_queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
                 validator_hash: env::sha256(validator.as_bytes()),
@@ -252,7 +252,7 @@ impl Vault {
     }
 
     // Returns the available balance after subtracting a fixed storage buffer
-    fn get_available_balance(&self) -> NearToken {
+    pub fn get_available_balance(&self) -> NearToken {
         let total = env::account_balance().as_yoctonear();
         let available = total.saturating_sub(STORAGE_BUFFER);
         NearToken::from_yoctonear(available)
