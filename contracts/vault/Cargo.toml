@@ -14,6 +14,8 @@ common = { path = "../../common" }
 near-workspaces = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+near-crypto = "0.21.2"
+near-primitives = "0.21.0"
 anyhow = { workspace = true }
 
 [lib]
