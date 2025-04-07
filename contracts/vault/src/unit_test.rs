@@ -8,7 +8,7 @@ mod tests {
     }
 
     #[test]
-    fn test_factory_initialization() {
+    fn test_vault_initialization() {
         // Set up mock context
         let context = VMContextBuilder::new()
             .predecessor_account_id(alice())
