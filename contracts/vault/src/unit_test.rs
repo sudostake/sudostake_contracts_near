@@ -364,4 +364,23 @@ mod tests {
             "get_available_balance() should subtract STORAGE_BUFFER correctly"
         );
     }
+
+    #[test]
+    #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+    fn test_undelegate_requires_yocto() {
+        // Set up context with NO attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Register the validator as active
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.active_validators.insert(&validator);
+
+        // Attempt to call undelegate with no attached deposit
+        // This should panic due to assert_one_yocto()
+        vault.undelegate(validator, NearToken::from_near(1));
+    }
 }
