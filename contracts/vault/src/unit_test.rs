@@ -658,4 +658,44 @@ mod tests {
             Err(near_sdk::PromiseError::Failed),
         );
     }
+
+    #[test]
+    fn test_on_unstake_complete_adds_unstake_entry() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator to simulate unstaking from
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate a successful callback from unstake() by passing Ok(())
+        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), Ok(()));
+
+        // Fetch the queue from state after the call
+        let queue = vault
+            .unstake_entries
+            .get(&validator)
+            .expect("Validator queue should exist");
+
+        // Assert that one entry exists
+        assert_eq!(queue.len(), 1, "Expected one unstake entry in the queue");
+
+        // Fetch the entry and assert it matches expected amount
+        let entry = queue.get(0).unwrap();
+        assert_eq!(
+            entry.amount,
+            NearToken::from_near(1).as_yoctonear(),
+            "Unstake entry amount is incorrect"
+        );
+
+        // Assert that the epoch_height was recorded as the current block epoch
+        assert_eq!(
+            entry.epoch_height,
+            env::epoch_height(),
+            "Epoch height recorded is incorrect"
+        );
+    }
 }
