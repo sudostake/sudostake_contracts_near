@@ -526,4 +526,58 @@ mod tests {
             logs
         );
     }
+
+    #[test]
+    fn test_on_reconciled_unstake_handles_successful_withdrawal() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator account
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate one existing unstake entry of 1 NEAR
+        let unstake_amount = NearToken::from_near(1).as_yoctonear();
+        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+        queue.push(&UnstakeEntry {
+            amount: unstake_amount,
+            epoch_height: 100,
+        });
+
+        // Insert the queue into vault state
+        vault.unstake_entries.insert(&validator, &queue);
+
+        // Simulate get_account_unstaked_balance callback returning 0 NEAR remaining
+        let remaining_unstaked = U128::from(0);
+
+        // Call the method — should reconcile and proceed to unstake
+        let _ = vault.on_reconciled_unstake(
+            validator.clone(),
+            NearToken::from_near(1),
+            Ok(remaining_unstaked),
+        );
+
+        // Collect logs emitted during reconciliation
+        let logs = get_logs();
+
+        // Verify reconciliation log was emitted
+        let found_reconciled = logs
+            .iter()
+            .any(|log| log.contains("unstake_entries_reconciled"));
+
+        // Verify unstake_initiated log was emitted
+        let found_unstake = logs.iter().any(|log| log.contains("unstake_initiated"));
+
+        // Assert that both logs are present
+        assert!(
+            found_reconciled,
+            "Expected log 'unstake_entries_reconciled' not found"
+        );
+        assert!(found_unstake, "Expected log 'unstake_initiated' not found");
+    }
 }

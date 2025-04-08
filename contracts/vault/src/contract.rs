@@ -363,7 +363,7 @@ impl Vault {
             "unstake_entries_reconciled",
             near_sdk::serde_json::json!({
                 "validator": validator,
-                "withdrawn": withdrawn,
+                "withdrawn": withdrawn.to_string(),
                 "remaining": remaining_unstaked,
             })
         );
@@ -377,15 +377,17 @@ impl Vault {
             })
         );
 
+        // Prepare unstake arguments for the staking_pool contract
+        let json_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
+            "amount": amount.as_yoctonear().to_string()
+        }))
+        .unwrap();
+
         // Proceed with unstaking the intended amount
         Promise::new(validator.clone())
             .function_call(
                 "unstake".to_string(),
-                near_sdk::serde_json::json!({
-                    "amount": amount
-                })
-                .to_string()
-                .into_bytes(),
+                json_args,
                 NearToken::from_yoctonear(0),
                 GAS_FOR_UNSTAKE,
             )
