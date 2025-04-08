@@ -405,4 +405,26 @@ mod tests {
         // Alice tries to undelegate — should panic
         vault.undelegate(validator, NearToken::from_near(1));
     }
+
+    #[test]
+    #[should_panic(expected = "Amount must be greater than 0")]
+    fn test_undelegate_rejects_zero_amount() {
+        // Set up context with correct owner and 1 yoctoNEAR deposit
+        let context = get_context(
+            owner(),
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Register validator as active
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.active_validators.insert(&validator);
+
+        // Attempt to undelegate 0 NEAR — should panic
+        vault.undelegate(validator, NearToken::from_yoctonear(0));
+    }
 }
