@@ -383,4 +383,26 @@ mod tests {
         // This should panic due to assert_one_yocto()
         vault.undelegate(validator, NearToken::from_near(1));
     }
+
+    #[test]
+    #[should_panic(expected = "Only the vault owner can undelegate")]
+    fn test_undelegate_requires_owner() {
+        // Context: alice is NOT the vault owner
+        let context = get_context(
+            alice(), // <-- caller is alice
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Vault is owned by owner.near
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Register the validator as active
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.active_validators.insert(&validator);
+
+        // Alice tries to undelegate — should panic
+        vault.undelegate(validator, NearToken::from_near(1));
+    }
 }
