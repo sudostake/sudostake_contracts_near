@@ -637,4 +637,25 @@ mod tests {
             "Expected unstake_entries to be cleared for validator"
         );
     }
+
+    #[test]
+    #[should_panic(expected = "Failed to fetch unstaked balance from validator")]
+    fn test_on_reconciled_unstake_panics_on_failure() {
+        // Set up the test context with the vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault with the correct owner
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator for this undelegation flow
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Attempt to call the reconciled callback with a simulated failure
+        vault.on_reconciled_unstake(
+            validator,
+            NearToken::from_near(1),
+            Err(near_sdk::PromiseError::Failed),
+        );
+    }
 }
