@@ -488,4 +488,42 @@ mod tests {
         // Request to undelegate 1 NEAR (more than staked) — should panic
         vault.on_checked_staked_balance(validator, NearToken::from_near(1), Ok(staked_balance));
     }
+
+    #[test]
+    fn test_on_checked_staked_balance_proceeds_on_success() {
+        // Set up test context with vault owner and no attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault with the correct owner
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator we will simulate staking with
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate a successful callback from get_account_staked_balance with 2 NEAR staked
+        let staked_balance = U128::from(NearToken::from_near(2).as_yoctonear());
+
+        // Attempt to undelegate 1 NEAR — this should succeed and return a promise
+        let _ = vault.on_checked_staked_balance(
+            validator.clone(),
+            NearToken::from_near(1),
+            Ok(staked_balance),
+        );
+
+        // Collect logs emitted during the call
+        let logs = get_logs();
+
+        // Verify that the log event 'undelegate_check_passed' was emitted
+        let found_log = logs
+            .iter()
+            .any(|log| log.contains("undelegate_check_passed"));
+
+        // Assert that the event log was found
+        assert!(
+            found_log,
+            "Expected log 'undelegate_check_passed' not found. Logs: {:?}",
+            logs
+        );
+    }
 }
