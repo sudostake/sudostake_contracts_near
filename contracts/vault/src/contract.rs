@@ -25,7 +25,6 @@ pub struct UnstakeEntry {
 #[derive(BorshStorageKey, BorshSerialize)]
 pub enum StorageKey {
     ActiveValidators,
-    UnbondingValidators,
     UnstakeEntries,
     UnstakeEntryPerValidator { validator_hash: Vec<u8> },
 }
@@ -37,7 +36,6 @@ pub struct Vault {
     pub index: u64,
     pub version: u64,
     pub active_validators: UnorderedSet<AccountId>,
-    pub unbonding_validators: UnorderedSet<AccountId>,
     pub unstake_entries: UnorderedMap<AccountId, Vector<UnstakeEntry>>,
 }
 
@@ -61,7 +59,6 @@ impl Vault {
             index,
             version,
             active_validators: UnorderedSet::new(StorageKey::ActiveValidators),
-            unbonding_validators: UnorderedSet::new(StorageKey::UnbondingValidators),
             unstake_entries: UnorderedMap::new(StorageKey::UnstakeEntries),
         }
     }
@@ -244,7 +241,6 @@ impl Vault {
 
             if new_queue.is_empty() {
                 self.unstake_entries.remove(validator);
-                self.unbonding_validators.remove(validator);
             } else {
                 self.unstake_entries.insert(validator, &new_queue);
             }

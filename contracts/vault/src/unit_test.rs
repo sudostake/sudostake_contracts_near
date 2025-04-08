@@ -54,7 +54,6 @@ mod tests {
 
         // Check validators are initialized as empty
         assert!(vault.active_validators.is_empty());
-        assert!(vault.unbonding_validators.is_empty());
         assert!(vault.unstake_entries.is_empty());
     }
 
@@ -258,7 +257,6 @@ mod tests {
             epoch_height: 101,
         });
         vault.unstake_entries.insert(&validator, &queue);
-        vault.unbonding_validators.insert(&validator);
 
         // Reconcile with full withdrawal of 1 NEAR
         vault.reconcile_unstake_entries(&validator, NearToken::from_near(1).as_yoctonear());
@@ -267,10 +265,6 @@ mod tests {
         assert!(
             vault.unstake_entries.get(&validator).is_none(),
             "Unstake entry map should not contain validator"
-        );
-        assert!(
-            !vault.unbonding_validators.contains(&validator),
-            "Validator should be removed from unbonding set"
         );
     }
 
@@ -300,7 +294,6 @@ mod tests {
         queue.push(&entry_a);
         queue.push(&entry_b);
         vault.unstake_entries.insert(&validator, &queue);
-        vault.unbonding_validators.insert(&validator);
 
         // Simulate withdrawing only 0.4 NEAR
         vault.reconcile_unstake_entries(&validator, entry_a.amount);
@@ -308,7 +301,7 @@ mod tests {
         // Ensure:
         // - entry_a is removed
         // - entry_b is still present
-        // - validator still tracked in both maps
+        // - validator still tracked in unstaked_entries
         let new_queue = vault
             .unstake_entries
             .get(&validator)
@@ -318,10 +311,6 @@ mod tests {
         assert_eq!(
             remaining_entries[0].amount, entry_b.amount,
             "Remaining entry should match entry_b"
-        );
-        assert!(
-            vault.unbonding_validators.contains(&validator),
-            "Validator should still be tracked in unbonding_validators"
         );
     }
 
@@ -340,15 +329,12 @@ mod tests {
         let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
-
         let entry = UnstakeEntry {
             amount: NearToken::from_near(1).as_yoctonear(),
             epoch_height: 100,
         };
-
         queue.push(&entry);
         vault.unstake_entries.insert(&validator, &queue);
-        vault.unbonding_validators.insert(&validator);
 
         // Simulate total withdrawn = 1.5 NEAR (rewards included)
         vault.reconcile_unstake_entries(&validator, 1_500_000_000_000_000_000_000_000);
@@ -358,13 +344,6 @@ mod tests {
             vault.unstake_entries.get(&validator).is_none(),
             "Unstake entry should be cleared"
         );
-
-        assert!(
-            !vault.unbonding_validators.contains(&validator),
-            "Validator should be removed from unbonding list"
-        );
-
-        // We do NOT check balance here — just confirm no over-clearing
     }
 
     #[test]
