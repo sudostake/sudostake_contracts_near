@@ -580,4 +580,61 @@ mod tests {
         );
         assert!(found_unstake, "Expected log 'unstake_initiated' not found");
     }
+
+    #[test]
+    fn test_on_reconciled_unstake_handles_extra_rewards() {
+        // Set up the test context with the vault owner and no attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault with the owner account
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator to simulate unbonding from
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Create a new unstake entry queue with one 1 NEAR entry
+        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+
+        // Push a single unstake entry to the queue
+        queue.push(&UnstakeEntry {
+            amount: 1_000_000_000_000_000_000_000_000,
+            epoch_height: 100,
+        });
+
+        // Insert the queue into vault state for the validator
+        vault.unstake_entries.insert(&validator, &queue);
+
+        // Simulate a callback where all NEAR was withdrawn, leaving 0 remaining
+        let remaining_unstaked = U128::from(0);
+
+        // Call the method — this should trigger reconciliation and continue unstaking
+        let _promise = vault.on_reconciled_unstake(
+            validator.clone(),
+            NearToken::from_near(2),
+            Ok(remaining_unstaked),
+        );
+
+        // Collect emitted logs during the callback
+        let logs = get_logs();
+
+        // Check for presence of 'unstake_entries_reconciled' log
+        let found_log = logs
+            .iter()
+            .any(|log| log.contains("unstake_entries_reconciled"));
+
+        // Assert that reconciliation log was emitted
+        assert!(
+            found_log,
+            "Expected log 'unstake_entries_reconciled' not found"
+        );
+
+        // Assert that the validator's unstake entry queue has been cleared
+        assert!(
+            vault.unstake_entries.get(&validator).is_none(),
+            "Expected unstake_entries to be cleared for validator"
+        );
+    }
 }
