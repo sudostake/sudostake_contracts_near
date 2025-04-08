@@ -698,4 +698,25 @@ mod tests {
             "Epoch height recorded is incorrect"
         );
     }
+
+    #[test]
+    #[should_panic(expected = "Failed to execute unstake on validator")]
+    fn test_on_unstake_complete_panics_on_failure() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator we are simulating unstaking from
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate a failed callback from the unstake() Promise
+        vault.on_unstake_complete(
+            validator,
+            NearToken::from_near(1),
+            Err(near_sdk::PromiseError::Failed),
+        );
+    }
 }
