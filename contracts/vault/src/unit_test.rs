@@ -427,4 +427,25 @@ mod tests {
         // Attempt to undelegate 0 NEAR — should panic
         vault.undelegate(validator, NearToken::from_yoctonear(0));
     }
+
+    #[test]
+    #[should_panic(expected = "Validator is not currently active")]
+    fn test_undelegate_requires_active_validator() {
+        // Set up context with owner and valid deposit
+        let context = get_context(
+            owner(),
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Initialize vault with owner
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Use a validator that hasn't been added to active_validators
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Attempt to undelegate — should panic due to missing validator
+        vault.undelegate(validator, NearToken::from_near(1));
+    }
 }
