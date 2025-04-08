@@ -3,6 +3,7 @@ mod tests {
     use crate::contract::{StorageKey, UnstakeEntry, Vault, STORAGE_BUFFER};
     use near_sdk::{
         env,
+        json_types::U128,
         test_utils::{get_logs, VMContextBuilder},
         testing_env, AccountId, NearToken,
     };
@@ -468,5 +469,23 @@ mod tests {
             NearToken::from_near(1),
             Err(near_sdk::PromiseError::Failed),
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "Not enough staked balance to undelegate")]
+    fn test_on_checked_staked_balance_rejects_if_insufficient() {
+        // Set up context with owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Simulate callback from get_account_staked_balance with only 0.5 NEAR staked
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        let staked_balance = U128::from(500_000_000_000_000_000_000_000u128); // 0.5 NEAR
+
+        // Request to undelegate 1 NEAR (more than staked) — should panic
+        vault.on_checked_staked_balance(validator, NearToken::from_near(1), Ok(staked_balance));
     }
 }
