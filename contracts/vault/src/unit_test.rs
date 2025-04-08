@@ -448,4 +448,25 @@ mod tests {
         // Attempt to undelegate — should panic due to missing validator
         vault.undelegate(validator, NearToken::from_near(1));
     }
+
+    #[test]
+    #[should_panic(expected = "Failed to fetch staked balance from validator")]
+    fn test_on_checked_staked_balance_panics_on_failure() {
+        // Set up context with owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Simulate callback from failed get_account_staked_balance
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // This should panic due to simulated callback failure
+        vault.on_checked_staked_balance(
+            validator,
+            NearToken::from_near(1),
+            Err(near_sdk::PromiseError::Failed),
+        );
+    }
 }
