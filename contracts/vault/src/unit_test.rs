@@ -3,6 +3,7 @@ mod tests {
     use crate::contract::{StorageKey, UnstakeEntry, Vault, STORAGE_BUFFER};
     use near_sdk::{
         env,
+        json_types::U128,
         test_utils::{get_logs, VMContextBuilder},
         testing_env, AccountId, NearToken,
     };
@@ -362,6 +363,360 @@ mod tests {
             vault.get_available_balance().as_yoctonear(),
             expected,
             "get_available_balance() should subtract STORAGE_BUFFER correctly"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+    fn test_undelegate_requires_yocto() {
+        // Set up context with NO attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Register the validator as active
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.active_validators.insert(&validator);
+
+        // Attempt to call undelegate with no attached deposit
+        // This should panic due to assert_one_yocto()
+        vault.undelegate(validator, NearToken::from_near(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the vault owner can undelegate")]
+    fn test_undelegate_requires_owner() {
+        // Context: alice is NOT the vault owner
+        let context = get_context(
+            alice(), // <-- caller is alice
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Vault is owned by owner.near
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Register the validator as active
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.active_validators.insert(&validator);
+
+        // Alice tries to undelegate — should panic
+        vault.undelegate(validator, NearToken::from_near(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Amount must be greater than 0")]
+    fn test_undelegate_rejects_zero_amount() {
+        // Set up context with correct owner and 1 yoctoNEAR deposit
+        let context = get_context(
+            owner(),
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Register validator as active
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.active_validators.insert(&validator);
+
+        // Attempt to undelegate 0 NEAR — should panic
+        vault.undelegate(validator, NearToken::from_yoctonear(0));
+    }
+
+    #[test]
+    #[should_panic(expected = "Validator is not currently active")]
+    fn test_undelegate_requires_active_validator() {
+        // Set up context with owner and valid deposit
+        let context = get_context(
+            owner(),
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Initialize vault with owner
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Use a validator that hasn't been added to active_validators
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Attempt to undelegate — should panic due to missing validator
+        vault.undelegate(validator, NearToken::from_near(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to fetch staked balance from validator")]
+    fn test_on_checked_staked_balance_panics_on_failure() {
+        // Set up context with owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Simulate callback from failed get_account_staked_balance
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // This should panic due to simulated callback failure
+        vault.on_checked_staked_balance(
+            validator,
+            NearToken::from_near(1),
+            Err(near_sdk::PromiseError::Failed),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Not enough staked balance to undelegate")]
+    fn test_on_checked_staked_balance_rejects_if_insufficient() {
+        // Set up context with owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Simulate callback from get_account_staked_balance with only 0.5 NEAR staked
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        let staked_balance = U128::from(500_000_000_000_000_000_000_000u128); // 0.5 NEAR
+
+        // Request to undelegate 1 NEAR (more than staked) — should panic
+        vault.on_checked_staked_balance(validator, NearToken::from_near(1), Ok(staked_balance));
+    }
+
+    #[test]
+    fn test_on_checked_staked_balance_proceeds_on_success() {
+        // Set up test context with vault owner and no attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault with the correct owner
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator we will simulate staking with
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate a successful callback from get_account_staked_balance with 2 NEAR staked
+        let staked_balance = U128::from(NearToken::from_near(2).as_yoctonear());
+
+        // Attempt to undelegate 1 NEAR — this should succeed and return a promise
+        let _ = vault.on_checked_staked_balance(
+            validator.clone(),
+            NearToken::from_near(1),
+            Ok(staked_balance),
+        );
+
+        // Collect logs emitted during the call
+        let logs = get_logs();
+
+        // Verify that the log event 'undelegate_check_passed' was emitted
+        let found_log = logs
+            .iter()
+            .any(|log| log.contains("undelegate_check_passed"));
+
+        // Assert that the event log was found
+        assert!(
+            found_log,
+            "Expected log 'undelegate_check_passed' not found. Logs: {:?}",
+            logs
+        );
+    }
+
+    #[test]
+    fn test_on_reconciled_unstake_handles_successful_withdrawal() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator account
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate one existing unstake entry of 1 NEAR
+        let unstake_amount = NearToken::from_near(1).as_yoctonear();
+        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+        queue.push(&UnstakeEntry {
+            amount: unstake_amount,
+            epoch_height: 100,
+        });
+
+        // Insert the queue into vault state
+        vault.unstake_entries.insert(&validator, &queue);
+
+        // Simulate get_account_unstaked_balance callback returning 0 NEAR remaining
+        let remaining_unstaked = U128::from(0);
+
+        // Call the method — should reconcile and proceed to unstake
+        let _ = vault.on_reconciled_unstake(
+            validator.clone(),
+            NearToken::from_near(1),
+            Ok(remaining_unstaked),
+        );
+
+        // Collect logs emitted during reconciliation
+        let logs = get_logs();
+
+        // Verify reconciliation log was emitted
+        let found_reconciled = logs
+            .iter()
+            .any(|log| log.contains("unstake_entries_reconciled"));
+
+        // Verify unstake_initiated log was emitted
+        let found_unstake = logs.iter().any(|log| log.contains("unstake_initiated"));
+
+        // Assert that both logs are present
+        assert!(
+            found_reconciled,
+            "Expected log 'unstake_entries_reconciled' not found"
+        );
+        assert!(found_unstake, "Expected log 'unstake_initiated' not found");
+    }
+
+    #[test]
+    fn test_on_reconciled_unstake_handles_extra_rewards() {
+        // Set up the test context with the vault owner and no attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault with the owner account
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator to simulate unbonding from
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Create a new unstake entry queue with one 1 NEAR entry
+        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+
+        // Push a single unstake entry to the queue
+        queue.push(&UnstakeEntry {
+            amount: 1_000_000_000_000_000_000_000_000,
+            epoch_height: 100,
+        });
+
+        // Insert the queue into vault state for the validator
+        vault.unstake_entries.insert(&validator, &queue);
+
+        // Simulate a callback where all NEAR was withdrawn, leaving 0 remaining
+        let remaining_unstaked = U128::from(0);
+
+        // Call the method — this should trigger reconciliation and continue unstaking
+        let _promise = vault.on_reconciled_unstake(
+            validator.clone(),
+            NearToken::from_near(2),
+            Ok(remaining_unstaked),
+        );
+
+        // Collect emitted logs during the callback
+        let logs = get_logs();
+
+        // Check for presence of 'unstake_entries_reconciled' log
+        let found_log = logs
+            .iter()
+            .any(|log| log.contains("unstake_entries_reconciled"));
+
+        // Assert that reconciliation log was emitted
+        assert!(
+            found_log,
+            "Expected log 'unstake_entries_reconciled' not found"
+        );
+
+        // Assert that the validator's unstake entry queue has been cleared
+        assert!(
+            vault.unstake_entries.get(&validator).is_none(),
+            "Expected unstake_entries to be cleared for validator"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to fetch unstaked balance from validator")]
+    fn test_on_reconciled_unstake_panics_on_failure() {
+        // Set up the test context with the vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault with the correct owner
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator for this undelegation flow
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Attempt to call the reconciled callback with a simulated failure
+        vault.on_reconciled_unstake(
+            validator,
+            NearToken::from_near(1),
+            Err(near_sdk::PromiseError::Failed),
+        );
+    }
+
+    #[test]
+    fn test_on_unstake_complete_adds_unstake_entry() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator to simulate unstaking from
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate a successful callback from unstake() by passing Ok(())
+        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), Ok(()));
+
+        // Fetch the queue from state after the call
+        let queue = vault
+            .unstake_entries
+            .get(&validator)
+            .expect("Validator queue should exist");
+
+        // Assert that one entry exists
+        assert_eq!(queue.len(), 1, "Expected one unstake entry in the queue");
+
+        // Fetch the entry and assert it matches expected amount
+        let entry = queue.get(0).unwrap();
+        assert_eq!(
+            entry.amount,
+            NearToken::from_near(1).as_yoctonear(),
+            "Unstake entry amount is incorrect"
+        );
+
+        // Assert that the epoch_height was recorded as the current block epoch
+        assert_eq!(
+            entry.epoch_height,
+            env::epoch_height(),
+            "Epoch height recorded is incorrect"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Failed to execute unstake on validator")]
+    fn test_on_unstake_complete_panics_on_failure() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator we are simulating unstaking from
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Simulate a failed callback from the unstake() Promise
+        vault.on_unstake_complete(
+            validator,
+            NearToken::from_near(1),
+            Err(near_sdk::PromiseError::Failed),
         );
     }
 }
