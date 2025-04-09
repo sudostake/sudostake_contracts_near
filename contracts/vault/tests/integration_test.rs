@@ -139,20 +139,34 @@ async fn test_delegate_fast_path() -> anyhow::Result<()> {
         .deposit(NearToken::from_yoctonear(1))
         .gas(Gas::from_tgas(300))
         .transact()
-        .await?;
+        .await?
+        .into_result()?;
 
-    assert!(
-        result.is_success(),
-        "Vault failed to delegate on fast path: {:#?}",
-        result
-    );
-
+    // Verify that delegate_direct was called
     assert!(
         result
             .logs()
             .iter()
             .any(|log| log.contains("delegate_direct")),
         "Expected 'delegate_direct' log event to be emitted"
+    );
+
+    // Verify that validator_activated was called
+    assert!(
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains("validator_activated")),
+        "Expected 'validator_activated' log event to be emitted"
+    );
+
+    // Verify that delegate_completed was called
+    assert!(
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains("delegate_completed")),
+        "Expected 'delegate_completed' log event to be emitted"
     );
 
     Ok(())
