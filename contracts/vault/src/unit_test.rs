@@ -859,4 +859,20 @@ mod tests {
             logs
         );
     }
+
+    #[test]
+    fn test_on_withdraw_all_returned_triggers_balance_check() {
+        // Set up context with the vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator account
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Call the internal method and capture the returned Promise
+        let _ = vault.on_withdraw_all_returned_for_claim_unstaked(validator.clone());
+    }
 }
