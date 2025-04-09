@@ -69,20 +69,20 @@ impl Vault {
 impl Vault {
     #[payable]
     pub fn delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
-        // Ensure the function is called intentionally with exactly 1 yoctoNEAR
+        // Require exactly 1 yoctoNEAR to ensure intentional access
         assert_one_yocto();
 
-        // Only the vault owner is allowed to call this method
+        // Ensure only the vault owner can delegate
         assert_eq!(
             env::predecessor_account_id(),
             self.owner,
             "Only the vault owner can delegate stake"
         );
 
-        // The amount to delegate must be greater than zero
+        // Validate that the amount is greater than 0
         assert!(amount.as_yoctonear() > 0, "Amount must be greater than 0");
 
-        // Ensure the vault has enough available balance to cover the delegation
+        // Ensure vault has sufficient balance to cover the delegation
         let available_balance = self.get_available_balance();
         assert!(
             amount.as_yoctonear() <= available_balance.as_yoctonear(),
@@ -91,34 +91,38 @@ impl Vault {
             available_balance
         );
 
-        // Track this validator as active
-        self.active_validators.insert(&validator);
-
-        // Optimization: If there are no pending unstake entries, skip withdrawal and reconciliation
+        // Check whether there are pending unstake entries for this validator
         let has_pending_unstakes = self
             .unstake_entries
             .get(&validator)
             .map(|q| !q.is_empty())
             .unwrap_or(false);
 
+        // Fast path: directly stake if no pending unstake reconciliation is needed
         if !has_pending_unstakes {
             log_event!(
                 "delegate_direct",
                 near_sdk::serde_json::json!({
-                    "validator": validator,
+                    "validator": validator.clone(),
                     "amount": amount
                 })
             );
 
-            return Promise::new(validator).function_call(
-                "deposit_and_stake".to_string(),
-                vec![],
-                amount,
-                GAS_FOR_DEPOSIT_AND_STAKE,
-            );
+            return Promise::new(validator.clone())
+                .function_call(
+                    "deposit_and_stake".to_string(),
+                    vec![],
+                    amount,
+                    GAS_FOR_DEPOSIT_AND_STAKE,
+                )
+                .then(
+                    Self::ext(env::current_account_id())
+                        .with_static_gas(GAS_FOR_CALLBACK)
+                        .on_delegate_complete(validator, amount),
+                );
         }
 
-        // Standard path: begin delegation with withdraw_all followed by reconciliation and staking
+        // Standard path: withdraw, reconcile, then stake
         log_event!(
             "delegate_started",
             near_sdk::serde_json::json!({
@@ -127,6 +131,7 @@ impl Vault {
             })
         );
 
+        // Withdraw all available unstaked balance at the validator
         Promise::new(validator.clone())
             .function_call(
                 "withdraw_all".to_string(),
@@ -147,7 +152,7 @@ impl Vault {
 
     #[private]
     pub fn on_withdraw_and_delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
-        // Once withdraw_all resolves, fetch how much is still pending unbonded
+        // Fetch updated unstaked balance after withdraw_all completes
         Promise::new(validator.clone())
             .function_call(
                 "get_account_unstaked_balance".to_string(),
@@ -173,30 +178,68 @@ impl Vault {
         amount: NearToken,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) -> Promise {
-        // Parse the returned unstaked balance after withdraw_all
+        // Parse the returned unstaked balance
         let remaining_unstaked = match result {
             Ok(value) => NearToken::from_yoctonear(value.0),
             Err(_) => env::panic_str("Failed to fetch unstaked balance from validator"),
         };
 
-        // Determine how much was withdrawn by comparing with previous total
+        // Calculate amount that was actually withdrawn
         let total_before = self.total_unstaked(&validator);
         let withdrawn = total_before
             .as_yoctonear()
             .saturating_sub(remaining_unstaked.as_yoctonear());
 
-        // Update unstake_entries based on withdrawn amount
+        // Reconcile unstake entries with the withdrawn amount
         self.reconcile_unstake_entries(&validator, withdrawn);
 
+        // Emit unstake_entries_reconciled event
         log_event!(
             "unstake_entries_reconciled",
             near_sdk::serde_json::json!({
                 "validator": validator,
-                "withdrawn": withdrawn,
+                "withdrawn": withdrawn.to_string(),
                 "remaining": remaining_unstaked,
             })
         );
 
+        // Proceed to stake and track the validator only after successful deposit
+        Promise::new(validator.clone())
+            .function_call(
+                "deposit_and_stake".to_string(),
+                vec![],
+                amount,
+                GAS_FOR_DEPOSIT_AND_STAKE,
+            )
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .on_delegate_complete(validator, amount),
+            )
+    }
+
+    #[private]
+    pub fn on_delegate_complete(
+        &mut self,
+        validator: AccountId,
+        amount: NearToken,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    ) {
+        // Abort if deposit_and_stake failed
+        if result.is_err() {
+            env::panic_str("Failed to execute deposit_and_stake on validator");
+        }
+
+        // Mark validator as active only after confirmed staking success
+        self.active_validators.insert(&validator);
+
+        // Emit validator_activated event
+        log_event!(
+            "validator_activated",
+            near_sdk::serde_json::json!({ "validator": validator })
+        );
+
+        // Emit delegate_completed event
         log_event!(
             "delegate_completed",
             near_sdk::serde_json::json!({
@@ -204,14 +247,6 @@ impl Vault {
                 "amount": amount
             })
         );
-
-        // Proceed with staking the intended amount
-        Promise::new(validator).function_call(
-            "deposit_and_stake".to_string(),
-            vec![],
-            amount,
-            GAS_FOR_DEPOSIT_AND_STAKE,
-        )
     }
 }
 
