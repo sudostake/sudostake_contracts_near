@@ -171,7 +171,7 @@ mod tests {
         );
 
         // Check validator is now tracked
-        vault.on_delegate_complete(
+        vault.on_deposit_and_stake_returned_for_delegate(
             "validator.poolv1.near".parse().unwrap(),
             NearToken::from_near(1),
             Ok(()),
@@ -366,7 +366,7 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // Simulate a failed deposit_and_stake callback
-        vault.on_delegate_complete(
+        vault.on_deposit_and_stake_returned_for_delegate(
             validator,
             NearToken::from_near(1),
             Err(near_sdk::PromiseError::Failed),
@@ -490,7 +490,7 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // This should panic due to simulated callback failure
-        vault.on_checked_staked_balance(
+        vault.on_account_staked_balance_returned_for_undelegate(
             validator,
             NearToken::from_near(1),
             Err(near_sdk::PromiseError::Failed),
@@ -512,7 +512,11 @@ mod tests {
         let staked_balance = U128::from(500_000_000_000_000_000_000_000u128); // 0.5 NEAR
 
         // Request to undelegate 1 NEAR (more than staked) — should panic
-        vault.on_checked_staked_balance(validator, NearToken::from_near(1), Ok(staked_balance));
+        vault.on_account_staked_balance_returned_for_undelegate(
+            validator,
+            NearToken::from_near(1),
+            Ok(staked_balance),
+        );
     }
 
     #[test]
@@ -531,7 +535,7 @@ mod tests {
         let staked_balance = U128::from(NearToken::from_near(2).as_yoctonear());
 
         // Attempt to undelegate 1 NEAR — this should succeed and return a promise
-        let _ = vault.on_checked_staked_balance(
+        let _ = vault.on_account_staked_balance_returned_for_undelegate(
             validator.clone(),
             NearToken::from_near(1),
             Ok(staked_balance),
@@ -582,7 +586,7 @@ mod tests {
         let remaining_unstaked = U128::from(0);
 
         // Call the method — should reconcile and proceed to unstake
-        let _ = vault.on_reconciled_unstake(
+        let _ = vault.on_account_unstaked_balance_returned_for_undelegate(
             validator.clone(),
             NearToken::from_near(1),
             false,
@@ -638,7 +642,7 @@ mod tests {
         let remaining_unstaked = U128::from(0);
 
         // Call the method — this should trigger reconciliation and continue unstaking
-        let _promise = vault.on_reconciled_unstake(
+        let _promise = vault.on_account_unstaked_balance_returned_for_undelegate(
             validator.clone(),
             NearToken::from_near(2),
             false,
@@ -680,7 +684,7 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // Attempt to call the reconciled callback with a simulated failure
-        vault.on_reconciled_unstake(
+        vault.on_account_unstaked_balance_returned_for_undelegate(
             validator,
             NearToken::from_near(1),
             false,
@@ -701,7 +705,12 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // Simulate a successful callback from unstake() by passing Ok(())
-        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), false, Ok(()));
+        vault.on_unstake_returned_for_undelegate(
+            validator.clone(),
+            NearToken::from_near(1),
+            false,
+            Ok(()),
+        );
 
         // Fetch the queue from state after the call
         let queue = vault
@@ -742,7 +751,7 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // Simulate a failed callback from the unstake() Promise
-        vault.on_unstake_complete(
+        vault.on_unstake_returned_for_undelegate(
             validator,
             NearToken::from_near(1),
             false,
@@ -772,7 +781,12 @@ mod tests {
         );
 
         // Simulate successful unstake callback with removal flag
-        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), true, Ok(()));
+        vault.on_unstake_returned_for_undelegate(
+            validator.clone(),
+            NearToken::from_near(1),
+            true,
+            Ok(()),
+        );
 
         // Assert that the validator has been removed from active_validators
         assert!(

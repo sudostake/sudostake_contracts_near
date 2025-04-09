@@ -118,7 +118,7 @@ impl Vault {
                 .then(
                     Self::ext(env::current_account_id())
                         .with_static_gas(GAS_FOR_CALLBACK)
-                        .on_delegate_complete(validator, amount),
+                        .on_deposit_and_stake_returned_for_delegate(validator, amount),
                 );
         }
 
@@ -146,12 +146,16 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_VIEW_CALL)
-                    .on_withdraw_and_delegate(validator, amount),
+                    .on_withdraw_all_returned_for_delegate(validator, amount),
             )
     }
 
     #[private]
-    pub fn on_withdraw_and_delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
+    pub fn on_withdraw_all_returned_for_delegate(
+        &mut self,
+        validator: AccountId,
+        amount: NearToken,
+    ) -> Promise {
         // Fetch updated unstaked balance after withdraw_all completes
         Promise::new(validator.clone())
             .function_call(
@@ -167,12 +171,12 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_reconciled_delegate(validator, amount),
+                    .on_account_unstaked_balance_returned_for_delegate(validator, amount),
             )
     }
 
     #[private]
-    pub fn on_reconciled_delegate(
+    pub fn on_account_unstaked_balance_returned_for_delegate(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -214,12 +218,12 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_delegate_complete(validator, amount),
+                    .on_deposit_and_stake_returned_for_delegate(validator, amount),
             )
     }
 
     #[private]
-    pub fn on_delegate_complete(
+    pub fn on_deposit_and_stake_returned_for_delegate(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -297,12 +301,12 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_checked_staked_balance(validator, amount),
+                    .on_account_staked_balance_returned_for_undelegate(validator, amount),
             )
     }
 
     #[private]
-    pub fn on_checked_staked_balance(
+    pub fn on_account_staked_balance_returned_for_undelegate(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -350,12 +354,16 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_withdraw_and_unstake(validator, amount, should_remove_validator),
+                    .on_withdraw_all_returned_for_undelegate(
+                        validator,
+                        amount,
+                        should_remove_validator,
+                    ),
             )
     }
 
     #[private]
-    pub fn on_withdraw_and_unstake(
+    pub fn on_withdraw_all_returned_for_undelegate(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -376,12 +384,16 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_reconciled_unstake(validator, amount, should_remove_validator),
+                    .on_account_unstaked_balance_returned_for_undelegate(
+                        validator,
+                        amount,
+                        should_remove_validator,
+                    ),
             )
     }
 
     #[private]
-    pub fn on_reconciled_unstake(
+    pub fn on_account_unstaked_balance_returned_for_undelegate(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -439,12 +451,12 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_unstake_complete(validator, amount, should_remove_validator),
+                    .on_unstake_returned_for_undelegate(validator, amount, should_remove_validator),
             )
     }
 
     #[private]
-    pub fn on_unstake_complete(
+    pub fn on_unstake_returned_for_undelegate(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -484,13 +496,22 @@ impl Vault {
         // Persist the updated queue to state
         self.unstake_entries.insert(&validator, &queue);
 
-        // Emit a log to confirm the entry was added
+        // Emit unstake_entry_added event
         log_event!(
             "unstake_entry_added",
             near_sdk::serde_json::json!({
                 "validator": validator,
                 "amount": amount,
                 "epoch_height": entry.epoch_height
+            })
+        );
+
+        // Emit undelegate_completed event
+        log_event!(
+            "undelegate_completed",
+            near_sdk::serde_json::json!({
+                "validator": validator,
+                "amount": amount
             })
         );
     }
