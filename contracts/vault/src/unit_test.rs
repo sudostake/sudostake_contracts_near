@@ -875,4 +875,71 @@ mod tests {
         // Call the internal method and capture the returned Promise
         let _ = vault.on_withdraw_all_returned_for_claim_unstaked(validator.clone());
     }
+
+    #[test]
+    fn test_on_account_unstaked_balance_returned_for_claim_unstaked_success() {
+        // Set up the execution context with the vault owner and 10 NEAR balance
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Define the validator account we'll use in the test
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Initialize a new Vault contract instance
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Create an unstake entry for 1 NEAR
+        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+
+        // Push a single entry with 1 NEAR and dummy epoch height
+        queue.push(&UnstakeEntry {
+            amount: NearToken::from_near(1).as_yoctonear(),
+            epoch_height: 100,
+        });
+
+        // Store the queue in the vault under the validator
+        vault.unstake_entries.insert(&validator, &queue);
+
+        // Simulate that the validator now reports 0 NEAR remaining (meaning 1 NEAR was withdrawn)
+        let remaining_unstaked = U128::from(0);
+
+        // Call the method to simulate the callback resolution
+        vault.on_account_unstaked_balance_returned_for_claim_unstaked(
+            validator.clone(),
+            Ok(remaining_unstaked),
+        );
+
+        // Collect emitted logs
+        let logs = get_logs();
+
+        // Check that the unstake_entries_reconciled log was emitted
+        let found_reconciled = logs
+            .iter()
+            .any(|log| log.contains("unstake_entries_reconciled"));
+
+        // Check that the claim_unstaked_completed log was emitted
+        let found_claimed = logs
+            .iter()
+            .any(|log| log.contains("claim_unstaked_completed"));
+
+        // Assert that the reconciliation log was found
+        assert!(
+            found_reconciled,
+            "Expected 'unstake_entries_reconciled' log not found"
+        );
+
+        // Assert that the claim completion log was found
+        assert!(
+            found_claimed,
+            "Expected 'claim_unstaked_completed' log not found"
+        );
+
+        // Confirm that the validator's unstake entry queue has been fully cleared
+        assert!(
+            vault.unstake_entries.get(&validator).is_none(),
+            "Expected unstake_entries to be cleared for validator"
+        );
+    }
 }

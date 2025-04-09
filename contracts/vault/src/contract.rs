@@ -613,7 +613,7 @@ impl Vault {
             "claim_unstaked_completed",
             near_sdk::serde_json::json!({
                 "validator": validator,
-                "claimed": withdrawn
+                "claimed": withdrawn.to_string()
             })
         );
     }
