@@ -794,4 +794,19 @@ mod tests {
             "Validator should have been removed from active_validators"
         );
     }
+
+    #[test]
+    #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+    fn test_claim_unstaked_requires_yocto() {
+        // Set up context with NO attached deposit
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Attempt to call claim_unstaked without attaching 1 yoctoNEAR
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        vault.claim_unstaked(validator);
+    }
 }
