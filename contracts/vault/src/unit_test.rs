@@ -828,4 +828,35 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
         vault.claim_unstaked(validator);
     }
+
+    #[test]
+    fn test_claim_unstaked_emits_start_log() {
+        // Set up context with the vault owner and 1 yoctoNEAR
+        let context = get_context(
+            owner(),
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Call claim_unstaked
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+        let _ = vault.claim_unstaked(validator);
+
+        // Fetch logs
+        let logs = get_logs();
+
+        // Check that "claim_unstaked_started" appears
+        let found = logs
+            .iter()
+            .any(|log| log.contains("claim_unstaked_started"));
+        assert!(
+            found,
+            "Expected 'claim_unstaked_started' log not found. Logs: {:?}",
+            logs
+        );
+    }
 }
