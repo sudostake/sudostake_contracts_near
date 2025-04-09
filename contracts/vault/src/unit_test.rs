@@ -171,6 +171,11 @@ mod tests {
         );
 
         // Check validator is now tracked
+        vault.on_delegate_complete(
+            "validator.poolv1.near".parse().unwrap(),
+            NearToken::from_near(1),
+            Ok(()),
+        );
         assert!(vault
             .active_validators
             .contains(&"validator.poolv1.near".parse().unwrap()));
