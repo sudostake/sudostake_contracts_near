@@ -1014,4 +1014,24 @@ mod tests {
             "Epoch height of remaining entry should match entry_b"
         );
     }
+
+    #[test]
+    #[should_panic(expected = "Failed to fetch unstaked balance from validator")]
+    fn test_on_account_unstaked_balance_returned_for_claim_unstaked_failure() {
+        // Set up context with vault owner and balance
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Define the validator for this test
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Initialize the vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Simulate callback failure from get_account_unstaked_balance
+        vault.on_account_unstaked_balance_returned_for_claim_unstaked(
+            validator,
+            Err(near_sdk::PromiseError::Failed),
+        );
+    }
 }
