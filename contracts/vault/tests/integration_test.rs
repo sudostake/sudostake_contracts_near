@@ -322,12 +322,12 @@ async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> 
         .await?
         .into_result()?;
 
-    // Call delegate for 3 NEAR to the validator
+    // Call delegate for 2 NEAR to the validator
     vault
         .call("delegate")
         .args_json(json!({
             "validator": validator.id(),
-            "amount": NearToken::from_near(3)
+            "amount": NearToken::from_near(2)
         }))
         .deposit(NearToken::from_yoctonear(1))
         .gas(Gas::from_tgas(300))
@@ -393,6 +393,13 @@ async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> 
     assert_eq!(
         found_new_unstake, 1,
         "Expected exactly one new 'unstake_entry_added' log. Logs: {:?}",
+        logs
+    );
+
+    // Confirm validator was removed
+    assert!(
+        logs.iter().any(|log| log.contains("validator_removed")),
+        "Expected 'validator_removed' log not found. Logs: {:?}",
         logs
     );
 

@@ -559,6 +559,7 @@ mod tests {
         let _ = vault.on_reconciled_unstake(
             validator.clone(),
             NearToken::from_near(1),
+            false,
             Ok(remaining_unstaked),
         );
 
@@ -614,6 +615,7 @@ mod tests {
         let _promise = vault.on_reconciled_unstake(
             validator.clone(),
             NearToken::from_near(2),
+            false,
             Ok(remaining_unstaked),
         );
 
@@ -655,6 +657,7 @@ mod tests {
         vault.on_reconciled_unstake(
             validator,
             NearToken::from_near(1),
+            false,
             Err(near_sdk::PromiseError::Failed),
         );
     }
@@ -672,7 +675,7 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // Simulate a successful callback from unstake() by passing Ok(())
-        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), Ok(()));
+        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), false, Ok(()));
 
         // Fetch the queue from state after the call
         let queue = vault
@@ -716,7 +719,39 @@ mod tests {
         vault.on_unstake_complete(
             validator,
             NearToken::from_near(1),
+            false,
             Err(near_sdk::PromiseError::Failed),
+        );
+    }
+
+    #[test]
+    fn test_on_unstake_complete_removes_validator_when_flag_is_true() {
+        // Set up test context with vault owner
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Initialize vault
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Define the validator
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Manually add the validator to the active set
+        vault.active_validators.insert(&validator);
+
+        // Ensure validator is initially active
+        assert!(
+            vault.active_validators.contains(&validator),
+            "Validator should be initially active"
+        );
+
+        // Simulate successful unstake callback with removal flag
+        vault.on_unstake_complete(validator.clone(), NearToken::from_near(1), true, Ok(()));
+
+        // Assert that the validator has been removed from active_validators
+        assert!(
+            !vault.active_validators.contains(&validator),
+            "Validator should have been removed from active_validators"
         );
     }
 }

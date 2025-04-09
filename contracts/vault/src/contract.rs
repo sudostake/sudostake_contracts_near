@@ -286,6 +286,10 @@ impl Vault {
             staked_balance.as_yoctonear()
         );
 
+        // We should remove this validator from the active validators
+        // When the user is unstaking all their funds
+        let should_remove_validator = staked_balance == amount;
+
         // Emit undelegate_check_passed event
         log_event!(
             "undelegate_check_passed",
@@ -311,12 +315,17 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_withdraw_and_unstake(validator, amount),
+                    .on_withdraw_and_unstake(validator, amount, should_remove_validator),
             )
     }
 
     #[private]
-    pub fn on_withdraw_and_unstake(&mut self, validator: AccountId, amount: NearToken) -> Promise {
+    pub fn on_withdraw_and_unstake(
+        &mut self,
+        validator: AccountId,
+        amount: NearToken,
+        should_remove_validator: bool,
+    ) -> Promise {
         // Call get_account_unstaked_balance to determine how much remains unwithdrawn
         Promise::new(validator.clone())
             .function_call(
@@ -332,7 +341,7 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_reconciled_unstake(validator, amount),
+                    .on_reconciled_unstake(validator, amount, should_remove_validator),
             )
     }
 
@@ -341,6 +350,7 @@ impl Vault {
         &mut self,
         validator: AccountId,
         amount: NearToken,
+        should_remove_validator: bool,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) -> Promise {
         // Parse the returned unstaked balance after withdraw_all
@@ -394,7 +404,7 @@ impl Vault {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_unstake_complete(validator, amount),
+                    .on_unstake_complete(validator, amount, should_remove_validator),
             )
     }
 
@@ -403,11 +413,21 @@ impl Vault {
         &mut self,
         validator: AccountId,
         amount: NearToken,
+        should_remove_validator: bool,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
         // Ensure the unstake call succeeded
         if result.is_err() {
             env::panic_str("Failed to execute unstake on validator");
+        }
+
+        // Remove validator from the active list is remaining stake is 0
+        if should_remove_validator {
+            self.active_validators.remove(&validator);
+            log_event!(
+                "validator_removed",
+                near_sdk::serde_json::json!({ "validator": validator })
+            );
         }
 
         // Construct the new unstake entry using current epoch height
