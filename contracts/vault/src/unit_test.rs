@@ -942,4 +942,76 @@ mod tests {
             "Expected unstake_entries to be cleared for validator"
         );
     }
+
+    #[test]
+    fn test_on_account_unstaked_balance_returned_for_claim_unstaked_partial() {
+        // Set up the vault environment with the owner and 10 NEAR balance
+        let context = get_context(owner(), NearToken::from_near(10), None);
+        testing_env!(context);
+
+        // Define the validator for the test
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Initialize the vault contract
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Create a queue with two unstake entries:
+        // - Entry A: 0.4 NEAR
+        // - Entry B: 0.6 NEAR
+        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+
+        let entry_a = UnstakeEntry {
+            amount: 400_000_000_000_000_000_000_000, // 0.4 NEAR
+            epoch_height: 100,
+        };
+
+        let entry_b = UnstakeEntry {
+            amount: 600_000_000_000_000_000_000_000, // 0.6 NEAR
+            epoch_height: 101,
+        };
+
+        queue.push(&entry_a);
+        queue.push(&entry_b);
+
+        // Insert the queue into the vault for the validator
+        vault.unstake_entries.insert(&validator, &queue);
+
+        // Simulate a withdrawal of only 0.4 NEAR (matching entry_a)
+        // Only entry_b should remain
+        let remaining_unstaked = U128::from(entry_b.amount);
+
+        // Trigger the reconciliation callback with the partial withdrawal
+        vault.on_account_unstaked_balance_returned_for_claim_unstaked(
+            validator.clone(),
+            Ok(remaining_unstaked),
+        );
+
+        // Get the updated unstake queue from contract state
+        let updated_queue = vault
+            .unstake_entries
+            .get(&validator)
+            .expect("Queue should still exist after partial reconciliation");
+
+        // Ensure only one entry remains in the queue
+        assert_eq!(
+            updated_queue.len(),
+            1,
+            "Expected one entry to remain in the unstake queue"
+        );
+
+        // Fetch the remaining entry
+        let remaining_entry = updated_queue.get(0).unwrap();
+
+        // Ensure it is the correct (second) entry
+        assert_eq!(
+            remaining_entry.amount, entry_b.amount,
+            "Remaining entry should match entry_b"
+        );
+        assert_eq!(
+            remaining_entry.epoch_height, entry_b.epoch_height,
+            "Epoch height of remaining entry should match entry_b"
+        );
+    }
 }
