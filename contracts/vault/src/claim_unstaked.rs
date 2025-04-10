@@ -3,6 +3,8 @@ use crate::ext_self;
 use crate::log_event;
 use crate::types::*;
 use crate::Vault;
+use crate::METHOD_GET_ACCOUNT_UNSTAKED_BALANCE;
+use crate::METHOD_WITHDRAW_ALL;
 use near_sdk::json_types::U128;
 use near_sdk::{assert_one_yocto, env, near_bindgen, AccountId, NearToken, Promise};
 
@@ -29,7 +31,7 @@ impl Vault {
         // Trigger withdraw_all → then fetch updated unstaked balance
         Promise::new(validator.clone())
             .function_call(
-                "withdraw_all".to_string(),
+                METHOD_WITHDRAW_ALL.to_string(),
                 near_sdk::serde_json::json!({
                     "account_id": env::current_account_id()
                 })
@@ -50,7 +52,7 @@ impl Vault {
         // Now query the validator for how much NEAR is still unclaimed (after withdraw_all)
         Promise::new(validator.clone())
             .function_call(
-                "get_account_unstaked_balance".to_string(),
+                METHOD_GET_ACCOUNT_UNSTAKED_BALANCE.to_string(),
                 near_sdk::serde_json::json!({
                     "account_id": env::current_account_id()
                 })

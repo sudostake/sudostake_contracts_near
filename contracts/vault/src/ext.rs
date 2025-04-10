@@ -1,5 +1,12 @@
 use near_sdk::{ext_contract, json_types::U128, AccountId, NearToken, Promise};
 
+// staking_pool ext call method names
+pub const METHOD_DEPOSIT_AND_STAKE: &str = "deposit_and_stake";
+pub const METHOD_UNSTAKE: &str = "unstake";
+pub const METHOD_WITHDRAW_ALL: &str = "withdraw_all";
+pub const METHOD_GET_ACCOUNT_STAKED_BALANCE: &str = "get_account_staked_balance";
+pub const METHOD_GET_ACCOUNT_UNSTAKED_BALANCE: &str = "get_account_unstaked_balance";
+
 #[ext_contract(ext_self)]
 pub trait VaultExt {
     fn on_withdraw_all_returned_for_delegate(

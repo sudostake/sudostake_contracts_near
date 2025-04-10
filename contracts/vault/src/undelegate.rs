@@ -3,6 +3,10 @@ use crate::ext_self;
 use crate::log_event;
 use crate::types::*;
 use crate::Vault;
+use crate::METHOD_GET_ACCOUNT_STAKED_BALANCE;
+use crate::METHOD_GET_ACCOUNT_UNSTAKED_BALANCE;
+use crate::METHOD_UNSTAKE;
+use crate::METHOD_WITHDRAW_ALL;
 use near_sdk::collections::Vector;
 use near_sdk::json_types::U128;
 use near_sdk::{assert_one_yocto, env, near_bindgen, AccountId, NearToken, Promise};
@@ -42,7 +46,7 @@ impl Vault {
         // Query the validator for the current staked balance
         Promise::new(validator.clone())
             .function_call(
-                "get_account_staked_balance".to_string(),
+                METHOD_GET_ACCOUNT_STAKED_BALANCE.to_string(),
                 near_sdk::serde_json::json!({
                     "account_id": env::current_account_id()
                 })
@@ -95,7 +99,7 @@ impl Vault {
         // Call withdraw_all to pull any pending unstaked funds before proceeding
         Promise::new(validator.clone())
             .function_call(
-                "withdraw_all".to_string(),
+                METHOD_WITHDRAW_ALL.to_string(),
                 near_sdk::serde_json::json!({
                     "account_id": env::current_account_id()
                 })
@@ -125,7 +129,7 @@ impl Vault {
         // Call get_account_unstaked_balance to determine how much remains unwithdrawn
         Promise::new(validator.clone())
             .function_call(
-                "get_account_unstaked_balance".to_string(),
+                METHOD_GET_ACCOUNT_UNSTAKED_BALANCE.to_string(),
                 near_sdk::serde_json::json!({
                     "account_id": env::current_account_id()
                 })
@@ -196,7 +200,7 @@ impl Vault {
         // Proceed with unstaking the intended amount
         Promise::new(validator.clone())
             .function_call(
-                "unstake".to_string(),
+                METHOD_UNSTAKE.to_string(),
                 json_args,
                 NearToken::from_yoctonear(0),
                 GAS_FOR_UNSTAKE,
