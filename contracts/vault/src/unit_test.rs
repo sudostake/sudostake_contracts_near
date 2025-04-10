@@ -807,6 +807,27 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "No unstaked entries found for validator")]
+    fn test_claim_unstaked_rejects_if_no_entries() {
+        // Set up context with the vault owner calling with 1 yoctoNEAR
+        let context = get_context(
+            owner(),
+            NearToken::from_near(10),
+            Some(NearToken::from_yoctonear(1)),
+        );
+        testing_env!(context);
+
+        // Initialize an empty vault owned by `owner.near`
+        let mut vault = Vault::new(owner(), 0, 1);
+
+        // Use a validator that has no unstake entries in storage
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Should panic because no entries exist for this validator
+        vault.claim_unstaked(validator);
+    }
+
+    #[test]
     fn test_claim_unstaked_emits_start_log() {
         // Set up context with the vault owner and 1 yoctoNEAR
         let context = get_context(
@@ -818,10 +839,21 @@ mod tests {
 
         // Initialize the vault
         let mut vault = Vault::new(owner(), 0, 1);
+        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+        // Insert a dummy unstake entry to bypass the empty check
+        let entry = UnstakeEntry {
+            amount: 1_000_000_000_000_000_000_000_000,
+            epoch_height: 100,
+        };
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
+            validator_hash: env::sha256(validator.as_bytes()),
+        });
+        queue.push(&entry);
+        vault.unstake_entries.insert(&validator, &queue);
 
         // Call claim_unstaked
-        let validator: AccountId = "validator.poolv1.near".parse().unwrap();
-        let _ = vault.claim_unstaked(validator);
+        let _ = vault.claim_unstaked(validator.clone());
 
         // Fetch logs
         let logs = get_logs();
