@@ -137,16 +137,6 @@ async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> 
     // Extract logs
     let logs = result.logs();
 
-    // Confirm reconciliation was triggered
-    let found_reconcile = logs
-        .iter()
-        .any(|log| log.contains("unstake_entries_reconciled"));
-    assert!(
-        found_reconcile,
-        "Expected 'unstake_entries_reconciled' log not found. Logs: {:?}",
-        logs
-    );
-
     // Confirm a second unstake entry was added
     let found_new_unstake = logs
         .iter()

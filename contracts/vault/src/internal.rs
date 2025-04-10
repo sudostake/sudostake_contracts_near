@@ -6,6 +6,14 @@ use crate::contract::Vault;
 
 /// Internal utility methods for Vault
 impl Vault {
+    pub fn reconcile_after_withdraw(&mut self, validator: &AccountId, remaining: NearToken) {
+        let total_before = self.total_unstaked(validator);
+        let withdrawn = total_before
+            .as_yoctonear()
+            .saturating_sub(remaining.as_yoctonear());
+        self.reconcile_unstake_entries(validator, withdrawn);
+    }
+
     pub fn total_unstaked(&self, validator: &AccountId) -> NearToken {
         self.unstake_entries
             .get(validator)

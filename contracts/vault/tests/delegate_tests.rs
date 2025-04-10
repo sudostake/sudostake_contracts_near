@@ -139,13 +139,6 @@ async fn test_delegate_with_reconciliation_happy_path() -> anyhow::Result<()> {
         "Expected full path, but found 'delegate_direct' log"
     );
 
-    // Reconciliation log should appear
-    assert!(
-        logs.iter()
-            .any(|log| log.contains("unstake_entries_reconciled")),
-        "Expected 'unstake_entries_reconciled' log not found"
-    );
-
     // Final staking log should confirm
     assert!(
         logs.iter().any(|log| log.contains("delegate_completed")),

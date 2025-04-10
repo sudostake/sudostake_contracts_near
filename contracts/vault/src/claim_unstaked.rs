@@ -80,31 +80,14 @@ impl Vault {
             Err(_) => env::panic_str("Failed to fetch unstaked balance from validator"),
         };
 
-        // Compute how much was actually withdrawn
-        let total_before = self.total_unstaked(&validator);
-        let withdrawn = total_before
-            .as_yoctonear()
-            .saturating_sub(remaining_unstaked.as_yoctonear());
-
-        // Reconcile internal records
-        self.reconcile_unstake_entries(&validator, withdrawn);
-
-        // Emit unstake_entries_reconciled event
-        log_event!(
-            "unstake_entries_reconciled",
-            near_sdk::serde_json::json!({
-                "validator": validator,
-                "withdrawn": withdrawn.to_string(),
-                "remaining": remaining_unstaked
-            })
-        );
+        // Sync unstake entries after withdraw to match staking_pool
+        self.reconcile_after_withdraw(&validator, remaining_unstaked);
 
         // Emit claim_unstaked_completed event
         log_event!(
             "claim_unstaked_completed",
             near_sdk::serde_json::json!({
                 "validator": validator,
-                "claimed": withdrawn.to_string()
             })
         );
     }

@@ -67,19 +67,9 @@ async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
 
     // Extract logs
     let logs = result.logs();
-    let found_reconciled = logs
-        .iter()
-        .any(|log| log.contains("unstake_entries_reconciled"));
     let found_completed = logs
         .iter()
         .any(|log| log.contains("claim_unstaked_completed"));
-
-    // Confirm unstake_entries_reconciled
-    assert!(
-        found_reconciled,
-        "Expected 'unstake_entries_reconciled' log not found. Logs: {:#?}",
-        logs
-    );
 
     // Confirm claim_unstaked_completed
     assert!(
@@ -168,22 +158,10 @@ async fn test_claim_unstaked_partial_withdraw() -> anyhow::Result<()> {
     // Read the logs emitted during the call
     let logs = result.logs();
 
-    // Check that reconciliation occurred (should remove first entry)
-    let found_reconciled = logs
-        .iter()
-        .any(|log| log.contains("unstake_entries_reconciled"));
-
     // Check that the claim_unstaked flow was completed
     let found_completed = logs
         .iter()
         .any(|log| log.contains("claim_unstaked_completed"));
-
-    assert!(
-        found_reconciled,
-        "Expected 'unstake_entries_reconciled' log not found. Logs: {:#?}",
-        logs
-    );
-
     assert!(
         found_completed,
         "Expected 'claim_unstaked_completed' log not found. Logs: {:#?}",
@@ -225,19 +203,9 @@ async fn test_claim_unstaked_works_gracefully_when_queue_is_empty() -> anyhow::R
 
     // Check logs to confirm reconciliation and completion occurred
     let logs = result.logs();
-
-    let found_reconciled = logs
-        .iter()
-        .any(|log| log.contains("unstake_entries_reconciled"));
     let found_completed = logs
         .iter()
         .any(|log| log.contains("claim_unstaked_completed"));
-
-    assert!(
-        found_reconciled,
-        "Expected 'unstake_entries_reconciled' log not found. Logs: {:#?}",
-        logs
-    );
 
     assert!(
         found_completed,

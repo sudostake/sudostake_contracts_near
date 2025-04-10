@@ -1,7 +1,7 @@
 mod tests {
+    use crate::contract::Vault;
     use crate::STORAGE_BUFFER;
     use crate::{types::StorageKey, UnstakeEntry};
-    use crate::contract::Vault;
 
     use near_sdk::{
         env,
@@ -598,19 +598,8 @@ mod tests {
         // Collect logs emitted during reconciliation
         let logs = get_logs();
 
-        // Verify reconciliation log was emitted
-        let found_reconciled = logs
-            .iter()
-            .any(|log| log.contains("unstake_entries_reconciled"));
-
         // Verify unstake_initiated log was emitted
         let found_unstake = logs.iter().any(|log| log.contains("unstake_initiated"));
-
-        // Assert that both logs are present
-        assert!(
-            found_reconciled,
-            "Expected log 'unstake_entries_reconciled' not found"
-        );
         assert!(found_unstake, "Expected log 'unstake_initiated' not found");
     }
 
@@ -649,20 +638,6 @@ mod tests {
             NearToken::from_near(2),
             false,
             Ok(remaining_unstaked),
-        );
-
-        // Collect emitted logs during the callback
-        let logs = get_logs();
-
-        // Check for presence of 'unstake_entries_reconciled' log
-        let found_log = logs
-            .iter()
-            .any(|log| log.contains("unstake_entries_reconciled"));
-
-        // Assert that reconciliation log was emitted
-        assert!(
-            found_log,
-            "Expected log 'unstake_entries_reconciled' not found"
         );
 
         // Assert that the validator's unstake entry queue has been cleared
@@ -916,21 +891,10 @@ mod tests {
         // Collect emitted logs
         let logs = get_logs();
 
-        // Check that the unstake_entries_reconciled log was emitted
-        let found_reconciled = logs
-            .iter()
-            .any(|log| log.contains("unstake_entries_reconciled"));
-
         // Check that the claim_unstaked_completed log was emitted
         let found_claimed = logs
             .iter()
             .any(|log| log.contains("claim_unstaked_completed"));
-
-        // Assert that the reconciliation log was found
-        assert!(
-            found_reconciled,
-            "Expected 'unstake_entries_reconciled' log not found"
-        );
 
         // Assert that the claim completion log was found
         assert!(
