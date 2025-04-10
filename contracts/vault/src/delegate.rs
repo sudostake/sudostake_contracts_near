@@ -147,6 +147,14 @@ impl Vault {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
         if result.is_err() {
+            log_event!(
+                "delegate_failed",
+                near_sdk::serde_json::json!({
+                    "validator": validator,
+                    "amount": amount
+                })
+            );
+
             env::panic_str("Failed to execute deposit_and_stake on validator");
         }
 
