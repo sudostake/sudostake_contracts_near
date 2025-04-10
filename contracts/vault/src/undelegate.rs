@@ -69,6 +69,9 @@ impl Vault {
         amount: NearToken,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) -> Promise {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_account_staked_balance_returned_for_undelegate");
+
         let staked_balance = match result {
             Ok(value) => NearToken::from_yoctonear(value.0),
             Err(_) => env::panic_str("Failed to fetch staked balance from validator"),
@@ -126,6 +129,9 @@ impl Vault {
         amount: NearToken,
         should_remove_validator: bool,
     ) -> Promise {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_withdraw_all_returned_for_undelegate");
+
         // Call get_account_unstaked_balance to determine how much remains unwithdrawn
         Promise::new(validator.clone())
             .function_call(
@@ -157,6 +163,9 @@ impl Vault {
         should_remove_validator: bool,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) -> Promise {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_account_unstaked_balance_returned_for_undelegate");
+
         // Parse the returned unstaked balance after withdraw_all
         let remaining_unstaked = match result {
             Ok(value) => NearToken::from_yoctonear(value.0),
@@ -204,6 +213,9 @@ impl Vault {
         should_remove_validator: bool,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_unstake_returned_for_undelegate");
+
         // Ensure the unstake call succeeded
         if result.is_err() {
             env::panic_str("Failed to execute unstake on validator");

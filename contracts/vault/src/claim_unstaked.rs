@@ -58,6 +58,9 @@ impl Vault {
 
     #[private]
     pub fn on_withdraw_all_returned_for_claim_unstaked(&mut self, validator: AccountId) -> Promise {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_withdraw_all_returned_for_claim_unstaked");
+
         // Now query the validator for how much NEAR is still unclaimed (after withdraw_all)
         Promise::new(validator.clone())
             .function_call(
@@ -83,6 +86,9 @@ impl Vault {
         validator: AccountId,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_account_unstaked_balance_returned_for_claim_unstaked");
+
         // Parse the returned balance or fail
         let remaining_unstaked = match result {
             Ok(value) => NearToken::from_yoctonear(value.0),

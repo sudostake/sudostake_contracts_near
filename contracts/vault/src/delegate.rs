@@ -92,6 +92,9 @@ impl Vault {
         validator: AccountId,
         amount: NearToken,
     ) -> Promise {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_withdraw_all_returned_for_delegate");
+
         Promise::new(validator.clone())
             .function_call(
                 METHOD_GET_ACCOUNT_UNSTAKED_BALANCE.to_string(),
@@ -117,6 +120,10 @@ impl Vault {
         amount: NearToken,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) -> Promise {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_account_unstaked_balance_returned_for_delegate");
+
+        // Get remaining unstaked
         let remaining_unstaked = match result {
             Ok(value) => NearToken::from_yoctonear(value.0),
             Err(_) => env::panic_str("Failed to fetch unstaked balance from validator"),
@@ -146,6 +153,9 @@ impl Vault {
         amount: NearToken,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
+        // Inspect amount of gas left
+        self.log_gas_checkpoint("on_deposit_and_stake_returned_for_delegate");
+
         if result.is_err() {
             log_event!(
                 "delegate_failed",

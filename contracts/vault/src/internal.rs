@@ -49,4 +49,15 @@ impl Vault {
         let available = total.saturating_sub(STORAGE_BUFFER);
         NearToken::from_yoctonear(available)
     }
+
+    pub fn log_gas_checkpoint(&self, method: &str) {
+        let gas_left = env::prepaid_gas().as_gas() - env::used_gas().as_gas();
+        log_event!(
+            "gas_check",
+            near_sdk::serde_json::json!({
+                "method": method,
+                "gas_left": gas_left
+            })
+        );
+    }
 }
