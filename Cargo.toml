@@ -1,5 +1,5 @@
 [workspace]
-members = ["contracts/factory", "contracts/vault",  "common"]
+members = ["contracts/factory", "contracts/vault",  "contracts/mock_staking_pool",  "common"]
 resolver = "2"
 
 [workspace.package]

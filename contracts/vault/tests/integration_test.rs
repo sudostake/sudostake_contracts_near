@@ -7,7 +7,7 @@ use near_workspaces::{network::Sandbox, Account, Contract, Worker};
 use serde_json::json;
 
 const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
-const STAKING_POOL_WASM_PATH: &str = "../../res/staking_pool.wasm";
+const STAKING_POOL_WASM_PATH: &str = "../../res/mock_staking_pool.wasm";
 
 struct InstantiateTestVaultResult {
     pub execution_result: ExecutionFinalResult,
@@ -452,6 +452,9 @@ async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
+    // Wait 1 epochs to allow delegate to record
+    worker.fast_forward(1 * 500).await?;
+
     // undelegate 1 NEAR from validator
     vault
         .call("undelegate")
@@ -466,7 +469,7 @@ async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
         .into_result()?;
 
     // Wait 5 epochs to allow unbonding to complete
-    worker.fast_forward(5).await?;
+    worker.fast_forward(5 * 500).await?;
 
     // Call claim_unstaked to trigger withdraw_all + reconciliation
     let result = vault
