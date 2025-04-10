@@ -1,5 +1,19 @@
+mod types;
+pub use types::*;
+
 mod contract;
+pub use contract::Vault;
+
+mod claim_unstaked;
+mod delegate;
+mod internal;
+mod undelegate;
+
+#[cfg(test)]
 mod unit_test;
 
 #[macro_use]
-extern crate common;
+mod macros;
+
+mod ext;
+pub use ext::*;

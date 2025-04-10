@@ -5888,7 +5888,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "borsh-derive",
- "common",
  "near-crypto 0.21.2",
  "near-primitives 0.21.2",
  "near-sdk",

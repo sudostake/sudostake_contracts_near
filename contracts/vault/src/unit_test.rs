@@ -1,6 +1,8 @@
-#[cfg(test)]
 mod tests {
-    use crate::contract::{StorageKey, UnstakeEntry, Vault, STORAGE_BUFFER};
+    use crate::STORAGE_BUFFER;
+    use crate::{types::StorageKey, UnstakeEntry};
+    use crate::contract::Vault;
+
     use near_sdk::{
         env,
         json_types::U128,

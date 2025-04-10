@@ -8,7 +8,6 @@ repository = "https://github.com/sudostake/sudostake_contracts_near"
 borsh = { workspace = true }
 borsh-derive = { workspace = true }
 near-sdk = { workspace = true }
-common = { path = "../../common" }
 
 [dev-dependencies]
 near-workspaces = { workspace = true }
