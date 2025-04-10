@@ -226,7 +226,7 @@ impl Vault {
 
         // Get or create the unstake entry queue for the validator
         let mut queue = self.unstake_entries.get(&validator).unwrap_or_else(|| {
-            Vector::new(StorageKey::UnstakeEntryPerValidator {
+            Vector::new(StorageKey::UnstakeEntriesPerValidator {
                 validator_hash: env::sha256(validator.as_bytes()),
             })
         });

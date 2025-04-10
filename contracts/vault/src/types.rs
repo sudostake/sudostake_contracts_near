@@ -19,7 +19,7 @@ pub struct UnstakeEntry {
 pub enum StorageKey {
     ActiveValidators,
     UnstakeEntries,
-    UnstakeEntryPerValidator { validator_hash: Vec<u8> },
+    UnstakeEntriesPerValidator { validator_hash: Vec<u8> },
 }
 
 impl IntoStorageKey for StorageKey {

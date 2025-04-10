@@ -209,7 +209,7 @@ mod tests {
 
         // Manually add a dummy unstake entry for the validator
         // This simulates the presence of unclaimed unbonded tokens
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
         queue.push(&UnstakeEntry {
@@ -253,7 +253,7 @@ mod tests {
         let mut vault = Vault::new(owner(), 0, 1);
 
         // Add two unstake entries totaling 1 NEAR
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
         queue.push(&UnstakeEntry {
@@ -288,7 +288,7 @@ mod tests {
         let mut vault = Vault::new(owner(), 0, 1);
 
         // Add two unstake entries totaling 1 NEAR
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
         let entry_a = UnstakeEntry {
@@ -334,7 +334,7 @@ mod tests {
         let mut vault = Vault::new(owner(), 0, 1);
 
         // Add one unstake entry for 1 NEAR
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
         let entry = UnstakeEntry {
@@ -573,7 +573,7 @@ mod tests {
 
         // Simulate one existing unstake entry of 1 NEAR
         let unstake_amount = NearToken::from_near(1).as_yoctonear();
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
         queue.push(&UnstakeEntry {
@@ -616,7 +616,7 @@ mod tests {
         let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
         // Create a new unstake entry queue with one 1 NEAR entry
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
 
@@ -866,7 +866,7 @@ mod tests {
         let mut vault = Vault::new(owner(), 0, 1);
 
         // Create an unstake entry for 1 NEAR
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
 
@@ -924,7 +924,7 @@ mod tests {
         // Create a queue with two unstake entries:
         // - Entry A: 0.4 NEAR
         // - Entry B: 0.6 NEAR
-        let mut queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+        let mut queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
             validator_hash: env::sha256(validator.as_bytes()),
         });
 

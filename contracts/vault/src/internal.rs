@@ -24,7 +24,7 @@ impl Vault {
 
     pub fn reconcile_unstake_entries(&mut self, validator: &AccountId, mut withdrawn: u128) {
         if let Some(queue) = self.unstake_entries.get(validator) {
-            let mut new_queue = Vector::new(StorageKey::UnstakeEntryPerValidator {
+            let mut new_queue = Vector::new(StorageKey::UnstakeEntriesPerValidator {
                 validator_hash: env::sha256(validator.as_bytes()),
             });
 
