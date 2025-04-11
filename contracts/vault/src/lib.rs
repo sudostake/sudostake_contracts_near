@@ -8,6 +8,7 @@ mod claim_unstaked;
 mod delegate;
 mod internal;
 mod undelegate;
+mod transfer_ownership;
 mod view;
 
 #[cfg(test)]

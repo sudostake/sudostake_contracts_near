@@ -1,4 +1,4 @@
-use crate::Vault;
+use crate::{Vault, VaultViewState};
 use crate::{contract::VaultExt, UnstakeEntry};
 use near_sdk::{near_bindgen, AccountId};
 
@@ -9,5 +9,13 @@ impl Vault {
             .get(&validator)
             .map(|q| q.to_vec())
             .unwrap_or_default()
+    }
+
+    pub fn get_vault_state(&self) -> VaultViewState {
+        VaultViewState {
+            owner: self.owner.clone(),
+            index: self.index,
+            version: self.version,
+        }
     }
 }
