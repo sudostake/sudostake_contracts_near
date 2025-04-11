@@ -7,12 +7,12 @@ pub use contract::Vault;
 mod claim_unstaked;
 mod delegate;
 mod internal;
-mod undelegate;
 mod transfer_ownership;
+mod undelegate;
 mod view;
 
 #[cfg(test)]
-mod unit_test;
+mod unit;
 
 #[macro_use]
 mod macros;
