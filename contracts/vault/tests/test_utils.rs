@@ -23,6 +23,14 @@ pub struct UnstakeEntry {
     pub epoch_height: u64,
 }
 
+#[derive(serde::Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct VaultViewState {
+    pub owner: String,
+    pub index: u64,
+    pub version: u64,
+}
+
 pub async fn create_test_validator(
     worker: &Worker<Sandbox>,
     root: &Account,
