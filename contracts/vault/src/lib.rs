@@ -6,10 +6,12 @@ pub use contract::Vault;
 
 mod claim_unstaked;
 mod delegate;
+mod ft_receiver;
 mod internal;
 mod transfer_ownership;
 mod undelegate;
 mod view;
+mod withdraw_balance;
 
 #[cfg(test)]
 mod unit;

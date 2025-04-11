@@ -7,6 +7,7 @@ use serde::Deserialize;
 pub const GAS_FOR_WITHDRAW_ALL: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_VIEW_CALL: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_CALLBACK: Gas = Gas::from_tgas(20);
+pub const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(200);
 pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(200);
 pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
