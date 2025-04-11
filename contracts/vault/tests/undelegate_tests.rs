@@ -54,10 +54,10 @@ async fn test_undelegate_happy_path() -> anyhow::Result<()> {
 
     // Check for the expected unstake entry log
     let logs = result.logs();
-    let found = logs.iter().any(|log| log.contains("unstake_entry_added"));
+    let found = logs.iter().any(|log| log.contains("undelegate_completed"));
     assert!(
         found,
-        "Expected 'unstake_entry_added' log not found. Logs: {:?}",
+        "Expected 'undelegate_completed' log not found. Logs: {:?}",
         logs
     );
 
@@ -98,7 +98,7 @@ async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> 
         .into_result()?;
 
     // Call undelegate for 1 NEAR from the validator
-    let result = vault
+    let _ = vault
         .call("undelegate")
         .args_json(json!({
             "validator": validator.id(),
@@ -110,17 +110,21 @@ async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> 
         .await?
         .into_result()?;
 
-    // Check for the expected unstake entry log
-    let logs = result.logs();
-    let found = logs.iter().any(|log| log.contains("unstake_entry_added"));
-    assert!(
-        found,
-        "Expected 'unstake_entry_added' log not found. Logs: {:?}",
-        logs
+    // View unstake_entries BEFORE second undelegate
+    let before: Vec<test_utils::UnstakeEntry> = vault
+        .view("get_unstake_entries")
+        .args_json(json!({ "validator": validator.id() }))
+        .await?
+        .json()?;
+
+    assert_eq!(
+        before.len(),
+        1,
+        "Expected one unstake entry before reconciliation"
     );
 
-    // Wait 5 epochs to pass unbonding period
-    worker.fast_forward(5).await?;
+    // Wait 5 epochs to allow unbonding to complete
+    worker.fast_forward(5 * 500).await?;
 
     // Call undelegate again to trigger reconciliation before new unstake
     let result = vault
@@ -140,19 +144,32 @@ async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> 
     // Confirm a second unstake entry was added
     let found_new_unstake = logs
         .iter()
-        .filter(|log| log.contains("unstake_entry_added"))
+        .filter(|log| log.contains("undelegate_completed"))
         .count();
     assert_eq!(
         found_new_unstake, 1,
-        "Expected exactly one new 'unstake_entry_added' log. Logs: {:?}",
+        "Expected exactly one new 'undelegate_completed' log. Logs: {:?}",
         logs
     );
 
-    // Confirm validator was removed
+    // Confirm validator was removed from active validators list
     assert!(
         logs.iter().any(|log| log.contains("validator_removed")),
         "Expected 'validator_removed' log not found. Logs: {:?}",
         logs
+    );
+
+    // View unstake_entries AFTER reconciliation
+    let after: Vec<test_utils::UnstakeEntry> = vault
+        .view("get_unstake_entries")
+        .args_json(json!({ "validator": validator.id() }))
+        .await?
+        .json()?;
+
+    assert_eq!(
+        after.len(),
+        1,
+        "Expected one new unstake entry after reconciliation"
     );
 
     Ok(())

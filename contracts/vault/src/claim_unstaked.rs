@@ -22,15 +22,6 @@ impl Vault {
             "Only the vault owner can claim unstaked balance"
         );
 
-        // Only continue if the validator currently has unstake entries
-        assert!(
-            self.unstake_entries
-                .get(&validator)
-                .map(|q| !q.is_empty())
-                .unwrap_or(false),
-            "No unstaked entries found for validator"
-        );
-
         // Emit event to track the flow
         log_event!(
             "claim_unstaked_started",

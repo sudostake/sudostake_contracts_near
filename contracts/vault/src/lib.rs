@@ -8,6 +8,7 @@ mod claim_unstaked;
 mod delegate;
 mod internal;
 mod undelegate;
+mod view;
 
 #[cfg(test)]
 mod unit_test;

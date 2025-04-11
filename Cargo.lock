@@ -5892,6 +5892,7 @@ dependencies = [
  "near-primitives 0.21.2",
  "near-sdk",
  "near-workspaces",
+ "serde",
  "serde_json",
  "tokio",
 ]

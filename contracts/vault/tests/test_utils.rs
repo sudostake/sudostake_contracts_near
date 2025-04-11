@@ -16,6 +16,13 @@ pub struct InstantiateTestVaultResult {
     pub contract: Contract,
 }
 
+#[derive(serde::Deserialize, Debug, PartialEq)]
+#[serde(crate = "near_sdk::serde")]
+pub struct UnstakeEntry {
+    pub amount: u128,
+    pub epoch_height: u64,
+}
+
 pub async fn create_test_validator(
     worker: &Worker<Sandbox>,
     root: &Account,

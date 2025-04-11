@@ -249,16 +249,6 @@ impl Vault {
         // Persist the updated queue to state
         self.unstake_entries.insert(&validator, &queue);
 
-        // Emit unstake_entry_added event
-        log_event!(
-            "unstake_entry_added",
-            near_sdk::serde_json::json!({
-                "validator": validator,
-                "amount": amount,
-                "epoch_height": entry.epoch_height
-            })
-        );
-
         // Emit undelegate_completed event
         log_event!(
             "undelegate_completed",

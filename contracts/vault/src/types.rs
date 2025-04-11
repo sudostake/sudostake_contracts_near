@@ -9,8 +9,8 @@ pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(200);
 pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(200);
 pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
 
-#[cfg_attr(test, derive(PartialEq))]
-#[derive(BorshDeserialize, BorshSerialize, Debug)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, serde::Serialize)]
+#[serde(crate = "near_sdk::serde")]
 pub struct UnstakeEntry {
     pub amount: u128,
     pub epoch_height: EpochHeight,

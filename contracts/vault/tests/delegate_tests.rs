@@ -115,8 +115,8 @@ async fn test_delegate_with_reconciliation_happy_path() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // Wait for unbonding window to pass
-    worker.fast_forward(5).await?;
+    // Wait 5 epochs to allow unbonding to complete
+    worker.fast_forward(5 * 500).await?;
 
     // Now delegate again — should trigger reconciliation
     let result = vault
@@ -143,6 +143,19 @@ async fn test_delegate_with_reconciliation_happy_path() -> anyhow::Result<()> {
     assert!(
         logs.iter().any(|log| log.contains("delegate_completed")),
         "Expected 'delegate_completed' log not found"
+    );
+
+    // Inspect unstake entries AFTER delegation
+    let after: Vec<test_utils::UnstakeEntry> = vault
+        .view("get_unstake_entries")
+        .args_json(json!({ "validator": validator.id() }))
+        .await?
+        .json()?;
+
+    assert_eq!(
+        after.len(),
+        0,
+        "Expected unstake entries to be cleared after reconciliation"
     );
 
     Ok(())
