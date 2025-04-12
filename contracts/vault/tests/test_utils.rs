@@ -10,6 +10,10 @@ use serde_json::json;
 
 const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
 const STAKING_POOL_WASM_PATH: &str = "../../res/mock_staking_pool.wasm";
+const FT_WASM_PATH: &str = "../../res/fungible_token.wasm";
+const FT_TOTAL_SUPPLY: &str = "1000000000000"; // 1,000,000 USDC (1_000_000 × 10^6)
+const FT_DECIMALS: u8 = 6;
+pub const VAULT_CALL_GAS: Gas = Gas::from_tgas(300);
 
 pub struct InstantiateTestVaultResult {
     pub execution_result: ExecutionFinalResult,
@@ -99,4 +103,133 @@ pub async fn initialize_test_vault(root: &Account) -> anyhow::Result<Instantiate
         execution_result: res,
         contract: vault,
     })
+}
+
+// TODO consolidate this method with initialize_test_vault
+pub async fn initialize_test_vault_on_sub_account(
+    root: &Account,
+) -> anyhow::Result<InstantiateTestVaultResult> {
+    // Read the vault wasm file
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+
+    // Create a new subaccount for the vault (unique name)
+    let subaccount = root
+        .create_subaccount("vault")
+        .initial_balance(NearToken::from_near(5))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Deploy the vault to that subaccount
+    let vault: Contract = subaccount.deploy(&vault_wasm).await?.into_result()?;
+
+    // Initialize the vault contract
+    let res = vault
+        .call("new")
+        .args_json(json!({
+            "owner": root.id(),
+            "index": 0,
+            "version": 1
+        }))
+        .transact()
+        .await?;
+
+    Ok(InstantiateTestVaultResult {
+        execution_result: res,
+        contract: vault,
+    })
+}
+
+pub async fn initialize_test_token(root: &Account) -> anyhow::Result<Contract> {
+    // Read the token wasm file
+    let ft_wasm = std::fs::read(FT_WASM_PATH)?;
+
+    // Create a new subaccount for the token (unique name)
+    let subaccount = root
+        .create_subaccount("token")
+        .initial_balance(NearToken::from_near(5))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Deploy the token to that subaccount
+    let token: Contract = subaccount.deploy(&ft_wasm).await?.into_result()?;
+
+    // Call `new` with proper USDC-style metadata (6 decimals)
+    token
+        .call("new")
+        .args_json(json!({
+            "owner_id": root.id(),
+            "total_supply": FT_TOTAL_SUPPLY,
+            "metadata": {
+                "spec": "ft-1.0.0",
+                "name": "Mock USD Coin",
+                "symbol": "USDC",
+                "decimals": FT_DECIMALS
+            }
+        }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    Ok(token)
+}
+
+pub async fn register_account_with_token(
+    root: &Account,
+    token: &Contract,
+    account_id: &AccountId,
+) -> anyhow::Result<()> {
+    root.call(token.id(), "storage_deposit")
+        .args_json(json!({ "account_id": account_id }))
+        .deposit(NearToken::from_yoctonear(125_000_000_000_000_000_000_000)) // ≈ 0.00125 NEAR
+        .transact()
+        .await?
+        .into_result()?;
+
+    Ok(())
+}
+
+pub async fn transfer_tokens_to_vault(
+    root: &Account,
+    token: &Contract,
+    vault: &Contract,
+    amount: u128,
+    msg: &str,
+) -> anyhow::Result<ExecutionFinalResult> {
+    let result = root
+        .call(token.id(), "ft_transfer_call")
+        .args_json(json!({
+            "receiver_id": vault.id(),
+            "amount": amount.to_string(),
+            "msg": msg,
+        }))
+        .deposit(NearToken::from_yoctonear(1)) // required by NEP-141
+        .max_gas()
+        .transact()
+        .await?;
+
+    Ok(result)
+}
+
+pub async fn withdraw_ft(
+    vault: &Contract,
+    token: &Contract,
+    caller: &Account,
+    recipient: &Account,
+    amount: u128,
+) -> anyhow::Result<ExecutionFinalResult> {
+    let result = caller
+        .call(vault.id(), "withdraw_balance")
+        .args_json(json!({
+            "token_address": token.id(),
+            "amount": amount.to_string(),
+            "to": recipient.id()
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    Ok(result)
 }
