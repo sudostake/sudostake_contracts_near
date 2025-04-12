@@ -42,6 +42,17 @@ pub struct VaultViewState {
     pub version: u64,
 }
 
+/// Describes a liquidity request pre-validation
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct PendingLiquidityRequest {
+    pub token: AccountId,      // NEP-141 token used by lenders (e.g. USDC)
+    pub amount: U128,          // Principal requested from lender
+    pub interest: U128,        // Additional amount to be repaid
+    pub collateral: NearToken, // NEAR collateral backing the loan
+    pub duration: u64,         // Time in seconds before liquidation is allowed
+}
+
 /// Describes a liquidity request created by the vault owner
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]

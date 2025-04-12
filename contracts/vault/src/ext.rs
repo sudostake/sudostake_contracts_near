@@ -68,4 +68,8 @@ pub trait VaultExt {
     );
 
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+
+    fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
+
+    fn on_check_total_staked(&mut self);
 }

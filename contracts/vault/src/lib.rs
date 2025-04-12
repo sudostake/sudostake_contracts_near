@@ -12,6 +12,7 @@ mod transfer_ownership;
 mod undelegate;
 mod view;
 mod withdraw_balance;
+mod request_liquidity;
 
 #[cfg(test)]
 mod unit;
