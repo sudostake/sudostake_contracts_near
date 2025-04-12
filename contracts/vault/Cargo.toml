@@ -9,6 +9,7 @@ borsh = { workspace = true }
 borsh-derive = { workspace = true }
 near-sdk = { workspace = true }
 serde = { workspace = true }
+near-contract-standards = { workspace = true }
 
 [dev-dependencies]
 near-workspaces = { workspace = true }

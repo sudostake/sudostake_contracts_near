@@ -66,4 +66,6 @@ pub trait VaultExt {
         validator: AccountId,
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     );
+
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
 }
