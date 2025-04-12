@@ -18,6 +18,10 @@ pub struct Vault {
     pub version: u64,
     pub active_validators: UnorderedSet<AccountId>,
     pub unstake_entries: UnorderedMap<AccountId, Vector<UnstakeEntry>>,
+    pub liquidity_request: Option<LiquidityRequest>,
+    pub counter_offers: Option<UnorderedMap<AccountId, CounterOffer>>,
+    pub accepted_offer: Option<AcceptedOffer>,
+    pub liquidation: Option<Liquidation>,
 }
 
 #[near_bindgen]
@@ -41,6 +45,10 @@ impl Vault {
             version,
             active_validators: UnorderedSet::new(StorageKey::ActiveValidators),
             unstake_entries: UnorderedMap::new(StorageKey::UnstakeEntries),
+            liquidity_request: None,
+            counter_offers: None,
+            accepted_offer: None,
+            liquidation: None,
         }
     }
 }
