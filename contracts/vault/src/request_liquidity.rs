@@ -1,8 +1,12 @@
+#![allow(dead_code)]
+
+use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext_self;
+use crate::ext::{ext_self, ext_staking_pool};
 use crate::log_event;
-use crate::types::*;
-use crate::Vault;
+use crate::types::{
+    LiquidityRequest, PendingLiquidityRequest, StorageKey, GAS_FOR_CALLBACK, GAS_FOR_VIEW_CALL,
+};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::require;
@@ -65,15 +69,15 @@ impl Vault {
             .expect("No active validators available for collateral check");
 
         // --- Start staking view call chain ---
-        let initial = ext_self::ext(env::current_account_id())
+        let initial = ext_staking_pool::ext(first.clone())
             .with_static_gas(GAS_FOR_VIEW_CALL)
-            .get_account_staked_balance(first.clone());
+            .get_account_staked_balance(env::current_account_id());
 
         let promise_chain = validators.fold(initial, |acc, validator| {
             acc.and(
-                ext_self::ext(env::current_account_id())
+                ext_staking_pool::ext(validator.clone())
                     .with_static_gas(GAS_FOR_VIEW_CALL)
-                    .get_account_staked_balance(validator.clone()),
+                    .get_account_staked_balance(env::current_account_id()),
             )
         });
 

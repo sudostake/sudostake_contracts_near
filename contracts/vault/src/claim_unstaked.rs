@@ -1,10 +1,12 @@
+#![allow(dead_code)]
+
+use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext_self;
+use crate::ext::ext_self;
+use crate::ext::{METHOD_GET_ACCOUNT_UNSTAKED_BALANCE, METHOD_WITHDRAW_ALL};
 use crate::log_event;
-use crate::types::*;
-use crate::Vault;
-use crate::METHOD_GET_ACCOUNT_UNSTAKED_BALANCE;
-use crate::METHOD_WITHDRAW_ALL;
+use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL};
+
 use near_sdk::json_types::U128;
 use near_sdk::{assert_one_yocto, env, near_bindgen, AccountId, NearToken, Promise};
 

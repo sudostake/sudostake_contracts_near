@@ -1,6 +1,7 @@
 #[path = "test_utils.rs"]
 mod test_utils;
-use crate::Vault;
+
+use crate::contract::Vault;
 use near_sdk::{test_utils::get_logs, testing_env, NearToken};
 use test_utils::{alice, get_context, owner};
 

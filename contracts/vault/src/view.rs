@@ -1,5 +1,7 @@
-use crate::{Vault, VaultViewState};
-use crate::{contract::VaultExt, UnstakeEntry};
+#![allow(dead_code)]
+
+use crate::contract::{Vault, VaultExt};
+use crate::types::{UnstakeEntry, VaultViewState};
 use near_sdk::{near_bindgen, AccountId};
 
 #[near_bindgen]

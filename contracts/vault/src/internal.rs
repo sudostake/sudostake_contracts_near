@@ -1,8 +1,8 @@
-use crate::*;
+use crate::contract::Vault;
+use crate::log_event;
+use crate::types::{StorageKey, STORAGE_BUFFER};
 use near_sdk::collections::Vector;
 use near_sdk::{env, AccountId, NearToken};
-
-use crate::contract::Vault;
 
 /// Internal utility methods for Vault
 impl Vault {

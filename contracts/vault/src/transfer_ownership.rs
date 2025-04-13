@@ -1,6 +1,7 @@
-use crate::contract::VaultExt;
+#![allow(dead_code)]
+
+use crate::contract::{Vault, VaultExt};
 use crate::log_event;
-use crate::Vault;
 
 use near_sdk::assert_one_yocto;
 use near_sdk::{env, near_bindgen, AccountId};
@@ -39,4 +40,3 @@ impl Vault {
         );
     }
 }
-

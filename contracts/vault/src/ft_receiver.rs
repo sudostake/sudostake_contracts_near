@@ -1,5 +1,7 @@
-use crate::Vault;
-use crate::{contract::VaultExt, log_event};
+use crate::{
+    contract::{Vault, VaultExt},
+    log_event,
+};
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::{json_types::U128, near_bindgen, AccountId, PromiseOrValue};
 

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use near_sdk::{ext_contract, json_types::U128, AccountId, NearToken, Promise};
 
 // staking_pool ext call method names
@@ -67,9 +69,15 @@ pub trait VaultExt {
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     );
 
-    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
-
-    fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
-
     fn on_check_total_staked(&mut self);
+}
+
+#[ext_contract(ext_staking_pool)]
+pub trait StakingPool {
+    fn get_account_staked_balance(&self, account_id: AccountId) -> U128;
+}
+
+#[ext_contract(ext_fungible_token)]
+pub trait FungibleToken {
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
 }
