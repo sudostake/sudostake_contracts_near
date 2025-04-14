@@ -2,6 +2,7 @@
 
 use anyhow::Ok;
 use near_primitives::types::AccountId;
+use near_sdk::json_types::U128;
 use near_sdk::{Gas, NearToken};
 use near_workspaces::result::ExecutionFinalResult;
 use near_workspaces::types::SecretKey;
@@ -29,12 +30,23 @@ pub struct UnstakeEntry {
 
 #[derive(serde::Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
+pub struct LiquidityRequest {
+    pub token: AccountId,
+    pub amount: U128,
+    pub interest: U128,
+    pub collateral: NearToken,
+    pub duration: u64,
+    pub created_at: u64,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub struct VaultViewState {
     pub owner: String,
     pub index: u64,
     pub version: u64,
     pub pending_liquidity_request: Option<serde_json::Value>,
-    pub liquidity_request: Option<serde_json::Value>,
+    pub liquidity_request: Option<LiquidityRequest>,
     pub accepted_offer: Option<serde_json::Value>,
 }
 
@@ -235,4 +247,16 @@ pub async fn withdraw_ft(
         .await?;
 
     Ok(result)
+}
+
+pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
+    serde_json::json!({
+        "action": "AcceptLiquidityRequest",
+        "token": request.token,
+        "amount": request.amount,
+        "interest": request.interest,
+        "collateral": request.collateral,
+        "duration": request.duration
+    })
+    .to_string()
 }
