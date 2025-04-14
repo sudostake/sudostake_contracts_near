@@ -187,12 +187,19 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // Initialize factory with 3 NEAR minting fee
+    // Load vault.wasm and calculate required minting fee
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    let wasm_bytes = vault_wasm.len() as u128;
+    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
+    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
+    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+
+    // Initialize factory with calculated minting fee
     owner
         .call(factory_contract.id(), "new")
         .args_json(serde_json::json!({
             "owner": owner.id(),
-            "vault_minting_fee": NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000)
+            "vault_minting_fee": minting_fee
         }))
         .transact()
         .await?
@@ -209,10 +216,10 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // Mint vault from user with full 3 NEAR fee
-    user.call(factory_contract.id(), "mint_vault")
-        .deposit(NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000))
-        .gas(Gas::from_tgas(300))
+    // Call mint_vault with the correct fee
+    user.call(factory.id(), "mint_vault")
+        .deposit(minting_fee.clone())
+        .max_gas()
         .transact()
         .await?
         .into_result()?;
@@ -259,12 +266,19 @@ async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // Initialize factory
+    // Load vault.wasm and calculate required minting fee
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    let wasm_bytes = vault_wasm.len() as u128;
+    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
+    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
+    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+
+    // Initialize factory with calculated minting fee
     owner
         .call(factory_contract.id(), "new")
         .args_json(serde_json::json!({
             "owner": owner.id(),
-            "vault_minting_fee": NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000)
+            "vault_minting_fee": minting_fee
         }))
         .transact()
         .await?
@@ -280,10 +294,10 @@ async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // User mints a vault (simulates income to factory)
-    user.call(factory_contract.id(), "mint_vault")
-        .deposit(NearToken::from_yoctonear(3_000_000_000_000_000_000_000_000))
-        .gas(Gas::from_tgas(300))
+    // Call mint_vault with the correct fee
+    user.call(factory.id(), "mint_vault")
+        .deposit(minting_fee.clone())
+        .max_gas()
         .transact()
         .await?
         .into_result()?;
@@ -328,11 +342,19 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
         .await?
         .into_result()?;
 
+    // Load vault.wasm and calculate required minting fee
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    let wasm_bytes = vault_wasm.len() as u128;
+    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
+    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
+    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+
+    // Initialize factory with calculated minting fee
     owner
         .call(factory_contract.id(), "new")
         .args_json(serde_json::json!({
             "owner": owner.id(),
-            "vault_minting_fee": NearToken::from_near(3)
+            "vault_minting_fee": minting_fee
         }))
         .transact()
         .await?
@@ -348,10 +370,10 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
         .await?
         .into_result()?;
 
-    // User mints a vault (this funds the factory account)
+    // Call mint_vault with the correct fee
     user.call(factory_contract.id(), "mint_vault")
-        .deposit(NearToken::from_near(3))
-        .gas(Gas::from_tgas(300))
+        .deposit(minting_fee.clone())
+        .max_gas()
         .transact()
         .await?
         .into_result()?;

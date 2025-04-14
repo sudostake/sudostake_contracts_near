@@ -1,8 +1,10 @@
+#![allow(dead_code)]
+
+use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext_self;
+use crate::ext::ext_fungible_token;
 use crate::log_event;
-use crate::Vault;
-use crate::GAS_FOR_FT_TRANSFER;
+use crate::types::GAS_FOR_FT_TRANSFER;
 use near_sdk::NearToken;
 use near_sdk::{assert_one_yocto, env, json_types::U128, near_bindgen, AccountId, Promise};
 
@@ -49,7 +51,7 @@ impl Vault {
         );
 
         // Call `ft_transfer` on the token contract to send tokens to recipient
-        ext_self::ext(token)
+        ext_fungible_token::ext(token)
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FOR_FT_TRANSFER)
             .ft_transfer(recipient, amount, None)

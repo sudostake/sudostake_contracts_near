@@ -1,6 +1,9 @@
 #[path = "test_utils.rs"]
 mod test_utils;
-use crate::{StorageKey, UnstakeEntry, Vault};
+use crate::{
+    contract::Vault,
+    types::{StorageKey, UnstakeEntry},
+};
 use near_sdk::{collections::Vector, env, test_utils::get_logs, testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
 
