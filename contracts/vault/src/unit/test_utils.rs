@@ -1,5 +1,7 @@
 #![allow(dead_code)]
-use near_sdk::{test_utils::VMContextBuilder, AccountId, NearToken};
+use near_sdk::{json_types::U128, test_utils::VMContextBuilder, AccountId, NearToken};
+
+use crate::types::LiquidityRequest;
 
 pub fn alice() -> AccountId {
     "alice.near".parse().unwrap()
@@ -28,4 +30,15 @@ pub fn get_context(
 
     // Step 4: Return the completed context
     builder.build()
+}
+
+pub fn create_valid_liquidity_request(token: AccountId) -> LiquidityRequest {
+    LiquidityRequest {
+        token,
+        amount: U128(1_000_000),
+        interest: U128(100_000),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+        created_at: 0,
+    }
 }
