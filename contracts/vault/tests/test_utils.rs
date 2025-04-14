@@ -33,6 +33,9 @@ pub struct VaultViewState {
     pub owner: String,
     pub index: u64,
     pub version: u64,
+    pub pending_liquidity_request: Option<serde_json::Value>,
+    pub liquidity_request: Option<serde_json::Value>,
+    pub accepted_offer: Option<serde_json::Value>,
 }
 
 pub async fn create_test_validator(

@@ -40,6 +40,9 @@ pub struct VaultViewState {
     pub owner: AccountId,
     pub index: u64,
     pub version: u64,
+    pub pending_liquidity_request: Option<PendingLiquidityRequest>,
+    pub liquidity_request: Option<LiquidityRequest>,
+    pub accepted_offer: Option<AcceptedOffer>,
 }
 
 /// Describes a liquidity request pre-validation
