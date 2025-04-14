@@ -68,12 +68,22 @@ pub struct LiquidityRequest {
     pub created_at: u64,       // Timestamp when request was opened
 }
 
+#[derive(serde::Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct AcceptRequestMessage {
+    pub action: String,        // "AcceptLiquidityRequest"
+    pub token: AccountId,      // NEP-141 token used by lenders (e.g. USDC)
+    pub amount: U128,          // Principal requested from lender
+    pub interest: U128,        // Additional amount to be repaid
+    pub collateral: NearToken, // NEAR collateral backing the loan
+    pub duration: u64,         // Time in seconds before liquidation is allowed
+}
+
 /// Represents the matched lender’s offer
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AcceptedOffer {
     pub lender: AccountId, // Account that fulfilled the liquidity request
-    pub amount: U128,      // Total repayment obligation (amount + interest)
     pub accepted_at: u64,  // Timestamp of acceptance
 }
 

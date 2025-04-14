@@ -198,7 +198,6 @@ fn test_request_liquidity_fails_if_accepted_offer_exists() {
     // Simulate an accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
         lender: "lender.near".parse().unwrap(),
-        amount: U128(1_000_000),
         accepted_at: 0,
     });
 

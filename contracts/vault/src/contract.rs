@@ -1,14 +1,16 @@
 #![allow(dead_code)]
 
+use crate::log_event;
+use crate::types::{
+    AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
+    StorageKey, UnstakeEntry,
+};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::{
     collections::{UnorderedSet, Vector},
     env, near_bindgen, AccountId, PanicOnDefault,
 };
-
-use crate::log_event;
-use crate::types::*;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
