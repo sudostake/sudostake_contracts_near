@@ -1,3 +1,4 @@
+mod cancel_liquidity_request_tests;
 mod claim_unstaked;
 mod delegate;
 mod ext_callbacks;

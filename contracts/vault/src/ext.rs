@@ -70,6 +70,10 @@ pub trait VaultExt {
     );
 
     fn on_check_total_staked(&mut self);
+
+    fn on_refund_complete(&mut self, proposer: AccountId, amount: U128, token_address: AccountId);
+
+    fn on_retry_refund_complete(&mut self, id: u64);
 }
 
 #[ext_contract(ext_staking_pool)]
