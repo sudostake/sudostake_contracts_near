@@ -1,6 +1,7 @@
 use crate::contract::Vault;
+use crate::ext::ext_fungible_token;
 use crate::log_event;
-use crate::types::{AcceptRequestMessage, StorageKey, STORAGE_BUFFER};
+use crate::types::{AcceptRequestMessage, StorageKey, GAS_FOR_FT_TRANSFER, STORAGE_BUFFER};
 use near_sdk::collections::Vector;
 use near_sdk::json_types::U128;
 use near_sdk::{env, AccountId, NearToken};
@@ -116,6 +117,9 @@ impl Vault {
             accepted_at: env::block_timestamp(),
         });
 
+        // Refund all counter offers if any
+        self.refund_all_counter_offers(msg.token);
+
         // Log liquidity_request_accepted event
         log_event!(
             "liquidity_request_accepted",
@@ -127,5 +131,21 @@ impl Vault {
         );
 
         Ok(())
+    }
+
+    pub(crate) fn refund_all_counter_offers(&self, token: AccountId) {
+        if let Some(counter_offers) = &self.counter_offers {
+            for (_, offer) in counter_offers.iter() {
+                ext_fungible_token::ext(token.clone())
+                    .with_attached_deposit(NearToken::from_yoctonear(1))
+                    .with_static_gas(GAS_FOR_FT_TRANSFER)
+                    .ft_transfer(offer.proposer.clone(), offer.amount, None)
+                    .then(Self::ext(env::current_account_id()).on_refund_complete(
+                        offer.proposer.clone(),
+                        offer.amount,
+                        token.clone(),
+                    ));
+            }
+        }
     }
 }

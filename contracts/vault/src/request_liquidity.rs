@@ -5,9 +5,8 @@ use crate::contract::VaultExt;
 use crate::ext::{ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    LiquidityRequest, PendingLiquidityRequest, StorageKey, GAS_FOR_CALLBACK, GAS_FOR_VIEW_CALL,
+    LiquidityRequest, PendingLiquidityRequest, GAS_FOR_CALLBACK, GAS_FOR_VIEW_CALL,
 };
-use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::require;
 use near_sdk::PromiseResult;
@@ -136,9 +135,6 @@ impl Vault {
             duration: pending.duration,
             created_at: env::block_timestamp(),
         });
-
-        // Initialize counter offers map
-        self.counter_offers = Some(UnorderedMap::new(StorageKey::CounterOffers));
 
         // Log liquidity_request_opened event
         log_event!(
