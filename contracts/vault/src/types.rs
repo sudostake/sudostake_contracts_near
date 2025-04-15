@@ -26,6 +26,7 @@ pub enum StorageKey {
     CounterOffers,
     UnstakeEntries,
     UnstakeEntriesPerValidator { validator_hash: Vec<u8> },
+    RefundList,
 }
 
 impl IntoStorageKey for StorageKey {
@@ -109,4 +110,11 @@ pub struct CounterOffer {
     pub proposer: AccountId, // The lender who submitted the offer
     pub amount: U128,        // Offered USDC amount (must be < requested_amount)
     pub timestamp: u64,      // When the offer was created or updated
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct RefundEntry {
+    pub token: AccountId,    // USDC token contract address
+    pub proposer: AccountId, // Receiver of the refund
+    pub amount: U128,        // Amount to refund
 }

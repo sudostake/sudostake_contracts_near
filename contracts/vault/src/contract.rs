@@ -3,7 +3,7 @@
 use crate::log_event;
 use crate::types::{
     AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
-    StorageKey, UnstakeEntry,
+    RefundEntry, StorageKey, UnstakeEntry,
 };
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
@@ -25,6 +25,8 @@ pub struct Vault {
     pub counter_offers: Option<UnorderedMap<AccountId, CounterOffer>>,
     pub accepted_offer: Option<AcceptedOffer>,
     pub liquidation: Option<Liquidation>,
+    pub refund_list: UnorderedMap<u64, RefundEntry>,
+    pub refund_nonce: u64,
 }
 
 #[near_bindgen]
@@ -53,6 +55,8 @@ impl Vault {
             counter_offers: None,
             accepted_offer: None,
             liquidation: None,
+            refund_list: UnorderedMap::new(StorageKey::RefundList),
+            refund_nonce: 0,
         }
     }
 }
