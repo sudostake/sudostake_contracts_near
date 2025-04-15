@@ -10,7 +10,7 @@ use near_workspaces::{network::Sandbox, Account, Contract, Worker};
 use serde_json::json;
 
 const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
-const STAKING_POOL_WASM_PATH: &str = "../../res/mock_staking_pool.wasm";
+const STAKING_POOL_WASM_PATH: &str = "../../res/staking_pool.wasm";
 const FT_WASM_PATH: &str = "../../res/fungible_token.wasm";
 const FT_TOTAL_SUPPLY: &str = "1000000000000"; // 1,000,000 USDC (1_000_000 × 10^6)
 const FT_DECIMALS: u8 = 6;
@@ -19,13 +19,6 @@ pub const VAULT_CALL_GAS: Gas = Gas::from_tgas(300);
 pub struct InstantiateTestVaultResult {
     pub execution_result: ExecutionFinalResult,
     pub contract: Contract,
-}
-
-#[derive(serde::Deserialize, Debug, PartialEq)]
-#[serde(crate = "near_sdk::serde")]
-pub struct UnstakeEntry {
-    pub amount: u128,
-    pub epoch_height: u64,
 }
 
 #[derive(serde::Deserialize, Debug)]

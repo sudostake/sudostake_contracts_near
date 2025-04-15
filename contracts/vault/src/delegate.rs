@@ -3,30 +3,29 @@
 use crate::contract::Vault;
 use crate::contract::VaultExt;
 use crate::ext::ext_self;
-use crate::ext::{
-    METHOD_DEPOSIT_AND_STAKE, METHOD_GET_ACCOUNT_UNSTAKED_BALANCE, METHOD_WITHDRAW_ALL,
-};
+use crate::ext::ext_staking_pool;
 use crate::log_event;
-use crate::types::{
-    GAS_FOR_CALLBACK, GAS_FOR_DEPOSIT_AND_STAKE, GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL,
-};
-use near_sdk::json_types::U128;
+use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_DEPOSIT_AND_STAKE};
 use near_sdk::{assert_one_yocto, env, near_bindgen, AccountId, NearToken, Promise};
 
 #[near_bindgen]
 impl Vault {
     #[payable]
     pub fn delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
+        // Ensure the call is intentional
         assert_one_yocto();
 
+        // Ensure only the vault owner can delegate
         assert_eq!(
             env::predecessor_account_id(),
             self.owner,
             "Only the vault owner can delegate stake"
         );
 
+        // Ensure amount is greater than 0
         assert!(amount.as_yoctonear() > 0, "Amount must be greater than 0");
 
+        // Ensure there is enough balance to delegate
         let available_balance = self.get_available_balance();
         assert!(
             amount.as_yoctonear() <= available_balance.as_yoctonear(),
@@ -35,156 +34,40 @@ impl Vault {
             available_balance
         );
 
-        let has_pending_unstakes = self
-            .unstake_entries
-            .get(&validator)
-            .map(|q| !q.is_empty())
-            .unwrap_or(false);
-
-        if !has_pending_unstakes {
-            log_event!(
-                "delegate_direct",
-                near_sdk::serde_json::json!({
-                    "validator": validator.clone(),
-                    "amount": amount
-                })
-            );
-
-            return Promise::new(validator.clone())
-                .function_call(
-                    METHOD_DEPOSIT_AND_STAKE.to_string(),
-                    vec![],
-                    amount,
-                    GAS_FOR_DEPOSIT_AND_STAKE,
-                )
-                .then(
-                    ext_self::ext(env::current_account_id())
-                        .with_static_gas(GAS_FOR_CALLBACK)
-                        .on_deposit_and_stake_returned_for_delegate(validator, amount),
-                );
-        }
-
-        log_event!(
-            "delegate_started",
-            near_sdk::serde_json::json!({
-                "validator": validator,
-                "amount": amount
-            })
-        );
-
-        Promise::new(validator.clone())
-            .function_call(
-                METHOD_WITHDRAW_ALL.to_string(),
-                near_sdk::serde_json::json!({
-                    "account_id": env::current_account_id()
-                })
-                .to_string()
-                .into_bytes(),
-                NearToken::from_yoctonear(0),
-                GAS_FOR_WITHDRAW_ALL,
-            )
-            .then(
-                ext_self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_VIEW_CALL)
-                    .on_withdraw_all_returned_for_delegate(validator, amount),
-            )
-    }
-
-    #[private]
-    pub fn on_withdraw_all_returned_for_delegate(
-        &mut self,
-        validator: AccountId,
-        amount: NearToken,
-    ) -> Promise {
-        // Inspect amount of gas left
-        self.log_gas_checkpoint("on_withdraw_all_returned_for_delegate");
-
-        Promise::new(validator.clone())
-            .function_call(
-                METHOD_GET_ACCOUNT_UNSTAKED_BALANCE.to_string(),
-                near_sdk::serde_json::json!({
-                    "account_id": env::current_account_id()
-                })
-                .to_string()
-                .into_bytes(),
-                NearToken::from_yoctonear(0),
-                GAS_FOR_VIEW_CALL,
-            )
+        // Call deposit and stake on ext_staking_pool
+        ext_staking_pool::ext(validator.clone())
+            .with_static_gas(GAS_FOR_DEPOSIT_AND_STAKE)
+            .with_attached_deposit(amount)
+            .deposit_and_stake()
             .then(
                 ext_self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_account_unstaked_balance_returned_for_delegate(validator, amount),
+                    .on_deposit_and_stake(validator, amount),
             )
     }
 
     #[private]
-    pub fn on_account_unstaked_balance_returned_for_delegate(
-        &mut self,
-        validator: AccountId,
-        amount: NearToken,
-        #[callback_result] result: Result<U128, near_sdk::PromiseError>,
-    ) -> Promise {
-        // Inspect amount of gas left
-        self.log_gas_checkpoint("on_account_unstaked_balance_returned_for_delegate");
-
-        // Get remaining unstaked
-        let remaining_unstaked = match result {
-            Ok(value) => NearToken::from_yoctonear(value.0),
-            Err(_) => env::panic_str("Failed to fetch unstaked balance from validator"),
-        };
-
-        // Sync unstake entries after withdraw to match staking_pool
-        self.reconcile_after_withdraw(&validator, remaining_unstaked);
-
-        Promise::new(validator.clone())
-            .function_call(
-                METHOD_DEPOSIT_AND_STAKE.to_string(),
-                vec![],
-                amount,
-                GAS_FOR_DEPOSIT_AND_STAKE,
-            )
-            .then(
-                ext_self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_deposit_and_stake_returned_for_delegate(validator, amount),
-            )
-    }
-
-    #[private]
-    pub fn on_deposit_and_stake_returned_for_delegate(
+    pub fn on_deposit_and_stake(
         &mut self,
         validator: AccountId,
         amount: NearToken,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
         // Inspect amount of gas left
-        self.log_gas_checkpoint("on_deposit_and_stake_returned_for_delegate");
+        self.log_gas_checkpoint("on_deposit_and_stake");
 
         if result.is_err() {
+            env::panic_str("Failed to execute deposit_and_stake on validator");
+        } else {
+            self.active_validators.insert(&validator);
+
             log_event!(
-                "delegate_failed",
+                "delegate_completed",
                 near_sdk::serde_json::json!({
                     "validator": validator,
                     "amount": amount
                 })
             );
-
-            env::panic_str("Failed to execute deposit_and_stake on validator");
         }
-
-        self.active_validators.insert(&validator);
-
-        log_event!(
-            "validator_activated",
-            near_sdk::serde_json::json!({ "validator": validator })
-        );
-
-        log_event!(
-            "delegate_completed",
-            near_sdk::serde_json::json!({
-                "validator": validator,
-                "amount": amount
-            })
-        );
     }
 }

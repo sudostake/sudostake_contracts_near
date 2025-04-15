@@ -2,12 +2,11 @@
 mod test_utils;
 
 use near_sdk::{Gas, NearToken};
-use near_workspaces::Contract;
 use serde_json::json;
 use test_utils::{create_test_validator, initialize_test_vault};
 
 #[tokio::test]
-async fn test_undelegate_happy_path() -> anyhow::Result<()> {
+async fn test_undelegate_succeed() -> anyhow::Result<()> {
     // Initialize sandbox and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -16,9 +15,7 @@ async fn test_undelegate_happy_path() -> anyhow::Result<()> {
     let validator = create_test_validator(&worker, &root).await?;
 
     // Instantiate the vault contract
-    let res = initialize_test_vault(&root).await?;
-    res.execution_result.into_result()?;
-    let vault: Contract = res.contract;
+    let vault = initialize_test_vault(&root).await?.contract;
 
     // Fund the vault with 5 NEAR from the root
     let _ = root
@@ -38,6 +35,9 @@ async fn test_undelegate_happy_path() -> anyhow::Result<()> {
         .transact()
         .await?
         .into_result()?;
+
+    // Fast forward 1 block so stake is visible to staking pool
+    worker.fast_forward(1).await?;
 
     // Call undelegate for 1 NEAR from the validator
     let result = vault
@@ -59,117 +59,6 @@ async fn test_undelegate_happy_path() -> anyhow::Result<()> {
         found,
         "Expected 'undelegate_completed' log not found. Logs: {:?}",
         logs
-    );
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_undelegate_with_reconciliation_happy_path() -> anyhow::Result<()> {
-    // Initialize sandbox and root account
-    let worker = near_workspaces::sandbox().await?;
-    let root = worker.root_account()?;
-
-    // Initialize a new validator
-    let validator = create_test_validator(&worker, &root).await?;
-
-    // Instantiate the vault contract
-    let res = initialize_test_vault(&root).await?;
-    res.execution_result.into_result()?;
-    let vault: Contract = res.contract;
-
-    // Fund the vault with 5 NEAR from the root
-    let _ = root
-        .transfer_near(vault.id(), NearToken::from_near(5))
-        .await?
-        .into_result()?;
-
-    // Call delegate for 2 NEAR to the validator
-    vault
-        .call("delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(2)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Call undelegate for 1 NEAR from the validator
-    let _ = vault
-        .call("undelegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(1)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // View unstake_entries BEFORE second undelegate
-    let before: Vec<test_utils::UnstakeEntry> = vault
-        .view("get_unstake_entries")
-        .args_json(json!({ "validator": validator.id() }))
-        .await?
-        .json()?;
-
-    assert_eq!(
-        before.len(),
-        1,
-        "Expected one unstake entry before reconciliation"
-    );
-
-    // Wait 5 epochs to allow unbonding to complete
-    worker.fast_forward(5 * 500).await?;
-
-    // Call undelegate again to trigger reconciliation before new unstake
-    let result = vault
-        .call("undelegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(1)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?;
-
-    // Extract logs
-    let logs = result.logs();
-
-    // Confirm a second unstake entry was added
-    let found_new_unstake = logs
-        .iter()
-        .filter(|log| log.contains("undelegate_completed"))
-        .count();
-    assert_eq!(
-        found_new_unstake, 1,
-        "Expected exactly one new 'undelegate_completed' log. Logs: {:?}",
-        logs
-    );
-
-    // Confirm validator was removed from active validators list
-    assert!(
-        logs.iter().any(|log| log.contains("validator_removed")),
-        "Expected 'validator_removed' log not found. Logs: {:?}",
-        logs
-    );
-
-    // View unstake_entries AFTER reconciliation
-    let after: Vec<test_utils::UnstakeEntry> = vault
-        .view("get_unstake_entries")
-        .args_json(json!({ "validator": validator.id() }))
-        .await?
-        .json()?;
-
-    assert_eq!(
-        after.len(),
-        1,
-        "Expected one new unstake entry after reconciliation"
     );
 
     Ok(())

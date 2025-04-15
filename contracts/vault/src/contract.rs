@@ -7,10 +7,7 @@ use crate::types::{
 };
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
-use near_sdk::{
-    collections::{UnorderedSet, Vector},
-    env, near_bindgen, AccountId, PanicOnDefault,
-};
+use near_sdk::{collections::UnorderedSet, env, near_bindgen, AccountId, PanicOnDefault};
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -19,7 +16,7 @@ pub struct Vault {
     pub index: u64,
     pub version: u64,
     pub active_validators: UnorderedSet<AccountId>,
-    pub unstake_entries: UnorderedMap<AccountId, Vector<UnstakeEntry>>,
+    pub unstake_entries: UnorderedMap<AccountId, UnstakeEntry>,
     pub pending_liquidity_request: Option<PendingLiquidityRequest>,
     pub liquidity_request: Option<LiquidityRequest>,
     pub counter_offers: Option<UnorderedMap<AccountId, CounterOffer>>,

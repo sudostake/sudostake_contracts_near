@@ -25,7 +25,6 @@ pub enum StorageKey {
     ActiveValidators,
     CounterOffers,
     UnstakeEntries,
-    UnstakeEntriesPerValidator { validator_hash: Vec<u8> },
     RefundList,
 }
 
