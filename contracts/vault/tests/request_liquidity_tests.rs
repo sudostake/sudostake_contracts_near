@@ -1,7 +1,10 @@
 use anyhow::Ok;
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
-use test_utils::{create_test_validator, initialize_test_vault, VaultViewState, VAULT_CALL_GAS};
+use test_utils::{
+    create_named_test_validator, create_test_validator, initialize_test_vault, VaultViewState,
+    VAULT_CALL_GAS,
+};
 #[path = "test_utils.rs"]
 mod test_utils;
 
@@ -146,6 +149,138 @@ async fn test_request_liquidity_fails_if_total_stake_insufficient() -> anyhow::R
     assert!(
         failure_text.contains("Insufficient staked NEAR to satisfy requested collateral"),
         "Expected error message not found. Got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_request_liquidity_prunes_zero_stake_validators() -> anyhow::Result<()> {
+    // Initialize sandbox environment
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+
+    // Initialize three test validators
+    let validator_1 = create_named_test_validator(&worker, &root, "validator_1").await?;
+    let validator_2 = create_named_test_validator(&worker, &root, "validator_2").await?;
+    let validator_3 = create_named_test_validator(&worker, &root, "validator_3").await?;
+
+    // Deploy and initialize the vault contract
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Delegate 5 NEAR only to validator_1
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_1.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward
+    worker.fast_forward(1).await?;
+
+    // Delegate 5 NEAR only to validator_2
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_2.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward
+    worker.fast_forward(1).await?;
+
+    // Delegate 5 NEAR only to validator_3
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_3.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward
+    worker.fast_forward(1).await?;
+
+    // Get total staked at validator_2 and undelegate all
+    let staked: U128 = validator_2
+        .view("get_account_staked_balance")
+        .args_json(json!({ "account_id": vault.id() }))
+        .await?
+        .json()?;
+
+    root.call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator_2.id(),
+            "amount": staked.0.to_string(),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Wait 5 epochs to allow unbonding to complete
+    worker.fast_forward(5 * 500).await?;
+
+    // Claim all unstaked balance from validator_2
+    root.call(vault.id(), "claim_unstaked")
+        .args_json(json!({ "validator": validator_2.id() }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward
+    worker.fast_forward(1).await?;
+
+    // Try requesting liquidity with the remaining staked 10 NEAR as collateral
+    let result = root
+        .call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": "usdc.token.near",
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(10),
+            "duration": 60 * 60 * 24
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Inspect logs for liquidity_request_opened event
+    let logs = result.logs();
+    let found = logs
+        .iter()
+        .any(|log| log.contains("liquidity_request_opened"));
+    assert!(
+        found,
+        "Expected 'liquidity_request_opened' log not found. Logs: {:?}",
+        logs
+    );
+
+    // Fetch active validators after pruning logic
+    let validators: Vec<String> = vault.view("get_active_validators").await?.json()?;
+
+    // Confirm that validator_2 has been removed
+    assert!(
+        !validators.contains(&validator_2.id().to_string()),
+        "Expected validator_2 to be pruned, but it is still present: {:?}",
+        validators
     );
 
     Ok(())

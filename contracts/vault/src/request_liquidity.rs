@@ -100,12 +100,22 @@ impl Vault {
         let mut total_staked_yocto: u128 = 0;
         let num_results = env::promise_results_count();
 
+        // Track and collect zero balance validators
+        let validator_ids: Vec<AccountId> = self.active_validators.iter().collect();
+        let mut zero_balance_validators: Vec<AccountId> = vec![];
+
         // Iterate through the results and calculate total_staked_yocto
         for i in 0..num_results {
+            let validator_id = &validator_ids[i as usize];
+
             match env::promise_result(i) {
                 PromiseResult::Successful(bytes) => {
                     if let Ok(U128(staked)) = near_sdk::serde_json::from_slice::<U128>(&bytes) {
                         total_staked_yocto += staked;
+
+                        if staked == 0 {
+                            zero_balance_validators.push(validator_id.clone());
+                        }
                     } else {
                         env::log_str(&format!(
                             "Warning: Could not parse staked balance from result #{}",
@@ -117,6 +127,15 @@ impl Vault {
                     env::log_str(&format!("Warning: Promise result #{} failed", i));
                 }
             }
+        }
+
+        // Prune validators with zero staked balance
+        for validator in zero_balance_validators {
+            self.active_validators.remove(&validator);
+            env::log_str(&format!(
+                "Removed validator with zero staked balance: {}",
+                validator
+            ));
         }
 
         // Verify the total staked >= collateral
