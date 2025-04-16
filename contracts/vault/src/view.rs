@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use crate::contract::{Vault, VaultExt};
-use crate::types::VaultViewState;
-use near_sdk::near_bindgen;
+use crate::types::{UnstakeEntry, VaultViewState};
+use near_sdk::{near_bindgen, AccountId};
 
 #[near_bindgen]
 impl Vault {
@@ -23,5 +23,9 @@ impl Vault {
             .into_iter()
             .map(|a| a.to_string())
             .collect()
+    }
+
+    pub fn get_unstake_entry(&self, validator: AccountId) -> Option<UnstakeEntry> {
+        self.unstake_entries.get(&validator)
     }
 }

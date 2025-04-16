@@ -7,5 +7,5 @@ mod request_liquidity_tests;
 mod test_utils;
 mod transfer_ownership;
 mod try_accept_liquidity_request_tests;
-mod undelegate;
+mod undelegate_unit_tests;
 mod withdraw_balance;

@@ -1,8 +1,8 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::contract::Vault;
-use near_sdk::{testing_env, AccountId, NearToken};
+use crate::{contract::Vault, types::UnstakeEntry};
+use near_sdk::{env, testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
 
 #[test]
@@ -87,4 +87,80 @@ fn test_undelegate_requires_active_validator() {
 
     // Attempt to undelegate — should panic due to missing validator
     vault.undelegate(validator, NearToken::from_near(1));
+}
+
+#[test]
+fn test_on_unstake_inserts_entry() {
+    // Set up context with the vault owner
+    let context = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Define validator and amount
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+    let amount = NearToken::from_near(2);
+
+    // Simulate successful on_unstake callback
+    vault.on_unstake(validator.clone(), amount, Ok(()));
+
+    // Assert that an entry was created in unstake_entries
+    let entry = vault
+        .unstake_entries
+        .get(&validator)
+        .expect("Expected unstake entry to be inserted");
+    assert_eq!(entry.amount, amount.as_yoctonear());
+    assert_eq!(entry.epoch_height, env::epoch_height());
+}
+
+#[test]
+fn test_on_unstake_updates_existing_entry() {
+    // Set up context with the vault owner
+    let context = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Define a validator and pre-insert an unstake entry
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+    let initial_amount = NearToken::from_near(1).as_yoctonear();
+    vault.unstake_entries.insert(
+        &validator,
+        &UnstakeEntry {
+            amount: initial_amount,
+            epoch_height: 100,
+        },
+    );
+
+    // Simulate a second successful unstake of 2 NEAR
+    let additional = NearToken::from_near(2);
+    vault.on_unstake(validator.clone(), additional, Ok(()));
+
+    // Assert that the entry was updated correctly
+    let entry = vault
+        .unstake_entries
+        .get(&validator)
+        .expect("Expected unstake entry to be present");
+    assert_eq!(entry.amount, initial_amount + additional.as_yoctonear());
+    assert_eq!(entry.epoch_height, env::epoch_height());
+}
+
+#[test]
+#[should_panic(expected = "Failed to execute unstake on validator")]
+fn test_on_unstake_panics_on_failure() {
+    // Set up context with the vault owner
+    let context = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Define validator and amount
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+    let amount = NearToken::from_near(1);
+
+    // Simulate a failed callback result
+    vault.on_unstake(validator, amount, Err(near_sdk::PromiseError::Failed));
 }

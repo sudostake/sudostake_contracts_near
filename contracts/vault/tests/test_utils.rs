@@ -34,6 +34,13 @@ pub struct LiquidityRequest {
 
 #[derive(serde::Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
+pub struct UnstakeEntry {
+    pub amount: u128,
+    pub epoch_height: u64,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub struct VaultViewState {
     pub owner: String,
     pub index: u64,

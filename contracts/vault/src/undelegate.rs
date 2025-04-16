@@ -55,30 +55,40 @@ impl Vault {
         self.log_gas_checkpoint("on_unstake");
 
         if result.is_err() {
-            env::panic_str("Failed to execute unstake on validator");
-        } else {
             log_event!(
-                "undelegate_completed",
+                "undelegate_failed",
                 near_sdk::serde_json::json!({
                     "validator": validator,
-                    "amount": amount
+                    "amount": amount,
+                    "error": "unstake failed"
                 })
             );
 
-            // Add or update unstake entry for validator
-            if let Some(mut entry) = self.unstake_entries.get(&validator) {
-                entry.amount += amount.as_yoctonear();
-                entry.epoch_height = env::epoch_height();
-                self.unstake_entries.insert(&validator, &entry);
-            } else {
-                self.unstake_entries.insert(
-                    &validator,
-                    &UnstakeEntry {
-                        amount: amount.as_yoctonear(),
-                        epoch_height: env::epoch_height(),
-                    },
-                );
-            }
+            // Throws an error
+            env::panic_str("Failed to execute unstake on validator");
         }
+
+        // Log undelegate_completed event
+        log_event!(
+            "undelegate_completed",
+            near_sdk::serde_json::json!({
+                "validator": validator,
+                "amount": amount
+            })
+        );
+
+        // Get the validator unstake entry
+        let mut entry = self
+            .unstake_entries
+            .get(&validator)
+            .unwrap_or_else(|| UnstakeEntry {
+                amount: 0,
+                epoch_height: 0,
+            });
+
+        // Update the entry and save to state
+        entry.amount += amount.as_yoctonear();
+        entry.epoch_height = env::epoch_height();
+        self.unstake_entries.insert(&validator, &entry);
     }
 }
