@@ -61,60 +61,73 @@ pub struct PendingLiquidityRequest {
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct LiquidityRequest {
-    pub token: AccountId,      // NEP-141 token used by lenders (e.g. USDC)
-    pub amount: U128,          // Principal requested from lender
-    pub interest: U128,        // Additional amount to be repaid
-    pub collateral: NearToken, // NEAR collateral backing the loan
-    pub duration: u64,         // Time in seconds before liquidation is allowed
-    pub created_at: u64,       // Timestamp when request was opened
+    pub token: AccountId,
+    pub amount: U128,
+    pub interest: U128,
+    pub collateral: NearToken,
+    pub duration: u64,
+    pub created_at: u64,
 }
 
 #[derive(serde::Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AcceptRequestMessage {
-    pub action: String,        // "AcceptLiquidityRequest"
-    pub token: AccountId,      // NEP-141 token used by lenders (e.g. USDC)
-    pub amount: U128,          // Principal requested from lender
-    pub interest: U128,        // Additional amount to be repaid
-    pub collateral: NearToken, // NEAR collateral backing the loan
-    pub duration: u64,         // Time in seconds before liquidation is allowed
+    /// "AcceptLiquidityRequest"
+    pub action: String,
+    pub token: AccountId,
+    pub amount: U128,
+    pub interest: U128,
+    pub collateral: NearToken,
+    pub duration: u64,
+}
+
+#[derive(serde::Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct CounterOfferMessage {
+    /// NewCounterOffer
+    pub action: String,
+    pub token: AccountId,
+    pub amount: U128,
+    pub interest: U128,
+    pub collateral: NearToken,
+    pub duration: u64,
 }
 
 /// Represents the matched lender’s offer
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct AcceptedOffer {
-    pub lender: AccountId, // Account that fulfilled the liquidity request
-    pub accepted_at: u64,  // Timestamp of acceptance
+    pub lender: AccountId,
+    pub accepted_at: u64,
 }
 
 /// Tracks how much NEAR has been liquidated toward fulfilling the lender's claim
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Liquidation {
-    pub liquidated: NearToken, // Total NEAR transferred to lender so far
+    pub liquidated: NearToken,
 }
 
 /// Represents the derived lifecycle state of the vault
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(crate = "near_sdk::serde")]
 pub enum VaultState {
-    Idle,    // No liquidity request
-    Pending, // Request exists but not matched
-    Active,  // Offer accepted and currently locked
+    Idle,
+    Pending,
+    Active,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct CounterOffer {
-    pub proposer: AccountId, // The lender who submitted the offer
-    pub amount: U128,        // Offered USDC amount (must be < requested_amount)
-    pub timestamp: u64,      // When the offer was created or updated
+    pub proposer: AccountId,
+    pub amount: U128,
+    pub timestamp: u64,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct RefundEntry {
-    pub token: AccountId,    // USDC token contract address
-    pub proposer: AccountId, // Receiver of the refund
-    pub amount: U128,        // Amount to refund
+    pub token: AccountId,
+    pub proposer: AccountId,
+    pub amount: U128,
 }
