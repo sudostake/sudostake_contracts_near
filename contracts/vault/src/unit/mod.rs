@@ -1,5 +1,5 @@
 mod cancel_liquidity_request_tests;
-mod claim_unstaked;
+mod claim_unstaked_unit_tests;
 mod delegate_unit_tests;
 mod ext_callbacks;
 mod initialization;

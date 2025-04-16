@@ -12,6 +12,7 @@ pub const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(200);
 pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(200);
 pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
+pub const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, Clone, serde::Serialize)]
 #[serde(crate = "near_sdk::serde")]
