@@ -16,4 +16,12 @@ impl Vault {
             accepted_offer: self.accepted_offer.clone(),
         }
     }
+
+    pub fn get_active_validators(&self) -> Vec<String> {
+        self.active_validators
+            .to_vec()
+            .into_iter()
+            .map(|a| a.to_string())
+            .collect()
+    }
 }

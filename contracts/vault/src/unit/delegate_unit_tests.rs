@@ -1,7 +1,7 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 use crate::contract::Vault;
-use near_sdk::{testing_env, NearToken};
+use near_sdk::{testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
 
 #[test]
@@ -88,5 +88,72 @@ fn test_delegate_fails_if_insufficient_balance() {
     vault.delegate(
         "validator.poolv1.near".parse().unwrap(),
         NearToken::from_near(1),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Failed to execute deposit_and_stake on validator")]
+fn test_on_delegate_complete_panics_on_failure() {
+    // Set up test context with the vault owner
+    let context = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Define a dummy validator
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+    // Simulate a failed deposit_and_stake callback
+    vault.on_deposit_and_stake(
+        validator,
+        NearToken::from_near(1),
+        Err(near_sdk::PromiseError::Failed),
+    );
+}
+
+#[test]
+fn test_delegate_success_does_not_panic() {
+    // Set up context with the correct owner and attach 1 yoctoNEAR
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize the vault owned by owner.near
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Call delegate with a valid validator and amount
+    // This should NOT panic, and return a Promise
+    let result = vault.delegate(
+        "validator.poolv1.near".parse().unwrap(),
+        NearToken::from_near(1),
+    );
+
+    // Assert that a Promise is returned (indirectly confirms no panic)
+    assert!(matches!(result, near_sdk::Promise { .. }));
+}
+
+#[test]
+fn test_on_deposit_and_stake_success_adds_validator() {
+    // Set up context with the vault owner
+    let context = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Define a dummy validator address
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+    // Simulate a successful deposit_and_stake callback
+    vault.on_deposit_and_stake(validator.clone(), NearToken::from_near(1), Ok(()));
+
+    // Assert that the validator was added to the active set
+    assert!(
+        vault.active_validators.contains(&validator),
+        "Validator should be marked as active after successful delegation"
     );
 }
