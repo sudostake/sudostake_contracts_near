@@ -1,7 +1,11 @@
 use crate::contract::Vault;
 use crate::ext::ext_fungible_token;
 use crate::log_event;
-use crate::types::{AcceptRequestMessage, GAS_FOR_FT_TRANSFER, STORAGE_BUFFER};
+use crate::types::{
+    AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_FT_TRANSFER,
+    STORAGE_BUFFER,
+};
+use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::{env, AccountId, NearToken};
 
@@ -94,19 +98,153 @@ impl Vault {
         Ok(())
     }
 
+    pub fn try_add_counter_offer(
+        &mut self,
+        proposer: AccountId,
+        offered_amount: U128,
+        msg: CounterOfferMessage,
+        token_contract: AccountId,
+    ) -> Result<(), String> {
+        // Must have a liquidity request
+        let request = self
+            .liquidity_request
+            .as_ref()
+            .ok_or("No liquidity request available")?;
+
+        // Must not be already accepted
+        if self.accepted_offer.is_some() {
+            return Err("Liquidity request already accepted".into());
+        }
+
+        // Token must match
+        if token_contract != request.token {
+            return Err("Token mismatch".into());
+        }
+
+        // Ensure message fields match the current request
+        if msg.token != request.token
+            || msg.amount != request.amount
+            || msg.interest != request.interest
+            || msg.collateral != request.collateral
+            || msg.duration != request.duration
+        {
+            return Err("Message fields do not match current request".into());
+        }
+
+        // Amount must be > 0
+        if offered_amount.0 == 0 {
+            return Err("Offer amount must be greater than 0".into());
+        }
+
+        // Offer must be < requested amount
+        if offered_amount.0 >= request.amount.0 {
+            return Err("Offer must be less than requested amount".into());
+        }
+
+        // Proposer must not already have an offer
+        let already_exists = self
+            .counter_offers
+            .as_ref()
+            .and_then(|map| map.get(&proposer))
+            .is_some();
+        if already_exists {
+            return Err("Proposer already has an active offer".into());
+        }
+
+        // Initialize counter_offers map if needed
+        let offers = self
+            .counter_offers
+            .get_or_insert_with(|| UnorderedMap::new(StorageKey::CounterOffers));
+
+        // Compute current best offer
+        let best_offer = offers
+            .iter()
+            .map(|(_, offer)| offer.amount.0)
+            .max()
+            .unwrap_or(0);
+
+        // Offer must be better than the current best
+        if offered_amount.0 <= best_offer {
+            return Err("Offer must be greater than current best offer".into());
+        }
+
+        // Add the offer to the list of counter offers
+        offers.insert(
+            &proposer,
+            &CounterOffer {
+                proposer: proposer.clone(),
+                amount: offered_amount,
+                timestamp: env::block_timestamp(),
+            },
+        );
+
+        // Log counter_offer_created event
+        log_event!(
+            "counter_offer_created",
+            near_sdk::serde_json::json!({
+                "proposer": proposer,
+                "amount": offered_amount,
+                "request": {
+                    "token": request.token,
+                    "amount": request.amount,
+                    "interest": request.interest,
+                    "collateral": request.collateral,
+                    "duration": request.duration
+                }
+            })
+        );
+
+        // Prune if more than 10 entries
+        if offers.len() > 10 {
+            // Find lowest offer
+            let (lowest_key, lowest_offer) = offers
+                .iter()
+                .min_by_key(|(_, offer)| offer.amount.0)
+                .expect("Expected at least one offer");
+
+            // Log counter_offer_evicted event
+            log_event!(
+                "counter_offer_evicted",
+                near_sdk::serde_json::json!({
+                    "proposer": lowest_key,
+                    "amount": lowest_offer.amount,
+                    "request": {
+                        "token": request.token,
+                        "amount": request.amount,
+                        "interest": request.interest,
+                        "collateral": request.collateral,
+                        "duration": request.duration
+                    }
+                })
+            );
+
+            // Remove lowest offer
+            offers.remove(&lowest_key);
+
+            // Attempt refund
+            self.refund_counter_offer(token_contract, lowest_offer);
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn refund_all_counter_offers(&self, token: AccountId) {
         if let Some(counter_offers) = &self.counter_offers {
             for (_, offer) in counter_offers.iter() {
-                ext_fungible_token::ext(token.clone())
-                    .with_attached_deposit(NearToken::from_yoctonear(1))
-                    .with_static_gas(GAS_FOR_FT_TRANSFER)
-                    .ft_transfer(offer.proposer.clone(), offer.amount, None)
-                    .then(Self::ext(env::current_account_id()).on_refund_complete(
-                        offer.proposer.clone(),
-                        offer.amount,
-                        token.clone(),
-                    ));
+                self.refund_counter_offer(token.clone(), offer);
             }
         }
+    }
+
+    pub(crate) fn refund_counter_offer(&self, token_address: AccountId, offer: CounterOffer) {
+        ext_fungible_token::ext(token_address.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(GAS_FOR_FT_TRANSFER)
+            .ft_transfer(offer.proposer.clone(), offer.amount, None)
+            .then(Self::ext(env::current_account_id()).on_refund_complete(
+                offer.proposer.clone(),
+                offer.amount,
+                token_address,
+            ));
     }
 }

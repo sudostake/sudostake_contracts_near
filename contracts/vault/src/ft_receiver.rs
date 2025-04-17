@@ -1,7 +1,7 @@
 use crate::{
     contract::{Vault, VaultExt},
     log_event,
-    types::AcceptRequestMessage,
+    types::{AcceptRequestMessage, CounterOfferMessage},
 };
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::{env, json_types::U128, near_bindgen, AccountId, PromiseOrValue};
@@ -23,10 +23,27 @@ impl FungibleTokenReceiver for Vault {
             })
         );
 
-        // Attempt to parse structured message for AcceptLiquidityRequest
+        // Try AcceptLiquidityRequest
         if let Ok(parsed) = near_sdk::serde_json::from_str::<AcceptRequestMessage>(&msg) {
             if parsed.action == "AcceptLiquidityRequest" {
                 let result = self.try_accept_liquidity_request(
+                    sender_id.clone(),
+                    amount,
+                    parsed,
+                    env::predecessor_account_id(),
+                );
+
+                return match result {
+                    Ok(_) => PromiseOrValue::Value(U128(0)),
+                    Err(_) => PromiseOrValue::Value(amount),
+                };
+            }
+        }
+
+        // Try NewCounterOffer
+        if let Ok(parsed) = near_sdk::serde_json::from_str::<CounterOfferMessage>(&msg) {
+            if parsed.action == "NewCounterOffer" {
+                let result = self.try_add_counter_offer(
                     sender_id.clone(),
                     amount,
                     parsed,
