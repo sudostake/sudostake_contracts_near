@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::contract::{Vault, VaultExt};
-use crate::types::{UnstakeEntry, VaultViewState};
+use crate::types::{CounterOffer, UnstakeEntry, VaultViewState};
 use near_sdk::{near_bindgen, AccountId};
 
 #[near_bindgen]
@@ -27,5 +27,11 @@ impl Vault {
 
     pub fn get_unstake_entry(&self, validator: AccountId) -> Option<UnstakeEntry> {
         self.unstake_entries.get(&validator)
+    }
+
+    pub fn get_counter_offers(&self) -> Option<std::collections::HashMap<AccountId, CounterOffer>> {
+        self.counter_offers
+            .as_ref()
+            .map(|map| map.to_vec().into_iter().collect())
     }
 }

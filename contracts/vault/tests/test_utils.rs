@@ -32,6 +32,14 @@ pub struct LiquidityRequest {
     pub created_at: u64,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct CounterOffer {
+    pub proposer: AccountId,
+    pub amount: U128,
+    pub timestamp: u64,
+}
+
 #[derive(serde::Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct UnstakeEntry {
@@ -308,4 +316,13 @@ pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
         "duration": request.duration
     })
     .to_string()
+}
+
+pub async fn get_usdc_balance(token: &Contract, account_id: &AccountId) -> anyhow::Result<U128> {
+    let result = token
+        .view("ft_balance_of")
+        .args_json(json!({ "account_id": account_id }))
+        .await?
+        .json()?;
+    Ok(result)
 }
