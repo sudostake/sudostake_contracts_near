@@ -1,3 +1,4 @@
+mod cancel_counter_offer_unit_tests;
 mod cancel_liquidity_request_tests;
 mod claim_unstaked_unit_tests;
 mod delegate_unit_tests;
