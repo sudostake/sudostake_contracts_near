@@ -3,11 +3,11 @@ use crate::ext::ext_fungible_token;
 use crate::log_event;
 use crate::types::{
     AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_FT_TRANSFER,
-    STORAGE_BUFFER,
+    MAX_COUNTER_OFFERS, STORAGE_BUFFER,
 };
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
-use near_sdk::{env, AccountId, NearToken};
+use near_sdk::{env, require, AccountId, NearToken};
 
 /// Internal utility methods for Vault
 impl Vault {
@@ -111,65 +111,82 @@ impl Vault {
             .as_ref()
             .ok_or("No liquidity request available")?;
 
-        // Must not be already accepted
-        if self.accepted_offer.is_some() {
-            return Err("Liquidity request already accepted".into());
-        }
+        // Get request details
+        let r_token = request.token.clone();
+        let r_amount = request.amount;
+        let r_interest = request.interest;
+        let r_collateral = request.collateral;
+        let r_duration = request.duration;
 
-        // Token must match
-        if token_contract != request.token {
-            return Err("Token mismatch".into());
-        }
+        // Request must not be already accepted
+        require!(
+            self.accepted_offer.is_none(),
+            "Liquidity request already accepted"
+        );
+
+        // Calling token_contract must match requested token
+        require!(token_contract == r_token, "Token mismatch");
 
         // Ensure message fields match the current request
-        if msg.token != request.token
-            || msg.amount != request.amount
-            || msg.interest != request.interest
-            || msg.collateral != request.collateral
-            || msg.duration != request.duration
-        {
-            return Err("Message fields do not match current request".into());
-        }
+        require!(
+            msg.token == r_token
+                && msg.amount == r_amount
+                && msg.interest == r_interest
+                && msg.collateral == r_collateral
+                && msg.duration == r_duration,
+            "Message fields do not match current request"
+        );
 
-        // Amount must be > 0
-        if offered_amount.0 == 0 {
-            return Err("Offer amount must be greater than 0".into());
-        }
+        // Offered amount must be > 0
+        require!(
+            offered_amount > U128::from(0),
+            "Offer amount must be greater than 0"
+        );
 
-        // Offer must be < requested amount
-        if offered_amount.0 >= request.amount.0 {
-            return Err("Offer must be less than requested amount".into());
-        }
+        // Offered amount must be < requested amount
+        require!(
+            offered_amount < r_amount,
+            "Offer must be less than requested amount"
+        );
 
-        // Proposer must not already have an offer
-        let already_exists = self
-            .counter_offers
-            .as_ref()
-            .and_then(|map| map.get(&proposer))
-            .is_some();
-        if already_exists {
-            return Err("Proposer already has an active offer".into());
-        }
-
-        // Initialize counter_offers map if needed
-        let offers = self
+        // Get or initialize counter_offers map if needed
+        let offers_map = self
             .counter_offers
             .get_or_insert_with(|| UnorderedMap::new(StorageKey::CounterOffers));
 
-        // Compute current best offer
-        let best_offer = offers
-            .iter()
-            .map(|(_, offer)| offer.amount.0)
-            .max()
-            .unwrap_or(0);
+        // Proposer must not already have an offer
+        require!(
+            offers_map.get(&proposer).is_none(),
+            "Proposer already has an active offer"
+        );
 
-        // Offer must be better than the current best
-        if offered_amount.0 <= best_offer {
-            return Err("Offer must be greater than current best offer".into());
+        // Find current best & worst offers simultaneously
+        let mut best = U128::from(0);
+        let mut worst: Option<(AccountId, CounterOffer)> = None;
+        let evict_worse_offfer = (offers_map.len() + 1) > MAX_COUNTER_OFFERS;
+        for (k, v) in offers_map.iter() {
+            let amt = v.amount;
+            if amt > best {
+                best = amt;
+            }
+
+            if evict_worse_offfer {
+                match &worst {
+                    None => worst = Some((k, v)),
+                    Some((_, w)) if amt < w.amount => worst = Some((k, v)),
+                    _ => {}
+                }
+            }
         }
 
+        // Offer must be better than the current best
+        require!(
+            offered_amount > best,
+            "Offer must be greater than current best offer"
+        );
+
         // Add the offer to the list of counter offers
-        offers.insert(
+        offers_map.insert(
             &proposer,
             &CounterOffer {
                 proposer: proposer.clone(),
@@ -185,44 +202,39 @@ impl Vault {
                 "proposer": proposer,
                 "amount": offered_amount,
                 "request": {
-                    "token": request.token,
-                    "amount": request.amount,
-                    "interest": request.interest,
-                    "collateral": request.collateral,
-                    "duration": request.duration
+                    "token": r_token,
+                    "amount": r_amount,
+                    "interest": r_interest,
+                    "collateral": r_collateral,
+                    "duration": r_duration
                 }
             })
         );
 
-        // Prune if more than 10 entries
-        if offers.len() > 10 {
-            // Find lowest offer
-            let (lowest_key, lowest_offer) = offers
-                .iter()
-                .min_by_key(|(_, offer)| offer.amount.0)
-                .expect("Expected at least one offer");
+        // Try evict worst offer
+        if evict_worse_offfer {
+            if let Some((lowest_key, lowest_offer)) = worst {
+                offers_map.remove(&lowest_key);
 
-            // Log counter_offer_evicted event
-            log_event!(
-                "counter_offer_evicted",
-                near_sdk::serde_json::json!({
-                    "proposer": lowest_key,
-                    "amount": lowest_offer.amount,
-                    "request": {
-                        "token": request.token,
-                        "amount": request.amount,
-                        "interest": request.interest,
-                        "collateral": request.collateral,
-                        "duration": request.duration
-                    }
-                })
-            );
+                // Log counter_offer_evicted event
+                log_event!(
+                    "counter_offer_evicted",
+                    near_sdk::serde_json::json!({
+                        "proposer": lowest_key,
+                        "amount": lowest_offer.amount,
+                        "request": {
+                            "token": r_token,
+                            "amount": r_amount,
+                            "interest": r_interest,
+                            "collateral": r_collateral,
+                            "duration": r_duration
+                        }
+                    })
+                );
 
-            // Remove lowest offer
-            offers.remove(&lowest_key);
-
-            // Attempt refund
-            self.refund_counter_offer(token_contract, lowest_offer);
+                // Refund lowest_offer
+                self.refund_counter_offer(token_contract, lowest_offer);
+            }
         }
 
         Ok(())
