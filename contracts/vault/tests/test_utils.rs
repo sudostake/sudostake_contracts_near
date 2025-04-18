@@ -318,6 +318,18 @@ pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
     .to_string()
 }
 
+pub fn make_counter_offer_msg(request: &LiquidityRequest) -> String {
+    serde_json::json!({
+        "action": "NewCounterOffer",
+        "token": request.token,
+        "amount": request.amount,
+        "interest": request.interest,
+        "collateral": request.collateral,
+        "duration": request.duration
+    })
+    .to_string()
+}
+
 pub async fn get_usdc_balance(token: &Contract, account_id: &AccountId) -> anyhow::Result<U128> {
     let result = token
         .view("ft_balance_of")
