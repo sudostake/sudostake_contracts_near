@@ -145,13 +145,13 @@ async fn test_transfer_ownership_requires_1yocto() -> anyhow::Result<()> {
         .transact()
         .await?;
 
-    // Step 4: Assert that it fails
+    // Assert that it fails
     assert!(
         result.is_failure(),
         "Expected failure when no yoctoNEAR is attached"
     );
 
-    // Step 5: Check for assert_one_yocto failure message
+    // Check for assert_one_yocto failure message
     let msg = result.clone().into_result().unwrap_err().to_string();
     assert!(
         msg.contains("Requires attached deposit of exactly 1 yoctoNEAR"),

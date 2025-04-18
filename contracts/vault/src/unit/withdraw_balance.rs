@@ -77,7 +77,7 @@ fn owner_can_withdraw_nep141_with_one_yocto() {
     // Use a fake token address for NEP-141 (we're not testing the external contract)
     let fake_token: AccountId = "usdc.mock.near".parse().unwrap();
 
-    // Step 4: Attempt to withdraw 100 USDC tokens (or whatever you want)
+    // Attempt to withdraw 100 USDC tokens (or whatever you want)
     vault.withdraw_balance(
         Some(fake_token),
         U128::from(100_000_000),

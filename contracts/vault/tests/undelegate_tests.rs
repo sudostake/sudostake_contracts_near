@@ -197,7 +197,7 @@ async fn test_undelegate_fails_if_validator_not_active() -> anyhow::Result<()> {
         .transact()
         .await?;
 
-    // Step 6: Assert that the call failed due to inactive validator
+    // Assert that the call failed due to inactive validator
     let failure_text = format!("{:?}", result.failures());
     assert!(
         failure_text.contains("Validator is not currently active"),

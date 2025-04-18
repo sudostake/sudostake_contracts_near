@@ -242,7 +242,7 @@ fn test_accept_fails_if_proposer_does_not_exist() {
 #[test]
 #[should_panic(expected = "Provided amount does not match the counter offer")]
 fn test_accept_fails_if_amount_mismatch() {
-    // Step 1: Set context as vault owner
+    // Set context as vault owner
     let ctx = get_context(
         owner(),
         NearToken::from_near(10),

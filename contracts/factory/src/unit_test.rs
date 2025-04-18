@@ -162,18 +162,18 @@ mod tests {
         let minting_fee = NearToken::from_near(2);
         let attached_deposit = minting_fee.clone();
 
-        // Step 1: Deploy factory with owner context
+        // Deploy factory with owner context
         let mut owner_context = VMContextBuilder::new();
         owner_context.predecessor_account_id(owner.clone());
         testing_env!(owner_context.build());
 
         let mut contract = FactoryContract::new(owner.clone(), minting_fee);
 
-        // Step 2: Upload vault code (must be > 1024 bytes)
+        // Upload vault code (must be > 1024 bytes)
         let dummy_wasm = vec![1; 2048];
         contract.set_vault_code(dummy_wasm);
 
-        // Step 3: Mint vault with user context
+        // Mint vault with user context
         let mut user_context = VMContextBuilder::new();
         user_context
             .predecessor_account_id(user.clone())
@@ -193,7 +193,7 @@ mod tests {
         let owner: AccountId = "owner.near".parse().unwrap();
         let user: AccountId = "user.near".parse().unwrap();
 
-        // Step 1: Deploy factory with zero minting fee
+        // Deploy factory with zero minting fee
         let mut owner_context = VMContextBuilder::new();
         owner_context.predecessor_account_id(owner.clone());
         testing_env!(owner_context.build());
@@ -201,11 +201,11 @@ mod tests {
         let zero_fee = NearToken::from_yoctonear(0);
         let mut contract = FactoryContract::new(owner.clone(), zero_fee);
 
-        // Step 2: Upload vault code (must be > 1024 bytes)
+        // Upload vault code (must be > 1024 bytes)
         let dummy_wasm = vec![1; 2048];
         contract.set_vault_code(dummy_wasm);
 
-        // Step 3: Try to mint vault with user context
+        // Try to mint vault with user context
         // The attached deposit doesn't matter because fee is zero
         let mut user_context = VMContextBuilder::new();
         user_context
@@ -224,7 +224,7 @@ mod tests {
         let owner: AccountId = "owner.near".parse().unwrap();
         let user: AccountId = "user.near".parse().unwrap();
 
-        // Step 1: Deploy factory with expected minting fee
+        // Deploy factory with expected minting fee
         let mut owner_context = VMContextBuilder::new();
         owner_context.predecessor_account_id(owner.clone());
         testing_env!(owner_context.build());
@@ -232,11 +232,11 @@ mod tests {
         let minting_fee = NearToken::from_near(2);
         let mut contract = FactoryContract::new(owner.clone(), minting_fee.clone());
 
-        // Step 2: Upload valid vault code
+        // Upload valid vault code
         let dummy_wasm = vec![1; 2048];
         contract.set_vault_code(dummy_wasm);
 
-        // Step 3: Attempt to mint vault with user attaching too little deposit
+        // Attempt to mint vault with user attaching too little deposit
         // Here we intentionally attach 1 NEAR instead of 2
         let mut user_context = VMContextBuilder::new();
         user_context
@@ -255,7 +255,7 @@ mod tests {
         let owner: AccountId = "owner.near".parse().unwrap();
         let user: AccountId = "user.near".parse().unwrap();
 
-        // Step 1: Deploy factory with valid minting fee
+        // Deploy factory with valid minting fee
         let mut owner_context = VMContextBuilder::new();
         owner_context.predecessor_account_id(owner.clone());
         testing_env!(owner_context.build());
@@ -263,9 +263,9 @@ mod tests {
         let minting_fee = NearToken::from_near(2);
         let mut contract = FactoryContract::new(owner.clone(), minting_fee.clone());
 
-        // Step 2: Do NOT upload vault code
+        // Do NOT upload vault code
 
-        // Step 3: Attempt to mint vault with correct deposit
+        // Attempt to mint vault with correct deposit
         let mut user_context = VMContextBuilder::new();
         user_context
             .predecessor_account_id(user.clone())
@@ -283,7 +283,7 @@ mod tests {
         let owner: AccountId = "owner.near".parse().unwrap();
         let user: AccountId = "user.near".parse().unwrap();
 
-        // Step 1: Deploy factory with intentionally low minting fee
+        // Deploy factory with intentionally low minting fee
         let mut owner_context = VMContextBuilder::new();
         owner_context.predecessor_account_id(owner.clone());
         testing_env!(owner_context.build());
@@ -291,11 +291,11 @@ mod tests {
         let low_fee = NearToken::from_yoctonear(1_000_000_000_000_000_000_000); // 0.001 NEAR
         let mut contract = FactoryContract::new(owner.clone(), low_fee.clone());
 
-        // Step 2: Upload large vault code to simulate high deploy cost
+        // Upload large vault code to simulate high deploy cost
         let large_wasm = vec![1; 200 * 1024];
         contract.set_vault_code(large_wasm);
 
-        // Step 3: Attempt to mint vault with insufficient attached deposit
+        // Attempt to mint vault with insufficient attached deposit
         let mut user_context = VMContextBuilder::new();
         user_context
             .predecessor_account_id(user.clone())
@@ -444,18 +444,18 @@ mod tests {
         let owner: AccountId = "owner.near".parse().unwrap();
         let new_owner: AccountId = "alice.near".parse().unwrap();
 
-        // Step 1: Set up context as the original owner
+        // Set up context as the original owner
         let mut context = VMContextBuilder::new();
         context.predecessor_account_id(owner.clone());
         testing_env!(context.build());
 
-        // Step 2: Deploy the contract with the original owner
+        // Deploy the contract with the original owner
         let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
 
-        // Step 3: Transfer ownership to new account
+        // Transfer ownership to new account
         contract.transfer_ownership(new_owner.clone());
 
-        // Step 4: Verify that the ownership has changed
+        // Verify that the ownership has changed
         assert_eq!(contract.owner, new_owner, "Ownership should be transferred");
     }
 
@@ -466,19 +466,19 @@ mod tests {
         let attacker: AccountId = "hacker.near".parse().unwrap();
         let new_owner: AccountId = "alice.near".parse().unwrap();
 
-        // Step 1: Set up context as the owner and deploy the contract
+        // Set up context as the owner and deploy the contract
         let mut owner_context = VMContextBuilder::new();
         owner_context.predecessor_account_id(owner.clone());
         testing_env!(owner_context.build());
 
         let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
 
-        // Step 2: Switch to attacker context to simulate unauthorized caller
+        // Switch to attacker context to simulate unauthorized caller
         let mut attacker_context = VMContextBuilder::new();
         attacker_context.predecessor_account_id(attacker.clone());
         testing_env!(attacker_context.build());
 
-        // Step 3: Attempt to transfer ownership — should panic
+        // Attempt to transfer ownership — should panic
         contract.transfer_ownership(new_owner);
     }
 
@@ -487,15 +487,15 @@ mod tests {
     fn test_transfer_ownership_fails_if_same_as_current() {
         let owner: AccountId = "owner.near".parse().unwrap();
 
-        // Step 1: Set up context as the owner
+        // Set up context as the owner
         let mut context = VMContextBuilder::new();
         context.predecessor_account_id(owner.clone());
         testing_env!(context.build());
 
-        // Step 2: Deploy contract
+        // Deploy contract
         let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
 
-        // Step 3: Attempt to transfer ownership to self — should panic
+        // Attempt to transfer ownership to self — should panic
         contract.transfer_ownership(owner);
     }
 }
