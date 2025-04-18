@@ -90,6 +90,30 @@ fn test_undelegate_requires_active_validator() {
 }
 
 #[test]
+#[should_panic(expected = "Cannot undelegate after a liquidity request has been accepted")]
+fn test_undelegate_fails_if_offer_accepted() {
+    // Set up context as vault owner with 1 yocto
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize vault with accepted offer
+    let mut vault = Vault::new(owner(), 0, 1);
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+    vault.active_validators.insert(&validator);
+    vault.accepted_offer = Some(crate::types::AcceptedOffer {
+        lender: "lender.near".parse().unwrap(),
+        accepted_at: 12345678,
+    });
+
+    // Try undelegating — should panic
+    vault.undelegate(validator, NearToken::from_near(1));
+}
+
+#[test]
 fn test_on_unstake_inserts_entry() {
     // Set up context with the vault owner
     let context = get_context(owner(), NearToken::from_near(10), None);

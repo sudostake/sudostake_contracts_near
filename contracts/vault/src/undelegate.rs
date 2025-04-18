@@ -33,6 +33,12 @@ impl Vault {
             "Validator is not currently active"
         );
 
+        // Disallow undelegation if an offer has already been accepted
+        require!(
+            self.accepted_offer.is_none(),
+            "Cannot undelegate after a liquidity request has been accepted"
+        );
+
         // Proceed with unstaking the intended amount
         ext_staking_pool::ext(validator.clone())
             .with_static_gas(GAS_FOR_UNSTAKE)

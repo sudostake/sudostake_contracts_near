@@ -1,9 +1,12 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use near_sdk::{Gas, NearToken};
+use near_sdk::{json_types::U128, Gas, NearToken};
 use serde_json::json;
-use test_utils::{create_test_validator, initialize_test_vault, UnstakeEntry};
+use test_utils::{
+    create_test_validator, initialize_test_token, initialize_test_vault,
+    register_account_with_token, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
+};
 
 #[tokio::test]
 async fn test_undelegate_succeed() -> anyhow::Result<()> {
@@ -202,6 +205,131 @@ async fn test_undelegate_fails_if_validator_not_active() -> anyhow::Result<()> {
     assert!(
         failure_text.contains("Validator is not currently active"),
         "Expected failure due to inactive validator, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_undelegate_fails_if_offer_already_accepted() -> anyhow::Result<()> {
+    // Set up sandbox and root account
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+
+    // Create lender account
+    let lender = root
+        .create_subaccount("lender")
+        .initial_balance(NearToken::from_near(10))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Deploy contracts
+    let validator = create_test_validator(&worker, &root).await?;
+    let token = initialize_test_token(&root).await?;
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Register accounts with token
+    for account in [vault.id(), lender.id()] {
+        register_account_with_token(&root, &token, account).await?;
+    }
+
+    // Fund lender
+    root.call(token.id(), "ft_transfer")
+        .args_json(json!({
+            "receiver_id": lender.id(),
+            "amount": "1000000"
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Delegate from vault to validator
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward 1 block so stake is visible to staking pool
+    worker.fast_forward(1).await?;
+
+    // Vault owner opens liquidity request
+    root.call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": token.id(),
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(5),
+            "duration": 86400
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fetch the request for offer matching
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let request = state.liquidity_request.unwrap();
+    let msg = serde_json::json!({
+        "action": "NewCounterOffer",
+        "token": request.token,
+        "amount": request.amount,
+        "interest": request.interest,
+        "collateral": request.collateral,
+        "duration": request.duration
+    })
+    .to_string();
+
+    // Lender submits counter offer
+    lender
+        .call(token.id(), "ft_transfer_call")
+        .args_json(json!({
+            "receiver_id": vault.id(),
+            "amount": "900000",
+            "msg": msg
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Vault owner accepts lender's offer
+    root.call(vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": lender.id(),
+            "amount": U128(900_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Try to undelegate after accepting — should fail
+    let result = root
+        .call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    let failure = format!("{:?}", result.failures());
+    assert!(
+        failure.contains("Cannot undelegate after a liquidity request has been accepted"),
+        "Expected undelegate to fail after offer acceptance, got: {failure}"
     );
 
     Ok(())
