@@ -42,11 +42,8 @@ impl Vault {
             self.counter_offers = None;
         }
 
-        // Attempt refund
-        let liquidity_request = self.liquidity_request.as_ref().unwrap();
-        self.refund_counter_offer(liquidity_request.token.clone(), offer.clone());
-
         // Log counter_offer_cancelled event
+        let liquidity_request = self.liquidity_request.as_ref().unwrap();
         log_event!(
             "counter_offer_cancelled",
             near_sdk::serde_json::json!({
@@ -61,5 +58,8 @@ impl Vault {
                 }
             })
         );
+
+        // Attempt refund
+        self.refund_counter_offer(liquidity_request.token.clone(), offer);
     }
 }
