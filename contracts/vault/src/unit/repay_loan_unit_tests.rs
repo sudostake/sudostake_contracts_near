@@ -190,7 +190,7 @@ fn test_repay_loan_fails_if_liquidation_started() {
 
     // Simulate liquidation
     vault.liquidation = Some(Liquidation {
-        liquidated: NearToken::from_near(1),
+        liquidated: 1u128,
     });
 
     // Attempt to repay — should panic

@@ -106,7 +106,7 @@ pub struct AcceptedOffer {
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Liquidation {
-    pub liquidated: NearToken,
+    pub liquidated: u128,
 }
 
 /// Represents the derived lifecycle state of the vault

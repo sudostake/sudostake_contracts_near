@@ -1,13 +1,14 @@
 use crate::contract::Vault;
-use crate::ext::ext_fungible_token;
+use crate::ext::{ext_fungible_token, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_FT_TRANSFER,
-    MAX_COUNTER_OFFERS, STORAGE_BUFFER,
+    AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_CALLBACK,
+    GAS_FOR_FT_TRANSFER, GAS_FOR_VIEW_CALL, MAX_COUNTER_OFFERS, NUM_EPOCHS_TO_UNLOCK,
+    STORAGE_BUFFER,
 };
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
-use near_sdk::{env, require, AccountId, NearToken};
+use near_sdk::{env, require, AccountId, NearToken, Promise};
 
 /// Internal utility methods for Vault
 impl Vault {
@@ -258,5 +259,128 @@ impl Vault {
                 offer.amount,
                 token_address,
             ));
+    }
+
+    fn get_total_debt(&self) -> u128 {
+        self.liquidity_request
+            .as_ref()
+            .unwrap()
+            .collateral
+            .as_yoctonear()
+    }
+
+    pub fn get_remaining_debt(&self) -> u128 {
+        let total = self.get_total_debt();
+        let liquidated = self.liquidation.as_ref().unwrap().liquidated;
+        total - liquidated
+    }
+
+    pub(crate) fn get_matured_unstaked_entries(&self) -> Vec<AccountId> {
+        let current_epoch = env::epoch_height();
+        let mut matured: Vec<AccountId> = vec![];
+
+        for (validator, entry) in self.unstake_entries.iter() {
+            if current_epoch > entry.epoch_height + NUM_EPOCHS_TO_UNLOCK {
+                matured.push(validator);
+            }
+        }
+
+        matured
+    }
+
+    fn repay_to_lender(&mut self, lender: AccountId, amount: u128) -> Promise {
+        // Track how much we’ve repaid so far
+        self.liquidation.as_mut().unwrap().liquidated += amount;
+
+        // Transfer amount to lender
+        Promise::new(lender).transfer(NearToken::from_yoctonear(amount))
+    }
+
+    pub(crate) fn clear_liquidation_state(&mut self) {
+        self.liquidity_request = None;
+        self.accepted_offer = None;
+        self.liquidation = None;
+    }
+
+    pub(crate) fn repay_and_finalize(&mut self, lender: AccountId, amount: u128) {
+        self.repay_to_lender(lender.clone(), amount);
+
+        log_event!(
+            "liquidation_complete",
+            near_sdk::serde_json::json!({ "lender": lender, "repaid": amount.to_string() })
+        );
+
+        self.clear_liquidation_state();
+    }
+
+    pub(crate) fn process_repayment(&mut self, lender: AccountId) {
+        // Get outstanding debt
+        let outstanding = self.get_remaining_debt();
+        let available = self.get_available_balance().as_yoctonear();
+
+        // If we can pay it off now, repay_and_finalize
+        if available >= outstanding {
+            self.repay_and_finalize(lender.clone(), outstanding);
+        } else if available > 0 {
+            self.repay_to_lender(lender.clone(), available);
+
+            log_event!(
+                "partial_liquidation",
+                near_sdk::serde_json::json!({
+                    "lender": lender,
+                    "transferred": available.to_string(),
+                    "remaining": (outstanding - available).to_string()
+                })
+            );
+        }
+    }
+
+    pub(crate) fn batch_claim_unstaked(&self, validators: Vec<AccountId>) -> Promise {
+        // Start the batch chain with the first validator
+        let mut chain = ext_staking_pool::ext(validators[0].clone())
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(GAS_FOR_CALLBACK)
+            .withdraw_all();
+
+        // Fold the remaining validators into the chain
+        for validator in validators.iter().skip(1) {
+            chain = chain.and(
+                ext_staking_pool::ext(validator.clone())
+                    .with_attached_deposit(NearToken::from_yoctonear(1))
+                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .withdraw_all(),
+            );
+        }
+
+        // Add the final callback to handle claim result
+        chain.then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_FOR_CALLBACK)
+                .on_batch_claim_unstaked(validators),
+        )
+    }
+
+    pub(crate) fn batch_query_total_staked(&self, call_back: Promise) -> Promise {
+        // Ensure there are validators to query
+        let mut validators = self.active_validators.iter();
+        let first = validators
+            .next()
+            .expect("No active validators available for collateral check");
+
+        // Start staking view call chain
+        let initial = ext_staking_pool::ext(first.clone())
+            .with_static_gas(GAS_FOR_VIEW_CALL)
+            .get_account_staked_balance(env::current_account_id());
+
+        let promise_chain = validators.fold(initial, |acc, validator| {
+            acc.and(
+                ext_staking_pool::ext(validator.clone())
+                    .with_static_gas(GAS_FOR_VIEW_CALL)
+                    .get_account_staked_balance(env::current_account_id()),
+            )
+        });
+
+        // Attach the final callback to check total staked balance
+        promise_chain.then(call_back)
     }
 }
