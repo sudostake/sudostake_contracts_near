@@ -3,9 +3,9 @@ use near_sdk::{json_types::U128, NearToken};
 use near_workspaces::{network::Sandbox, sandbox, Account, Contract, Worker};
 use serde_json::json;
 use test_utils::{
-    create_test_validator, initialize_test_token, initialize_test_vault_on_sub_account,
-    make_accept_request_msg, register_account_with_token, UnstakeEntry, VaultViewState,
-    VAULT_CALL_GAS,
+    create_named_test_validator, create_test_validator, initialize_test_token,
+    initialize_test_vault_on_sub_account, make_accept_request_msg, register_account_with_token,
+    UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -591,6 +591,112 @@ async fn test_process_claims_triggers_fallback_unstake_when_matured_insufficient
         unstaked_rounded, 1,
         "Expected ~1 NEAR to be in unstake_entries, got: {} yocto",
         entry.amount
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_process_claims_waits_when_matured_and_maturing_is_sufficient() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator_1, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Create another validator_2
+    let validator_2 = create_named_test_validator(&worker, &root, "validator_2").await?;
+
+    // Stake all but 4NEAR to validator_1
+    let available: U128 = vault.view("view_available_balance").await?.json()?;
+    let to_delegate = available.0 - NearToken::from_near(4).as_yoctonear();
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_1.id(),
+            "amount": NearToken::from_yoctonear(to_delegate)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Stake 3NEAR to validator_2 leaving ~1NEAR as vault balance
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_2.id(),
+            "amount": NearToken::from_near(3)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward 1 block
+    worker.fast_forward(1).await?;
+
+    // Unstake 2NEAR from validator_1
+    root.call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator_1.id(),
+            "amount": NearToken::from_near(2)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward 5 epochs
+    worker.fast_forward(5 * 500).await?;
+
+    // Unstake 3NEAR from validator_2
+    root.call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator_2.id(),
+            "amount": NearToken::from_near(3)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward 1 block
+    worker.fast_forward(1).await?;
+
+    // Request and accept liquidity request
+    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
+
+    // Patch accepted_at to simulate expiration
+    vault
+        .call("set_accepted_offer_timestamp")
+        .args_json(json!({ "timestamp": 1_000_000_000 }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Call process_claims by lender
+    let result = lender
+        .call(vault.id(), "process_claims")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Inspect logs to see "NEAR unstaking"
+    // Expect: log indicates waiting
+    let matched = result.logs().iter().any(|log| {
+        log.contains("EVENT_JSON")
+            && log.contains(r#""event":"liquidation_progress""#)
+            && log.contains("NEAR unstaking")
+    });
+    assert!(
+        matched,
+        "Expected liquidation_progress `NEAR unstaking` log not found: {:#?}",
+        result.logs()
     );
 
     Ok(())
