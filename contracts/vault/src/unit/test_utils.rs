@@ -32,6 +32,33 @@ pub fn get_context(
     builder.build()
 }
 
+pub fn get_context_with_timestamp(
+    predecessor: AccountId,
+    account_balance: NearToken,
+    attached_deposit: Option<NearToken>,
+    block_timestamp: Option<u64>,
+) -> near_sdk::VMContext {
+    // Create a mutable context builder
+    let mut builder = VMContextBuilder::new();
+
+    // Set signer and balance
+    builder.predecessor_account_id(predecessor);
+    builder.account_balance(account_balance);
+    builder.epoch_height(100);
+
+    // Optional attached deposit
+    if let Some(deposit) = attached_deposit {
+        builder.attached_deposit(deposit);
+    }
+
+    // Optional block timestamp
+    if let Some(ts) = block_timestamp {
+        builder.block_timestamp(ts);
+    }
+
+    builder.build()
+}
+
 pub fn create_valid_liquidity_request(token: AccountId) -> LiquidityRequest {
     LiquidityRequest {
         token,
