@@ -38,3 +38,7 @@ container_build_command = [
     "non-reproducible-wasm",
       "--locked",
 ]
+
+[features]
+default = []
+integration-test = []

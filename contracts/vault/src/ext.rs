@@ -30,6 +30,16 @@ pub trait VaultExt {
     fn on_retry_refund_complete(&mut self, id: u64);
 
     fn on_repay_loan(&mut self, #[callback_result] result: Result<(), near_sdk::PromiseError>);
+
+    fn on_batch_claim_unstaked(
+        &mut self,
+        validators: Vec<AccountId>,
+        total_maturing: u128,
+    ) -> Promise;
+
+    fn on_total_staked_process_claims(&mut self, total_maturing: u128);
+
+    fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128)>);
 }
 
 #[ext_contract(ext_staking_pool)]

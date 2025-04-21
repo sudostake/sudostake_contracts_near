@@ -1,19 +1,20 @@
 use crate::contract::Vault;
-use crate::ext::ext_fungible_token;
+use crate::ext::{ext_fungible_token, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
     AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_FT_TRANSFER,
-    MAX_COUNTER_OFFERS, STORAGE_BUFFER,
+    GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, MAX_COUNTER_OFFERS, STORAGE_BUFFER,
 };
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
-use near_sdk::{env, require, AccountId, NearToken};
+use near_sdk::{env, require, AccountId, NearToken, Promise};
 
 /// Internal utility methods for Vault
 impl Vault {
     pub fn get_available_balance(&self) -> NearToken {
         let total = env::account_balance().as_yoctonear();
-        let available = total.saturating_sub(STORAGE_BUFFER);
+        let storage_cost = env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
+        let available = total.saturating_sub(storage_cost + STORAGE_BUFFER);
         NearToken::from_yoctonear(available)
     }
 
@@ -258,5 +259,76 @@ impl Vault {
                 offer.amount,
                 token_address,
             ));
+    }
+
+    pub(crate) fn batch_claim_unstaked(
+        &self,
+        validators: Vec<AccountId>,
+        call_back: Promise,
+    ) -> Promise {
+        // Start the batch chain with the first validator
+        let mut chain = ext_staking_pool::ext(validators[0].clone())
+            .with_static_gas(GAS_FOR_WITHDRAW_ALL)
+            .withdraw_all();
+
+        // Fold the remaining validators into the chain
+        for validator in validators.iter().skip(1) {
+            chain = chain.and(
+                ext_staking_pool::ext(validator.clone())
+                    .with_static_gas(GAS_FOR_WITHDRAW_ALL)
+                    .withdraw_all(),
+            );
+        }
+
+        // Add the final callback to handle results
+        chain.then(call_back)
+    }
+
+    pub(crate) fn batch_query_total_staked(&self, call_back: Promise) -> Promise {
+        // Ensure there are validators to query
+        let mut validators = self.active_validators.iter();
+        let first = validators
+            .next()
+            .expect("No active validators available for collateral check");
+
+        // Start staking_pool view call chain
+        let initial = ext_staking_pool::ext(first.clone())
+            .with_static_gas(GAS_FOR_VIEW_CALL)
+            .get_account_staked_balance(env::current_account_id());
+
+        // Fold the remaining instructions into the clain
+        let chain = validators.fold(initial, |acc, validator| {
+            acc.and(
+                ext_staking_pool::ext(validator.clone())
+                    .with_static_gas(GAS_FOR_VIEW_CALL)
+                    .get_account_staked_balance(env::current_account_id()),
+            )
+        });
+
+        // Add the final callback to handle results
+        chain.then(call_back)
+    }
+
+    pub(crate) fn batch_unstake(
+        &self,
+        unstake_instructions: Vec<(AccountId, u128)>,
+        call_back: Promise,
+    ) -> Promise {
+        // Build the batch unstake call chain
+        let mut chain = ext_staking_pool::ext(unstake_instructions[0].0.clone())
+            .with_static_gas(crate::types::GAS_FOR_UNSTAKE)
+            .unstake(U128::from(unstake_instructions[0].1));
+
+        // Fold the remaining instructions into the chain
+        for (validator, amount) in unstake_instructions.iter().skip(1) {
+            chain = chain.and(
+                ext_staking_pool::ext(validator.clone())
+                    .with_static_gas(crate::types::GAS_FOR_UNSTAKE)
+                    .unstake(U128::from(*amount)),
+            );
+        }
+
+        // Add the final callback to handle results
+        chain.then(call_back)
     }
 }

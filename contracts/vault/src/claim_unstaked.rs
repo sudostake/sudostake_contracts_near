@@ -5,8 +5,9 @@ use crate::contract::VaultExt;
 use crate::ext::ext_self;
 use crate::ext::ext_staking_pool;
 use crate::log_event;
+use crate::types::GAS_FOR_CALLBACK;
+use crate::types::GAS_FOR_WITHDRAW_ALL;
 use crate::types::NUM_EPOCHS_TO_UNLOCK;
-use crate::types::{GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL};
 use near_sdk::{assert_one_yocto, env, near_bindgen, require, AccountId, Promise};
 
 #[near_bindgen]
@@ -31,7 +32,7 @@ impl Vault {
         // Ensure the required number of epochs has passed
         let current_epoch = env::epoch_height();
         require!(
-            current_epoch > entry.epoch_height + NUM_EPOCHS_TO_UNLOCK,
+            current_epoch >= entry.epoch_height + NUM_EPOCHS_TO_UNLOCK,
             format!(
                 "Unstaked funds not yet claimable (current_epoch: {}, required_epoch: {})",
                 current_epoch,
@@ -45,7 +46,7 @@ impl Vault {
             .withdraw_all()
             .then(
                 ext_self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_VIEW_CALL)
+                    .with_static_gas(GAS_FOR_CALLBACK)
                     .on_withdraw_all(validator),
             )
     }

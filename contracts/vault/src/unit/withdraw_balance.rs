@@ -2,8 +2,10 @@
 mod test_utils;
 
 use crate::contract::Vault;
+use crate::types::STORAGE_BUFFER;
+use near_sdk::test_utils::VMContextBuilder;
 use near_sdk::{json_types::U128, testing_env};
-use near_sdk::{AccountId, NearToken};
+use near_sdk::{env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
 
 #[test]
@@ -108,5 +110,31 @@ fn nep141_withdraw_without_one_yocto_should_panic() {
         Some(token),
         U128::from(100_000_000),
         None, // recipient defaults to owner
+    );
+}
+
+#[test]
+fn test_get_available_balance_subtracts_storage_and_buffer() {
+    // Setup context
+    let context = VMContextBuilder::new()
+        .current_account_id(owner())
+        .account_balance(NearToken::from_near(1))
+        .storage_usage(10_000) // e.g., 10 KB
+        .build();
+    testing_env!(context);
+
+    // create a vault instance
+    let vault = Vault::new(owner(), 0, 1);
+
+    // Calculate expected balance
+    let storage_cost = env::storage_byte_cost().as_yoctonear() * 10_000;
+    let expected =
+        1_000_000_000_000_000_000_000_000u128.saturating_sub(storage_cost + STORAGE_BUFFER);
+
+    // Assert balance as expected
+    assert_eq!(
+        vault.get_available_balance().as_yoctonear(),
+        expected,
+        "Should subtract both storage cost and buffer"
     );
 }
