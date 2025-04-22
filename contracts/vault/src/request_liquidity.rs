@@ -2,11 +2,10 @@
 
 use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext::{ext_self, ext_staking_pool};
+use crate::ext::ext_self;
 use crate::log_event;
-use crate::types::{
-    LiquidityRequest, PendingLiquidityRequest, GAS_FOR_CALLBACK, GAS_FOR_VIEW_CALL,
-};
+use crate::types::GAS_FOR_CALLBACK;
+use crate::types::{LiquidityRequest, PendingLiquidityRequest};
 use near_sdk::json_types::U128;
 use near_sdk::require;
 use near_sdk::PromiseResult;
@@ -61,27 +60,8 @@ impl Vault {
             duration,
         });
 
-        // --- Ensure there are validators to query ---
-        let mut validators = self.active_validators.iter();
-        let first = validators
-            .next()
-            .expect("No active validators available for collateral check");
-
-        // --- Start staking view call chain ---
-        let initial = ext_staking_pool::ext(first.clone())
-            .with_static_gas(GAS_FOR_VIEW_CALL)
-            .get_account_staked_balance(env::current_account_id());
-
-        let promise_chain = validators.fold(initial, |acc, validator| {
-            acc.and(
-                ext_staking_pool::ext(validator.clone())
-                    .with_static_gas(GAS_FOR_VIEW_CALL)
-                    .get_account_staked_balance(env::current_account_id()),
-            )
-        });
-
-        // Attach the final callback to check total staked balance
-        promise_chain.then(
+        // --- Batch query total staked balance across all active validators ---
+        self.batch_query_total_staked(
             ext_self::ext(env::current_account_id())
                 .with_static_gas(GAS_FOR_CALLBACK)
                 .on_check_total_staked(),

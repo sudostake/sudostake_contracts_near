@@ -9,11 +9,12 @@ pub const GAS_FOR_WITHDRAW_ALL: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_VIEW_CALL: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_CALLBACK: Gas = Gas::from_tgas(20);
 pub const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(20);
-pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(200);
-pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(200);
+pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(50);
+pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(20);
 pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
 pub const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
 pub const MAX_COUNTER_OFFERS: u64 = 10;
+pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, Clone, serde::Serialize)]
 #[serde(crate = "near_sdk::serde")]

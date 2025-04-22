@@ -187,7 +187,7 @@ pub async fn initialize_test_vault_on_sub_account(
     // Create a new subaccount for the vault (unique name)
     let subaccount = root
         .create_subaccount("vault")
-        .initial_balance(NearToken::from_near(5))
+        .initial_balance(NearToken::from_near(1000))
         .transact()
         .await?
         .into_result()?;

@@ -7,6 +7,7 @@ mod delegate;
 mod ext;
 mod ft_receiver;
 mod internal;
+mod process_claims;
 mod repay_loan;
 mod request_liquidity;
 mod retry_refunds;

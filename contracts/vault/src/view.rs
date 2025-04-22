@@ -2,6 +2,7 @@
 
 use crate::contract::{Vault, VaultExt};
 use crate::types::{CounterOffer, UnstakeEntry, VaultViewState};
+use near_sdk::json_types::U128;
 use near_sdk::{near_bindgen, AccountId};
 
 #[near_bindgen]
@@ -33,5 +34,9 @@ impl Vault {
         self.counter_offers
             .as_ref()
             .map(|map| map.to_vec().into_iter().collect())
+    }
+
+    pub fn view_available_balance(&self) -> U128 {
+        self.get_available_balance().as_yoctonear().into()
     }
 }

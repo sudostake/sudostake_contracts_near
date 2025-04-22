@@ -46,6 +46,10 @@ pub struct Vault {
     /// True while the vault is processing a repayment transfer to the lender.
     /// Prevents liquidation during this period.
     pub repaying: bool,
+    /// True while the vault is processing liquidation.
+    pub processing_claims: bool,
+    /// Prevents deadlock after processing_claims is set to true
+    pub processing_claims_since: u64,
 }
 
 #[near_bindgen]
@@ -77,6 +81,21 @@ impl Vault {
             refund_list: UnorderedMap::new(StorageKey::RefundList),
             refund_nonce: 0,
             repaying: false,
+            processing_claims: false,
+            processing_claims_since: 0,
+        }
+    }
+}
+
+#[cfg(feature = "integration-test")]
+#[near_bindgen]
+impl Vault {
+    /// Test-only method: overrides accepted_offer timestamp for liquidation tests
+    pub fn set_accepted_offer_timestamp(&mut self, timestamp: u64) {
+        if let Some(offer) = &mut self.accepted_offer {
+            offer.accepted_at = timestamp;
+        } else {
+            env::panic_str("No accepted offer found");
         }
     }
 }
