@@ -35,6 +35,12 @@ impl Vault {
             )
         );
 
+        // 🔒 Prevent delegation when liquidation is active
+        require!(
+            self.liquidation.is_none(),
+            "Cannot delegate while liquidation is in progress"
+        );
+
         // Initiate deposit_and_stake on validator
         ext_staking_pool::ext(validator.clone())
             .with_static_gas(GAS_FOR_DEPOSIT_AND_STAKE)

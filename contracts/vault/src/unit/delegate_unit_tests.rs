@@ -92,6 +92,32 @@ fn test_delegate_fails_if_insufficient_balance() {
 }
 
 #[test]
+#[should_panic(expected = "Cannot delegate while liquidation is in progress")]
+fn test_delegate_fails_if_liquidation_active() {
+    // Setup: 10 NEAR balance, 1 yoctoNEAR attached
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Simulate that liquidation has started
+    vault.liquidation = Some(crate::types::Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
+
+    // Attempt delegation during liquidation — should panic
+    vault.delegate(
+        "validator.poolv1.near".parse().unwrap(),
+        NearToken::from_near(1),
+    );
+}
+
+#[test]
 #[should_panic(expected = "Failed to execute deposit_and_stake on validator")]
 fn test_on_delegate_complete_panics_on_failure() {
     // Set up test context with the vault owner
