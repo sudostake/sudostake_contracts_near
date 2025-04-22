@@ -5,6 +5,7 @@ use crate::contract::VaultExt;
 use crate::ext::ext_fungible_token;
 use crate::log_event;
 use crate::types::GAS_FOR_FT_TRANSFER;
+use near_sdk::require;
 use near_sdk::NearToken;
 use near_sdk::{assert_one_yocto, env, json_types::U128, near_bindgen, AccountId, Promise};
 
@@ -24,6 +25,9 @@ impl Vault {
         // Ensure that only the vault owner can call this method
         let caller = env::predecessor_account_id();
         assert_eq!(caller, self.owner, "Only the vault owner can withdraw");
+
+        // ✅ Enforce withdrawal rules based on liquidity state and token
+        self.ensure_owner_can_withdraw(token_address.as_ref());
 
         // Determine the recipient of the withdrawal
         let recipient = to.unwrap_or_else(|| self.owner.clone());
@@ -81,5 +85,51 @@ impl Vault {
 
         // Return a Promise to transfer the NEAR to the recipient
         Promise::new(recipient).transfer(amount)
+    }
+}
+
+impl Vault {
+    /// Ensures the vault owner is allowed to withdraw the specified token,
+    /// based on the current liquidity request and liquidation status.
+    pub fn ensure_owner_can_withdraw(&self, token: Option<&AccountId>) {
+        // Attempt to access the liquidity request (if any), otherwise allow withdrawal
+        let Some(request) = &self.liquidity_request else {
+            return;
+        };
+
+        // Case 1: Pending liquidity request, no offer accepted
+        if self.accepted_offer.is_none() {
+            match token {
+                // a. Allow NEAR
+                None => return,
+
+                // b. Allow NEP-141 if not the requested token
+                Some(address) => {
+                    require!(
+                        request.token != *address,
+                        "Cannot withdraw requested token while counter offers are pending"
+                    );
+                    return;
+                }
+            }
+        }
+
+        // Case 2: Offer accepted
+        if self.liquidation.is_none() {
+            // a. No liquidation → all withdrawals allowed
+            return;
+        }
+
+        // Case 3: Liquidation active — NEAR not allowed
+        match token {
+            // a. Block NEAR withdrawal
+            None => require!(
+                false,
+                "Cannot withdraw NEAR while liquidation is in progress"
+            ),
+
+            // b. Allow NEP-141
+            Some(_) => {}
+        }
     }
 }

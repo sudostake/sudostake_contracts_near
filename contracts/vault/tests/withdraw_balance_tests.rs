@@ -1,11 +1,14 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use near_sdk::json_types::U128;
-use test_utils::{initialize_test_vault_on_sub_account, withdraw_ft, VAULT_CALL_GAS};
-
 use crate::test_utils::{
     initialize_test_token, register_account_with_token, transfer_tokens_to_vault,
+};
+use near_sdk::{json_types::U128, NearToken};
+use serde_json::json;
+use test_utils::{
+    initialize_test_vault_on_sub_account, request_and_accept_liquidity, setup_contracts,
+    setup_sandbox_and_accounts, withdraw_ft, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[tokio::test]
@@ -207,6 +210,147 @@ async fn non_owner_cannot_withdraw_near() -> anyhow::Result<()> {
     assert!(
         msg.contains("Only the vault owner can withdraw"),
         "Unexpected failure message: {msg}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_near_withdrawal_fails_during_liquidation() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Query the vault's available balance
+    let available: U128 = vault.view("view_available_balance").await?.json()?;
+    let available_yocto = available.0;
+
+    // Compute how much to delegate (leave 2 NEAR for repayment)
+    let leave_behind = NearToken::from_near(2).as_yoctonear();
+    let to_delegate = available_yocto - leave_behind;
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_yoctonear(to_delegate)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward to simulate validator update
+    worker.fast_forward(1).await?;
+
+    // Request and accept liquidity request
+    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
+
+    // Patch accepted_at to simulate expiration
+    vault
+        .call("set_accepted_offer_timestamp")
+        .args_json(json!({ "timestamp": 1_000_000_000 }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
+    lender
+        .call(vault.id(), "process_claims")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Check vault state — loan should still be active
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    assert!(
+        state.liquidity_request.is_some(),
+        "Liquidity request should still be open"
+    );
+    assert!(
+        state.accepted_offer.is_some(),
+        "Accepted offer should still be active"
+    );
+
+    // Transfer some tokens to the vault
+    root.transfer_near(vault.id(), near_sdk::NearToken::from_near(10))
+        .await?
+        .into_result()?;
+
+    // Try withdrawing while liquidation is active
+    let amount = near_sdk::NearToken::from_near(1);
+    let result = root
+        .call(vault.id(), "withdraw_balance")
+        .args_json(serde_json::json!({
+            "token_address": null,
+            "amount": amount.as_yoctonear().to_string(),
+            "to": root.id()
+        }))
+        .deposit(near_sdk::NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    // Assert the withdrawing fails with liquidation error
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("Cannot withdraw NEAR while liquidation is in progress"),
+        "Expected failure due to liquidation, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_nep_token_withdrawal_fails_during_counter_offers() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Delegate some tokens to validator
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(10)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward to simulate validator update
+    worker.fast_forward(1).await?;
+
+    // vault owner requests liquidity
+    root.call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": token.id(),
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(5),
+            "duration": 86400
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Try withdrawing token balance while the request is open for counter offers
+    let amount = 100_000;
+    let result = withdraw_ft(&vault, &token, &root, &lender, amount).await?;
+
+    // Assert the withdrawing fails with pending counter offers error
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("Cannot withdraw requested token while counter offers are pending"),
+        "Expected failure due to pending counter offers, got: {failure_text}"
     );
 
     Ok(())
