@@ -40,6 +40,40 @@ fn test_claim_unstaked_rejects_non_owner() {
 }
 
 #[test]
+#[should_panic(expected = "Cannot claim unstaked NEAR while liquidation is in progress")]
+fn test_claim_unstaked_fails_if_liquidation_active() {
+    // Set up a context with 1 yoctoNEAR and valid epoch
+    let mut context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    context.epoch_height = 10;
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Insert a claimable unstake entry
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+    vault.unstake_entries.insert(
+        &validator,
+        &UnstakeEntry {
+            amount: NearToken::from_near(2).as_yoctonear(),
+            epoch_height: 5,
+        },
+    );
+
+    // Simulate liquidation being active
+    vault.liquidation = Some(crate::types::Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
+
+    // Attempt to claim while liquidation is active — should panic
+    vault.claim_unstaked(validator);
+}
+
+#[test]
 #[should_panic(expected = "No unstake entry found for validator")]
 fn test_claim_unstaked_fails_if_no_entry() {
     // Set up context with the vault owner

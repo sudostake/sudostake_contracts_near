@@ -1,9 +1,12 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use near_sdk::NearToken;
+use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
-use test_utils::{create_test_validator, initialize_test_vault, UnstakeEntry, VAULT_CALL_GAS};
+use test_utils::{
+    create_test_validator, initialize_test_vault, request_and_accept_liquidity, setup_contracts,
+    setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
+};
 
 #[tokio::test]
 async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
@@ -235,5 +238,86 @@ async fn test_claim_unstaked_fails_if_no_entry() -> anyhow::Result<()> {
         "Expected panic due to missing unstake entry. Got: {failure_text}"
     );
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Query the vault's available balance
+    let available: U128 = vault.view("view_available_balance").await?.json()?;
+    let available_yocto = available.0;
+
+    // Compute how much to delegate (leave 2 NEAR for repayment)
+    let leave_behind = NearToken::from_near(2).as_yoctonear();
+    let to_delegate = available_yocto - leave_behind;
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_yoctonear(to_delegate)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward to simulate validator update
+    worker.fast_forward(1).await?;
+
+    // Request and accept liquidity request
+    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
+
+    // Patch accepted_at to simulate expiration
+    vault
+        .call("set_accepted_offer_timestamp")
+        .args_json(json!({ "timestamp": 1_000_000_000 }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
+    lender
+        .call(vault.id(), "process_claims")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Check vault state — loan should still be active
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    assert!(
+        state.liquidity_request.is_some(),
+        "Liquidity request should still be open"
+    );
+    assert!(
+        state.accepted_offer.is_some(),
+        "Accepted offer should still be active"
+    );
+
+    // Fast-forward 5 epochs to mature the unstake
+    worker.fast_forward(5 * 500).await?;
+
+    // Attempt to claim unstaked during liquidation
+    let result = root
+        .call(vault.id(), "claim_unstaked")
+        .args_json(json!({ "validator": validator.id() }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    // Check for expected panic
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("Cannot claim unstaked NEAR while liquidation is in progress"),
+        "Expected panic due to liquidation state. Got: {failure_text}"
+    );
     Ok(())
 }

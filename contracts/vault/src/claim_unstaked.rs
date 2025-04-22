@@ -40,6 +40,12 @@ impl Vault {
             )
         );
 
+        // 🔒 Prevent this action during liquidation
+        require!(
+            self.liquidation.is_none(),
+            "Cannot claim unstaked NEAR while liquidation is in progress"
+        );
+
         // Trigger withdraw_all → then clear unstake_entries in the callback
         ext_staking_pool::ext(validator.clone())
             .with_static_gas(GAS_FOR_WITHDRAW_ALL)
