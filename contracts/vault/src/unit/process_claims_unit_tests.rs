@@ -39,11 +39,6 @@ fn test_process_claims_fails_if_no_accepted_offer() {
     // Initialize a fresh vault instance
     let mut vault = Vault::new(owner(), 0, 1);
 
-    // Set a dummy liquidity request to pass that check
-    vault.liquidity_request = Some(create_valid_liquidity_request(
-        "usdc.test.near".parse().unwrap(),
-    ));
-
     // Attempt to call process_claims without accepted_offer set
     // This should panic with "No accepted offer found"
     vault.process_claims();

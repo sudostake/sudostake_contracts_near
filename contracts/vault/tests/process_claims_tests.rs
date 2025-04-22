@@ -12,7 +12,7 @@ use test_utils::{
 mod test_utils;
 
 async fn setup_sandbox_and_accounts() -> anyhow::Result<(Worker<Sandbox>, Account, Account)> {
-    // Setup worker and root
+    // Setup worker and root account
     let worker = sandbox().await?;
     let root = worker.root_account()?;
 

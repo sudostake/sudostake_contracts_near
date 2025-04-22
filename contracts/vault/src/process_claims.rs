@@ -32,16 +32,16 @@ impl Vault {
     /// request has expired. It kicks off or continues the liquidation flow.
     ///
     /// Steps performed:
-    /// 1. Access‑control (1 yocto) & guard against concurrent execution.
+    /// 1. Access‑control (1 yocto)
     /// 2. Initialise liquidation if needed & fetch the lender account.
-    /// 3. Transfer any liquid balance to the lender.
-    /// 4. Hand off to the asynchronous state‑machine (`next_liquidation_step`).
+    /// 3. Guard against concurrent execution.
+    /// 4. Transfer any liquid balance to the lender.
+    /// 5. Hand off to the asynchronous state‑machine (`next_liquidation_step`).
     #[payable]
     pub fn process_claims(&mut self) -> Promise {
         assert_one_yocto();
         let lender = self.ensure_liquidation_ready();
         self.acquire_processing_lock();
-        self.lock_processing();
         self.process_repayment(&lender);
         self.next_liquidation_step()
     }
@@ -58,31 +58,34 @@ impl Vault {
             return Promise::new(env::current_account_id());
         }
 
-        // Get matured_validators, maturing_total and remaining_debt
-        let (matured_validators, maturing_total) = self.get_unstaked_entries_stats();
+        // Get validators with matured unstaked balance, maturing_total and remaining_debt
+        let (validators_with_matured_unstaked, maturing_total) = self.get_unstaked_entries_stats();
         let remaining_debt = self.remaining_debt();
 
         match (
-            !matured_validators.is_empty(),
+            validators_with_matured_unstaked.is_empty(),
             maturing_total >= remaining_debt,
         ) {
             // (A) Immediate claim – some validators already have matured funds.
-            (true, _) => {
+            (false, _) => {
                 let cb = Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_batch_claim_unstaked(matured_validators.clone(), maturing_total);
-                self.batch_claim_unstaked(matured_validators, cb)
+                    .on_batch_claim_unstaked(
+                        validators_with_matured_unstaked.clone(),
+                        maturing_total,
+                    );
+                self.batch_claim_unstaked(validators_with_matured_unstaked, cb)
             }
 
             // (B) Nothing matured yet but sufficient funds are maturing.
-            (false, true) => {
+            (true, true) => {
                 self.log_waiting("NEAR unstaking");
                 self.processing_claims = false;
                 Promise::new(env::current_account_id())
             }
 
             // (C) Need to unstake additional NEAR.
-            (false, false) => {
+            (true, false) => {
                 let cb = Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
                     .on_total_staked_process_claims(maturing_total);
@@ -281,16 +284,13 @@ impl Vault {
     }
 
     fn acquire_processing_lock(&mut self) {
-        if self.processing_claims {
-            if env::block_timestamp() - self.processing_claims_since < LOCK_TIMEOUT {
-                require!(false, "Processing claims already in progress");
-            }
-            // Stale lock – release defensively.
-            self.processing_claims = false;
+        if self.processing_claims
+            && env::block_timestamp() - self.processing_claims_since < LOCK_TIMEOUT
+        {
+            require!(false, "Processing claims already in progress");
         }
-    }
 
-    fn lock_processing(&mut self) {
+        // Lock vault for processing claims
         self.processing_claims = true;
         self.processing_claims_since = env::block_timestamp();
     }
