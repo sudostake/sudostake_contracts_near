@@ -22,9 +22,26 @@ use crate::{
     types::{UnstakeEntry, GAS_FOR_CALLBACK, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK},
 };
 use near_sdk::{
-    assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, NearToken, Promise,
-    PromiseResult,
+    assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, Gas, NearToken,
+    Promise, PromiseResult,
 };
+
+/**
+ * Worse case scenario for MAX_ACTIVE_VALIDATORS = 2
+ * Root - 20Tgas
+   batch_claim_unstaked - (35 + 35)Tgas
+   [20 + 70]Tgas
+         ↳(200Tgas):on_batch_claim_unstaked - 20Tgas
+                    batch_query_total_staked - (10 + 10)Tgas
+                    [20 + 20]Tgas
+                        ↳(160Tgas):on_total_staked_process_claims - 20 Tgas 
+                                   batch_unstake - (60 + 60) Tgas
+                                        [20 + 120]Tgas
+                                            ↳(20Tgas):on_batch_unstake - 20Tgas
+                                                      [20]Tgas
+ */
+const GAS_FOR_CALLBACK_ON_BATCH_CLAIM_UNSTAKED: Gas = Gas::from_tgas(200);
+const GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS: Gas = Gas::from_tgas(160);
 
 #[near_bindgen]
 impl Vault {
@@ -69,7 +86,7 @@ impl Vault {
             // (A) Immediate claim – some validators already have matured funds.
             (false, _) => {
                 let cb = Self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .with_static_gas(GAS_FOR_CALLBACK_ON_BATCH_CLAIM_UNSTAKED)
                     .on_batch_claim_unstaked(
                         validators_with_matured_unstaked.clone(),
                         maturing_total,
@@ -87,7 +104,7 @@ impl Vault {
             // (C) Need to unstake additional NEAR.
             (true, false) => {
                 let cb = Self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .with_static_gas(GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS)
                     .on_total_staked_process_claims(maturing_total);
                 self.batch_query_total_staked(cb)
             }
@@ -129,7 +146,7 @@ impl Vault {
             let remaining = self.remaining_debt();
             if maturing_total < remaining {
                 let cb = Self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .with_static_gas(GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS)
                     .on_total_staked_process_claims(maturing_total);
                 return self.batch_query_total_staked(cb);
             }
@@ -184,7 +201,7 @@ impl Vault {
 
         // Issue batch_unstake
         let cb = Self::ext(env::current_account_id())
-            .with_static_gas(crate::types::GAS_FOR_CALLBACK)
+            .with_static_gas(GAS_FOR_CALLBACK)
             .on_batch_unstake(unstake_instructions.clone());
         self.batch_unstake(unstake_instructions, cb);
     }

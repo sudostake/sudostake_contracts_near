@@ -70,6 +70,8 @@ impl Vault {
 
     #[private]
     pub fn on_check_total_staked(&mut self) {
+        self.log_gas_checkpoint("on_check_total_staked");
+
         // Retrieve and remove the pending request
         let pending = self
             .pending_liquidity_request

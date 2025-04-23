@@ -1,6 +1,6 @@
 #[path = "test_utils.rs"]
 mod test_utils;
-use crate::contract::Vault;
+use crate::{contract::Vault, types::MAX_ACTIVE_VALIDATORS};
 use near_sdk::{testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
 
@@ -181,5 +181,32 @@ fn test_on_deposit_and_stake_success_adds_validator() {
     assert!(
         vault.active_validators.contains(&validator),
         "Validator should be marked as active after successful delegation"
+    );
+}
+
+#[test]
+#[should_panic(expected = "You can only stake with")]
+fn test_delegate_fails_if_max_active_validators_reached() {
+    // Set up context with the vault owner
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Fill active_validators to the limit
+    for i in 0..MAX_ACTIVE_VALIDATORS {
+        let validator = format!("v{}.poolv1.near", i).parse().unwrap();
+        vault.active_validators.insert(&validator);
+    }
+
+    // Attempt to add one more validator beyond the limit
+    vault.delegate(
+        "overflow.poolv1.near".parse().unwrap(),
+        NearToken::from_near(1),
     );
 }

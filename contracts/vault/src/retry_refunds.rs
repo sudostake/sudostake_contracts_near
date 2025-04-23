@@ -18,6 +18,8 @@ impl Vault {
         amount: U128,
         token_address: AccountId,
     ) {
+        self.log_gas_checkpoint("on_refund_complete");
+
         match env::promise_result(0) {
             near_sdk::PromiseResult::Successful(_) => {
                 // refund succeeded — do nothing
@@ -74,6 +76,8 @@ impl Vault {
     }
     #[private]
     pub fn on_retry_refund_complete(&mut self, id: u64) {
+        self.log_gas_checkpoint("on_retry_refund_complete");
+
         match env::promise_result(0) {
             near_sdk::PromiseResult::Successful(_) => {
                 self.refund_list.remove(&id);

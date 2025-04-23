@@ -5,15 +5,17 @@ use near_sdk::{AccountId, IntoStorageKey, NearToken};
 use near_sdk::{EpochHeight, Gas};
 use serde::Deserialize;
 
-pub const GAS_FOR_WITHDRAW_ALL: Gas = Gas::from_tgas(20);
-pub const GAS_FOR_VIEW_CALL: Gas = Gas::from_tgas(20);
+pub const GAS_FOR_WITHDRAW_ALL: Gas = Gas::from_tgas(35);
+pub const GAS_FOR_VIEW_CALL: Gas = Gas::from_tgas(10);
 pub const GAS_FOR_CALLBACK: Gas = Gas::from_tgas(20);
-pub const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(20);
-pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(50);
-pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(20);
+pub const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(30);
+pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(120);
+pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(60);
+
 pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
 pub const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
 pub const MAX_COUNTER_OFFERS: u64 = 10;
+pub const MAX_ACTIVE_VALIDATORS: u64 = 2;
 pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, Clone, serde::Serialize)]

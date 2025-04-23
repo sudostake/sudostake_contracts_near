@@ -160,10 +160,9 @@ async fn test_request_liquidity_prunes_zero_stake_validators() -> anyhow::Result
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
 
-    // Initialize three test validators
+    // Initialize two test validators
     let validator_1 = create_named_test_validator(&worker, &root, "validator_1").await?;
     let validator_2 = create_named_test_validator(&worker, &root, "validator_2").await?;
-    let validator_3 = create_named_test_validator(&worker, &root, "validator_3").await?;
 
     // Deploy and initialize the vault contract
     let vault = initialize_test_vault(&root).await?.contract;
@@ -187,21 +186,6 @@ async fn test_request_liquidity_prunes_zero_stake_validators() -> anyhow::Result
     root.call(vault.id(), "delegate")
         .args_json(json!({
             "validator": validator_2.id(),
-            "amount": NearToken::from_near(5),
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast forward
-    worker.fast_forward(1).await?;
-
-    // Delegate 5 NEAR only to validator_3
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator_3.id(),
             "amount": NearToken::from_near(5),
         }))
         .deposit(NearToken::from_yoctonear(1))
@@ -246,14 +230,14 @@ async fn test_request_liquidity_prunes_zero_stake_validators() -> anyhow::Result
     // Fast forward
     worker.fast_forward(1).await?;
 
-    // Try requesting liquidity with the remaining staked 10 NEAR as collateral
+    // Try requesting liquidity with the remaining staked 5 NEAR as collateral
     let result = root
         .call(vault.id(), "request_liquidity")
         .args_json(json!({
             "token": "usdc.token.near",
             "amount": U128(1_000_000),
             "interest": U128(100_000),
-            "collateral": NearToken::from_near(10),
+            "collateral": NearToken::from_near(5),
             "duration": 60 * 60 * 24
         }))
         .deposit(NearToken::from_yoctonear(1))

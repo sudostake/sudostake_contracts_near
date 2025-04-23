@@ -5,6 +5,7 @@ use crate::contract::VaultExt;
 use crate::ext::ext_self;
 use crate::ext::ext_staking_pool;
 use crate::log_event;
+use crate::types::MAX_ACTIVE_VALIDATORS;
 use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_DEPOSIT_AND_STAKE};
 use near_sdk::{assert_one_yocto, env, near_bindgen, require, AccountId, NearToken, Promise};
 
@@ -14,6 +15,15 @@ impl Vault {
     pub fn delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
         // Require 1 yoctoNEAR for intentional call
         assert_one_yocto();
+
+        // Limit to MAX_ACTIVE_VALIDATORS
+        require!(
+            self.active_validators.len() < MAX_ACTIVE_VALIDATORS,
+            format!(
+                "You can only stake with {:?} validators at a time",
+                MAX_ACTIVE_VALIDATORS
+            ),
+        );
 
         // Only the vault owner can delegate
         require!(
