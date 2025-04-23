@@ -14,7 +14,7 @@ pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(60);
 
 pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000;
 pub const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
-pub const MAX_COUNTER_OFFERS: u64 = 10;
+pub const MAX_COUNTER_OFFERS: u64 = 7;
 pub const MAX_ACTIVE_VALIDATORS: u64 = 2;
 pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000;
 

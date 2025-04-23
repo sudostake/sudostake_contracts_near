@@ -3,7 +3,7 @@ use near_sdk::{json_types::U128, AccountId, NearToken};
 use serde_json::json;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
-    register_account_with_token, VaultViewState, VAULT_CALL_GAS,
+    register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -141,7 +141,7 @@ async fn test_counter_offer_is_accepted_and_saved() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn test_counter_offer_eviction_on_11th_offer() -> anyhow::Result<()> {
+async fn test_counter_offer_eviction_after_max_offer() -> anyhow::Result<()> {
     // Set up sandbox and accounts
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -204,9 +204,9 @@ async fn test_counter_offer_eviction_on_11th_offer() -> anyhow::Result<()> {
     })
     .to_string();
 
-    // Add 10 lenders with increasing offers (100_000 to 190_000)
+    // Add MAX_COUNTER_OFFERS lenders with increasing offers (100_000 to 190_000)
     let mut proposers: Vec<AccountId> = vec![];
-    for i in 0..10 {
+    for i in 0..MAX_COUNTER_OFFERS {
         let lender = root
             .create_subaccount(format!("lender_{i}").as_str())
             .initial_balance(NearToken::from_near(2))
@@ -247,7 +247,7 @@ async fn test_counter_offer_eviction_on_11th_offer() -> anyhow::Result<()> {
             .into_result()?;
     }
 
-    // Add 11th lender that will propose the best offer
+    // Add (MAX_COUNTER_OFFERS + 1)th lender that will propose the best offer
     let best_lender = root
         .create_subaccount("lender_best")
         .initial_balance(NearToken::from_near(2))
@@ -287,8 +287,9 @@ async fn test_counter_offer_eviction_on_11th_offer() -> anyhow::Result<()> {
     let offers: serde_json::Value = vault.view("get_counter_offers").await?.json()?;
     assert_eq!(
         offers.as_object().unwrap().len(),
-        10,
-        "Only top 10 counter offers should be retained"
+        MAX_COUNTER_OFFERS as usize,
+        "Only top {} counter offers should be retained",
+        MAX_COUNTER_OFFERS
     );
     assert!(
         offers.get("lender_best.test.near").is_some(),
@@ -303,7 +304,7 @@ async fn test_counter_offer_eviction_on_11th_offer() -> anyhow::Result<()> {
         "Expected accepted_offer to not be set"
     );
 
-    // Verify that lender_0.test.near who had the 11th (lowest) counter offer
+    // Verify that lender_0.test.near who had the (MAX_COUNTER_OFFERS + 1)th (lowest) counter offer
     // Got refunded so their balance with the token contract remains the same
     let lender_0_balance = get_usdc_balance(&token, &proposers[0]).await?;
     assert!(

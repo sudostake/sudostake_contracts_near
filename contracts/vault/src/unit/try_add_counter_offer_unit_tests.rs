@@ -3,7 +3,7 @@ use test_utils::{get_context, owner};
 
 use crate::{
     contract::Vault,
-    types::{CounterOfferMessage, LiquidityRequest},
+    types::{CounterOfferMessage, LiquidityRequest, MAX_COUNTER_OFFERS},
 };
 
 #[path = "test_utils.rs"]
@@ -257,7 +257,7 @@ fn test_rejects_if_message_fields_mismatch() {
 }
 
 #[test]
-fn test_eviction_happens_when_over_10_offers() {
+fn test_eviction_happens_when_over_max_offers() {
     // Set up context
     let ctx = get_context(owner(), NearToken::from_near(10), None);
     testing_env!(ctx);
@@ -276,10 +276,10 @@ fn test_eviction_happens_when_over_10_offers() {
         created_at: 0,
     });
 
-    // Insert 10 offers with increasing amounts starting from 100_000
-    for i in 0..10 {
+    // Insert MAX_COUNTER_OFFERS offers with increasing amounts starting from 100_000
+    for i in 0..MAX_COUNTER_OFFERS {
         let proposer = format!("user_{}.near", i).parse().unwrap();
-        let offered_amount = U128(100_000 + i * 10_000);
+        let offered_amount = U128(100_000u128 + i as u128 * 10_000);
 
         let msg = CounterOfferMessage {
             action: "NewCounterOffer".to_string(),
@@ -303,11 +303,11 @@ fn test_eviction_happens_when_over_10_offers() {
     // At this point we have 10 entries
     assert_eq!(
         vault.counter_offers.as_ref().unwrap().len(),
-        10,
+        MAX_COUNTER_OFFERS,
         "Expected exactly 10 counter offers"
     );
 
-    // Add the 11th offer with better amount (e.g. 999_000)
+    // Add the (MAX_COUNTER_OFFERS + 1)th offer with better amount (e.g. 999_000)
     let best_proposer: AccountId = "best.near".parse().unwrap();
     let best_amount = U128(999_000);
     let msg = CounterOfferMessage {
@@ -327,9 +327,14 @@ fn test_eviction_happens_when_over_10_offers() {
         )
         .unwrap();
 
-    // Should still only have 10 offers
+    // Should still only have MAX_COUNTER_OFFERS offers
     let map = vault.counter_offers.as_ref().unwrap();
-    assert_eq!(map.len(), 10, "Expected eviction to keep map size at 10");
+    assert_eq!(
+        map.len(),
+        MAX_COUNTER_OFFERS,
+        "Expected eviction to keep map size at {}",
+        MAX_COUNTER_OFFERS
+    );
 
     // Confirm best_proposer exists
     assert!(
