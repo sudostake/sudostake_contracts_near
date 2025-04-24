@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 repository = "https://github.com/sudostake/sudostake_contracts_near"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 borsh = { workspace = true }
 borsh-derive = { workspace = true }
@@ -15,18 +18,17 @@ near-contract-standards = { workspace = true }
 near-workspaces = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
-near-crypto = "0.21.2"
-near-primitives = "0.21.0"
 anyhow = { workspace = true }
+near-crypto = "0.21.2"         # For unit test signing logic only
+near-primitives = "0.21.0"     # For testnet validator metadata/types
 
-[lib]
-crate-type = ["cdylib"]
+[features]
+default = []
+integration-test = []
 
-# Required NEAR metadata
 [package.metadata.near]
 version = "5.11.0"
 
-# Fields to configure reproducible WASM build according to NEP-330
 [package.metadata.near.reproducible_build]
 image = "sourcescan/cargo-near:0.13.4-rust-1.85.1"
 image_digest = "sha256:1f8b71742802f38990d442e8678aa4c0cd1c8317dd3ff493f41c079675d4f35b"
@@ -36,9 +38,5 @@ container_build_command = [
     "near",
     "build",
     "non-reproducible-wasm",
-      "--locked",
+    "--locked",
 ]
-
-[features]
-default = []
-integration-test = []

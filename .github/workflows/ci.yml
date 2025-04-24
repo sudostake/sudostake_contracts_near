@@ -37,7 +37,7 @@ jobs:
           sudo apt update
           sudo apt install -y binaryen
 
-      - name: Run Build and Test Script
+      - name: Run Build and Test Scripts
         run: |
-          chmod +x test.sh
-          ./test.sh
+          chmod +x build.sh factory_test.sh vault_test.sh
+          ./build.sh && ./factory_test.sh && ./vault_test.sh

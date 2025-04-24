@@ -1,29 +1,29 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use near_sdk::collections::UnorderedMap;
 use near_sdk::serde::Serialize;
 use near_sdk::{env, near_bindgen, AccountId, Promise};
 use near_sdk::{Gas, NearToken};
-use sha2::{Digest, Sha256};
+
+use crate::log_event;
 
 // NEAR costs (yoctoNEAR)
 const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 const GAS_FOR_VAULT_INIT: Gas = Gas::from_tgas(100);
 
+// vault.wasm bytes
+const VAULT_WASM_BYTES: &[u8] = include_bytes!("../../../res/vault.wasm");
+
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct FactoryViewState {
+    pub owner: AccountId,
     pub vault_minting_fee: NearToken,
     pub vault_counter: u64,
-    pub latest_vault_version: u64,
 }
 
 #[near_bindgen]
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct FactoryContract {
     pub owner: AccountId,
-    pub vault_code_versions: UnorderedMap<Vec<u8>, Vec<u8>>, // key = hash
-    pub latest_vault_version: u64,
-    pub latest_vault_hash: Vec<u8>,
     pub vault_counter: u64,
     pub vault_minting_fee: NearToken,
 }
@@ -43,9 +43,6 @@ impl FactoryContract {
 
         Self {
             owner,
-            vault_code_versions: UnorderedMap::new(b"v".to_vec()),
-            latest_vault_version: 0,
-            latest_vault_hash: vec![],
             vault_counter: 0,
             vault_minting_fee,
         }
@@ -70,55 +67,12 @@ impl FactoryContract {
         );
     }
 
-    #[allow(dead_code)]
-    pub fn set_vault_code(&mut self, code: Vec<u8>) -> Vec<u8> {
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.owner,
-            "Only the factory owner can set new vault code"
-        );
-
-        // TODO apply comprehensive tests to make sure the uploaded vault wasm
-        // is valid and matches expectations
-        assert!(code.len() > 1024, "Vault code is too small to be valid");
-
-        // Compute SHA-256 hash of the code
-        let hash = Sha256::digest(&code).to_vec();
-
-        // Prevent duplicate upload
-        if self.vault_code_versions.get(&hash).is_some() {
-            env::panic_str("This vault code has already been uploaded");
-        }
-
-        // Store by hash
-        self.vault_code_versions.insert(&hash, &code);
-
-        // Update versioning state
-        self.latest_vault_version += 1;
-        self.latest_vault_hash = hash.clone();
-
-        // Emit log
-        log_event!(
-            "vault_code_uploaded",
-            near_sdk::serde_json::json!({
-                "version": self.latest_vault_version,
-                "hash": hex::encode(&hash),
-                "size": code.len()
-            })
-        );
-
-        hash
-    }
-
     #[payable]
     #[allow(dead_code)]
     pub fn mint_vault(&mut self) -> Promise {
         // Get the caller and the attached deposit
         let caller = env::predecessor_account_id();
         let deposit = env::attached_deposit();
-
-        // Ensure vault code has been uploaded
-        assert!(self.latest_vault_version > 0, "No vault code uploaded");
 
         // Ensure the minting fee has been configured
         let required_fee = self.vault_minting_fee.as_yoctonear();
@@ -132,10 +86,7 @@ impl FactoryContract {
         );
 
         // Load the vault code from state
-        let vault_code = self
-            .vault_code_versions
-            .get(&self.latest_vault_hash)
-            .expect("Vault code missing");
+        let vault_code: Vec<u8> = VAULT_WASM_BYTES.to_vec();
 
         // Estimate deployment cost based on WASM size and protocol storage pricing
         let wasm_bytes = vault_code.len() as u128;
@@ -162,8 +113,8 @@ impl FactoryContract {
             near_sdk::serde_json::json!({
                 "owner": caller,
                 "vault_id": vault_account,
-                "version": self.latest_vault_version,
-                "index": index
+                "index": index,
+                "version": 1,
             })
         );
 
@@ -171,7 +122,7 @@ impl FactoryContract {
         let json_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
             "owner": caller,
             "index": index,
-            "version": self.latest_vault_version
+            "version": 1,
         }))
         .unwrap();
 
@@ -181,7 +132,7 @@ impl FactoryContract {
             .transfer(NearToken::from_yoctonear(transfer_amount))
             .deploy_contract(vault_code)
             .function_call(
-                "new".to_string(),
+                String::from("new"),
                 json_args,
                 NearToken::from_yoctonear(0),
                 GAS_FOR_VAULT_INIT,
@@ -267,9 +218,9 @@ impl FactoryContract {
     #[allow(dead_code)]
     pub fn get_contract_state(&self) -> FactoryViewState {
         FactoryViewState {
+            owner: self.owner.clone(),
             vault_minting_fee: self.vault_minting_fee,
             vault_counter: self.vault_counter,
-            latest_vault_version: self.latest_vault_version,
         }
     }
 }

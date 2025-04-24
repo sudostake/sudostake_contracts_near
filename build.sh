@@ -1,19 +1,15 @@
 #!/bin/bash
 set -e
 
-# Ensure the res/ folder exists
+# Ensure the res/ folder exists to store .wasm outputs
 mkdir -p res
 
-# Build all workspace contracts
-cargo build --target wasm32-unknown-unknown --release
+echo "📦 Building vault contract for wasm32-unknown-unknown..."
+cargo build -p vault --target wasm32-unknown-unknown --release
+wasm-opt -Oz -o res/vault.wasm target/wasm32-unknown-unknown/release/vault.wasm
 
-# Rebuild vault with integration-test feature
-cargo build -p vault --target wasm32-unknown-unknown --release --features integration-test
+echo "📦 Building factory contract for wasm32-unknown-unknown..."
+cargo build -p factory --target wasm32-unknown-unknown --release
+wasm-opt -Oz -o res/factory.wasm target/wasm32-unknown-unknown/release/factory.wasm
 
-# Optimize WASM binaries
-for file in target/wasm32-unknown-unknown/release/*.wasm; do
-    filename=$(basename "$file")
-    wasm-opt -Oz -o "res/$filename" "$file"
-done
-
-echo "✅ Build complete. Optimized WASM files are in the res/ folder."
+echo "✅ WASM build complete. Files available in ./res"

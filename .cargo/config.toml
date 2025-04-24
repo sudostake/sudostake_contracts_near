@@ -1,0 +1,14 @@
+# .cargo/config.toml
+[build]
+target = "wasm32-unknown-unknown"
+rustflags = [
+  "-C", "link-arg=--export-table",
+  "-C", "link-arg=--export=__heap_base",
+  "-C", "link-arg=--export=__data_end",
+  "-C", "opt-level=z",
+  "-C", "codegen-units=1",
+  "-C", "panic=abort",
+]
+
+[target.wasm32-unknown-unknown]
+runner = "wasm-opt -Oz -o"

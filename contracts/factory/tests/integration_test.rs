@@ -1,3 +1,4 @@
+use anyhow::Ok;
 use near_sdk::{env, Gas, NearToken};
 use near_workspaces::types::CryptoHash;
 use near_workspaces::{self as workspaces, network::Sandbox, Account, Contract, Worker};
@@ -8,6 +9,16 @@ const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
 
 // NEAR costs (yoctoNEAR)
 const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
+pub const FACTORY_CALL_GAS: Gas = Gas::from_tgas(300);
+
+async fn calculate_minting_fee() -> anyhow::Result<NearToken> {
+    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
+    let wasm_bytes = vault_wasm.len() as u128;
+    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
+    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
+
+    Ok(NearToken::from_yoctonear(total_fee_yocto))
+}
 
 #[tokio::test]
 async fn test_factory_initialization() -> anyhow::Result<()> {
@@ -27,46 +38,6 @@ async fn test_factory_initialization() -> anyhow::Result<()> {
         .await?;
 
     assert!(res.is_success(), "Contract call failed: {:?}", res);
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_set_vault_code() -> anyhow::Result<()> {
-    let worker = workspaces::sandbox().await?;
-    let owner = worker.root_account()?;
-
-    // Deploy factory contract
-    let wasm = std::fs::read(FACTORY_WASM_PATH)?;
-    let factory: Contract = owner.deploy(&wasm).await?.into_result()?;
-
-    // Initialize factory
-    let _ = factory
-        .call("new")
-        .args_json(json!({
-            "owner": owner.id(),
-            "vault_minting_fee": NearToken::from_near(1),
-        }))
-        .transact()
-        .await?;
-
-    // Read vault WASM
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-
-    // Call set_vault_code
-    let result = factory
-        .call("set_vault_code")
-        .args_json(json!({
-            "code": vault_wasm
-        }))
-        .gas(Gas::from_tgas(300))
-        .transact()
-        .await?;
-
-    assert!(
-        result.is_success(),
-        "Vault code upload failed: {:?}",
-        result
-    );
     Ok(())
 }
 
@@ -115,12 +86,8 @@ async fn test_mint_vault_success() -> anyhow::Result<()> {
     let factory_wasm = std::fs::read(FACTORY_WASM_PATH)?;
     let factory: Contract = owner.deploy(&factory_wasm).await?.into_result()?;
 
-    // Load vault.wasm and calculate required minting fee
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    let wasm_bytes = vault_wasm.len() as u128;
-    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
-    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
-    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+    // Calculate minting fee
+    let minting_fee = calculate_minting_fee().await?;
 
     // Initialize factory with calculated minting fee
     factory
@@ -129,15 +96,6 @@ async fn test_mint_vault_success() -> anyhow::Result<()> {
             "owner": owner.id(),
             "vault_minting_fee": minting_fee
         }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Upload vault code
-    factory
-        .call("set_vault_code")
-        .args_json(json!({ "code": vault_wasm }))
-        .gas(Gas::from_tgas(300))
         .transact()
         .await?
         .into_result()?;
@@ -154,16 +112,16 @@ async fn test_mint_vault_success() -> anyhow::Result<()> {
     let result = user
         .call(factory.id(), "mint_vault")
         .deposit(minting_fee.clone())
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?;
 
+    // Check if the call was a success
     assert!(result.is_success(), "mint_vault call failed: {:?}", result);
 
     // Check if vault subaccount was created and contract deployed
     let vault_id = format!("vault-0.{}", factory.id()).parse()?;
     let vault_account = worker.view_account(&vault_id).await?;
-
     assert_ne!(
         vault_account.code_hash,
         CryptoHash::default(),
@@ -187,12 +145,8 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // Load vault.wasm and calculate required minting fee
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    let wasm_bytes = vault_wasm.len() as u128;
-    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
-    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
-    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+    // Calculate minting fee
+    let minting_fee = calculate_minting_fee().await?;
 
     // Initialize factory with calculated minting fee
     owner
@@ -201,17 +155,7 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
             "owner": owner.id(),
             "vault_minting_fee": minting_fee
         }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Upload vault code (>1KB) using owner
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    assert!(vault_wasm.len() > 1024);
-    owner
-        .call(factory_contract.id(), "set_vault_code")
-        .args_json(serde_json::json!({ "code": vault_wasm }))
-        .gas(Gas::from_tgas(300))
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -219,7 +163,7 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
     // Call mint_vault with the correct fee
     user.call(factory.id(), "mint_vault")
         .deposit(minting_fee.clone())
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -234,7 +178,7 @@ async fn test_withdraw_balance_after_vault_mint() -> anyhow::Result<()> {
             "amount": NearToken::from_yoctonear(1_000_000_000_000_000_000_000_000),
             "to_address": null
         }))
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -266,12 +210,8 @@ async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
         .await?
         .into_result()?;
 
-    // Load vault.wasm and calculate required minting fee
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    let wasm_bytes = vault_wasm.len() as u128;
-    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
-    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
-    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+    // Calculate minting fee
+    let minting_fee = calculate_minting_fee().await?;
 
     // Initialize factory with calculated minting fee
     owner
@@ -280,16 +220,7 @@ async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
             "owner": owner.id(),
             "vault_minting_fee": minting_fee
         }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Upload vault code
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    owner
-        .call(factory_contract.id(), "set_vault_code")
-        .args_json(serde_json::json!({ "code": vault_wasm }))
-        .gas(Gas::from_tgas(300))
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -297,7 +228,7 @@ async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
     // Call mint_vault with the correct fee
     user.call(factory.id(), "mint_vault")
         .deposit(minting_fee.clone())
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -312,7 +243,7 @@ async fn test_withdraw_balance_success_to_third_party() -> anyhow::Result<()> {
             "amount": NearToken::from_yoctonear(1_000_000_000_000_000_000_000_000),
             "to_address": receiver.id(),
         }))
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -342,12 +273,8 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
         .await?
         .into_result()?;
 
-    // Load vault.wasm and calculate required minting fee
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    let wasm_bytes = vault_wasm.len() as u128;
-    let deploy_cost = wasm_bytes * env::storage_byte_cost().as_yoctonear();
-    let total_fee_yocto = deploy_cost + STORAGE_BUFFER;
-    let minting_fee = NearToken::from_yoctonear(total_fee_yocto);
+    // Calculate minting fee
+    let minting_fee = calculate_minting_fee().await?;
 
     // Initialize factory with calculated minting fee
     owner
@@ -356,16 +283,7 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
             "owner": owner.id(),
             "vault_minting_fee": minting_fee
         }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Upload vault code to the factory
-    let vault_wasm = std::fs::read(VAULT_WASM_PATH)?;
-    owner
-        .call(factory_contract.id(), "set_vault_code")
-        .args_json(serde_json::json!({ "code": vault_wasm }))
-        .gas(Gas::from_tgas(300))
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -373,7 +291,7 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
     // Call mint_vault with the correct fee
     user.call(factory_contract.id(), "mint_vault")
         .deposit(minting_fee.clone())
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
@@ -403,7 +321,7 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
             "amount": withdraw_amount,
             "to_address": null
         }))
-        .max_gas()
+        .gas(FACTORY_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
