@@ -9,6 +9,6 @@ chmod +x build.sh
 ## Test all contracts
 ```
 # Standard test
-chmod +x test.sh
-./test.sh
+chmod +x build.sh factory_test.sh vault_test.sh
+./build.sh && ./factory_test.sh && ./vault_test.sh
 ```
