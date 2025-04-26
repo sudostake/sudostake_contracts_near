@@ -1,6 +1,6 @@
 # SudoStake Factory Contract (NEAR)
 
-This contract powers the creation and management of user-owned staking vaults on the NEAR blockchain. Each vault is deployed as a subaccount and initialized with the latest code and immutable metadata.
+This contract powers the creation and management of user-owned staking vaults on the NEAR blockchain. Each vault is deployed as a subaccount and initialized with the included vault wasm bytes as an immutable smart contract.
 
 Part of the [SudoStake Protocol](https://sudostake.com).
 
@@ -8,7 +8,6 @@ Part of the [SudoStake Protocol](https://sudostake.com).
 
 ## Features
 
-- Upload and version vault contract code
 - Set and enforce vault creation fees
 - Mint new immutable vault contracts
 - Withdraw factory contract NEAR safely
@@ -33,27 +32,6 @@ _None_
 
 &nbsp;
 
-### `set_vault_code(code: Vec<u8>) -> Vec<u8>`
-
-**Description**  
-Uploads new WASM code for vault contracts and stores it by SHA-256 hash. Prevents duplicates.
-
-**Access Control**  
-Only callable by the factory `owner`.
-
-**Event JSON emitted**
-```json
-{
-  "event": "vault_code_uploaded",
-  "data": {
-    "version": 1,
-    "hash": "hex_sha256",
-    "size": 10240
-  }
-}
-```
-
-&nbsp;
 
 ### `set_vault_creation_fee(new_fee: NearToken)`
 
@@ -144,9 +122,9 @@ Returns the current state of the contract:
 
 ```json
 {
+  "owner": "factory_owner.near",
   "vault_minting_fee": "1000000000000000000000000",
   "vault_counter": 3,
-  "latest_vault_version": 1
 }
 ```
 
@@ -171,11 +149,4 @@ Public
   - `WASM size × env::storage_byte_cost()`
   - Plus a storage buffer of 0.01 NEAR
 - Vault subaccounts are named: `vault-<index>.factory.near`
-- Contract prevents duplicate code uploads using SHA-256 hash
 
-&nbsp;
-
-## License
-
-MIT License  
-© [Muhammed Ali](https://github.com/CodeMuhammed)
