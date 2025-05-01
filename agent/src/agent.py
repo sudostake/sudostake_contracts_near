@@ -8,5 +8,4 @@ def run(env: Environment):
     env.add_reply(result)
     env.request_user_input()
 
-run(env)
-
+run(env) # type: ignore[name-defined]
