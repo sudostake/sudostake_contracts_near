@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 
 use near_sdk::json_types::U128;
-use near_sdk::{assert_one_yocto, require, AccountId, NearToken};
+use near_sdk::{assert_one_yocto, require, AccountId, NearToken, Promise};
 use near_sdk::{env, near_bindgen};
 
 use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext::ext_fungible_token;
+use crate::ext::{ext_fungible_token};
 use crate::types::{RefundEntry, GAS_FOR_FT_TRANSFER};
 
 #[near_bindgen]
@@ -31,16 +31,15 @@ impl Vault {
                 ));
 
                 // Add to refund_list for retry
-                let id = self.refund_nonce;
+                let id = self.get_refund_nonce();
                 self.refund_list.insert(
                     &id,
                     &RefundEntry {
-                        token: token_address,
+                        token: Some(token_address),
                         proposer,
                         amount,
                     },
                 );
-                self.refund_nonce += 1;
             }
         }
     }
@@ -67,11 +66,17 @@ impl Vault {
 
         // Try to refund all entries on the to_retry list
         for (id, entry) in to_retry {
-            ext_fungible_token::ext(entry.token.clone())
-                .with_attached_deposit(NearToken::from_yoctonear(1))
-                .with_static_gas(GAS_FOR_FT_TRANSFER)
-                .ft_transfer(entry.proposer.clone(), entry.amount, None)
-                .then(Self::ext(env::current_account_id()).on_retry_refund_complete(id));
+            if let Some(token) = &entry.token {
+                ext_fungible_token::ext(token.clone())
+                    .with_attached_deposit(NearToken::from_yoctonear(1))
+                    .with_static_gas(GAS_FOR_FT_TRANSFER)
+                    .ft_transfer(entry.proposer.clone(), entry.amount, None)
+                    .then(Self::ext(env::current_account_id()).on_retry_refund_complete(id));
+            } else {
+                Promise::new(entry.proposer.clone())
+                    .transfer(NearToken::from_yoctonear(entry.amount.0))
+                    .then(Self::ext(env::current_account_id()).on_retry_refund_complete(id));
+            }
         }
     }
     #[private]

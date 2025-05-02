@@ -40,6 +40,14 @@ pub trait VaultExt {
     fn on_total_staked_process_claims(&mut self, total_maturing: u128);
 
     fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128)>);
+
+    fn on_claim_vault_complete(
+        &mut self,
+        old_owner: AccountId,
+        new_owner: AccountId,
+        amount: u128,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    );
 }
 
 #[ext_contract(ext_staking_pool)]

@@ -57,6 +57,7 @@ pub struct VaultViewState {
     pub pending_liquidity_request: Option<serde_json::Value>,
     pub liquidity_request: Option<LiquidityRequest>,
     pub accepted_offer: Option<serde_json::Value>,
+    pub is_listed_for_takeover: bool,
 }
 
 pub async fn create_test_validator(

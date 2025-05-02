@@ -16,3 +16,5 @@ mod withdraw_balance_unit_tests;
 
 mod cancel_takeover_unit_tests;
 mod list_for_takeover_unit_tests;
+
+mod claim_vault_unit_tests;
