@@ -14,5 +14,5 @@ mod try_add_counter_offer_unit_tests;
 mod undelegate_unit_tests;
 mod withdraw_balance_unit_tests;
 
-mod cancel_take_over_unit_tests;
+mod cancel_takeover_unit_tests;
 mod list_for_takeover_unit_tests;
