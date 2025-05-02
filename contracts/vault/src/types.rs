@@ -131,7 +131,7 @@ pub struct CounterOffer {
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct RefundEntry {
-    pub token: AccountId,
+    pub token: Option<AccountId>,
     pub proposer: AccountId,
     pub amount: U128,
 }

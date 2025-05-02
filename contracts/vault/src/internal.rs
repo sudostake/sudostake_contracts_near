@@ -1,5 +1,5 @@
 use crate::contract::Vault;
-use crate::ext::{ext_fungible_token, ext_staking_pool};
+use crate::ext::{ext_fungible_token, ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
     AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_FT_TRANSFER,
@@ -20,6 +20,13 @@ impl Vault {
         let total = env::account_balance().as_yoctonear();
         let available = total.saturating_sub(self.get_storage_cost());
         NearToken::from_yoctonear(available)
+    }
+
+    pub fn get_refund_nonce(&mut self) -> u64 {
+        let id = self.refund_nonce;
+        self.refund_nonce += 1;
+
+        id
     }
 
     pub fn log_gas_checkpoint(&self, method: &str) {
@@ -258,7 +265,7 @@ impl Vault {
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FOR_FT_TRANSFER)
             .ft_transfer(offer.proposer.clone(), offer.amount, None)
-            .then(Self::ext(env::current_account_id()).on_refund_complete(
+            .then(ext_self::ext(env::current_account_id()).on_refund_complete(
                 offer.proposer.clone(),
                 offer.amount,
                 token_address,
