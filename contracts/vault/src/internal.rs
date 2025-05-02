@@ -11,10 +11,14 @@ use near_sdk::{env, require, AccountId, NearToken, Promise};
 
 /// Internal utility methods for Vault
 impl Vault {
+    pub fn get_storage_cost(&self) -> u128 {
+        let actual_cost = env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
+        actual_cost + STORAGE_BUFFER
+    }
+
     pub fn get_available_balance(&self) -> NearToken {
         let total = env::account_balance().as_yoctonear();
-        let storage_cost = env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
-        let available = total.saturating_sub(storage_cost + STORAGE_BUFFER);
+        let available = total.saturating_sub(self.get_storage_cost());
         NearToken::from_yoctonear(available)
     }
 

@@ -39,4 +39,8 @@ impl Vault {
     pub fn view_available_balance(&self) -> U128 {
         self.get_available_balance().as_yoctonear().into()
     }
+
+    pub fn view_storage_cost(&self) -> U128 {
+        U128(self.get_storage_cost())
+    }
 }
