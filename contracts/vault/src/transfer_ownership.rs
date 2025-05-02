@@ -64,4 +64,26 @@ impl Vault {
             })
         );
     }
+
+    #[payable]
+    pub fn cancel_takeover(&mut self) {
+        assert_one_yocto();
+        require!(
+            env::predecessor_account_id() == self.owner,
+            "Only the vault owner can cancel takeover"
+        );
+        require!(
+            self.is_listed_for_takeover,
+            "Vault is not listed for takeover"
+        );
+
+        self.is_listed_for_takeover = false;
+
+        log_event!(
+            "vault_takeover_cancelled",
+            near_sdk::serde_json::json!({
+                "owner": self.owner
+            })
+        );
+    }
 }
