@@ -48,6 +48,7 @@ pub struct VaultViewState {
     pub pending_liquidity_request: Option<PendingLiquidityRequest>,
     pub liquidity_request: Option<LiquidityRequest>,
     pub accepted_offer: Option<AcceptedOffer>,
+    pub is_listed_for_takeover: bool,
 }
 
 /// Describes a liquidity request pre-validation

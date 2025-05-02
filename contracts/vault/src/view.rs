@@ -15,6 +15,7 @@ impl Vault {
             pending_liquidity_request: self.pending_liquidity_request.clone(),
             liquidity_request: self.liquidity_request.clone(),
             accepted_offer: self.accepted_offer.clone(),
+            is_listed_for_takeover: self.is_listed_for_takeover,
         }
     }
 
