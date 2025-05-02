@@ -3,7 +3,7 @@
 use crate::contract::{Vault, VaultExt};
 use crate::log_event;
 
-use near_sdk::assert_one_yocto;
+use near_sdk::{assert_one_yocto, require};
 use near_sdk::{env, near_bindgen, AccountId};
 
 #[near_bindgen]
@@ -36,6 +36,31 @@ impl Vault {
             near_sdk::serde_json::json!({
                 "old_owner": old_owner,
                 "new_owner": new_owner
+            })
+        );
+    }
+
+    #[payable]
+    pub fn list_for_takeover(&mut self) {
+        assert_one_yocto();
+
+        require!(
+            env::predecessor_account_id() == self.owner,
+            "Only the vault owner can list the vault for takeover"
+        );
+
+        require!(
+            !self.is_listed_for_takeover,
+            "Vault is already listed for takeover"
+        );
+
+        self.is_listed_for_takeover = true;
+
+        log_event!(
+            "vault_listed_for_takeover",
+            near_sdk::serde_json::json!({
+                "owner": self.owner,
+                "storage_cost": self.get_storage_cost().to_string()
             })
         );
     }
