@@ -1,4 +1,3 @@
-use anyhow::Ok;
 use near_sdk::{json_types::U128, NearToken};
 use test_utils::{setup_sandbox_and_accounts, VaultViewState, VAULT_CALL_GAS};
 
