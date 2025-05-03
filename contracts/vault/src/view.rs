@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::contract::{Vault, VaultExt};
-use crate::types::{CounterOffer, UnstakeEntry, VaultViewState};
+use crate::types::{CounterOffer, RefundEntry, UnstakeEntry, VaultViewState};
 use near_sdk::json_types::U128;
 use near_sdk::{near_bindgen, AccountId};
 
@@ -43,5 +43,9 @@ impl Vault {
 
     pub fn view_storage_cost(&self) -> U128 {
         U128(self.get_storage_cost())
+    }
+
+    pub fn get_all_refund_entries(&self) -> Vec<(u64, RefundEntry)> {
+        self.refund_list.iter().collect()
     }
 }
