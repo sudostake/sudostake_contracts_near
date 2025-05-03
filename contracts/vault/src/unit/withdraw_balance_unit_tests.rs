@@ -2,11 +2,11 @@
 mod test_utils;
 
 use crate::contract::Vault;
-use crate::types::{AcceptedOffer, Liquidation, LiquidityRequest, STORAGE_BUFFER};
+use crate::types::{AcceptedOffer, Liquidation, LiquidityRequest, RefundEntry, STORAGE_BUFFER};
 use near_sdk::test_utils::VMContextBuilder;
 use near_sdk::{env, AccountId, NearToken};
 use near_sdk::{json_types::U128, testing_env};
-use test_utils::{alice, get_context, owner};
+use test_utils::{alice, get_context, insert_refund_entry, owner};
 
 #[test]
 fn owner_can_withdraw_near_successfully() {
@@ -56,6 +56,36 @@ fn non_owner_cannot_withdraw_should_panic() {
 
     // Attempt to withdraw 1 NEAR from the vault
     // Since the caller is not the owner, this should panic
+    vault.withdraw_balance(
+        None,
+        U128::from(NearToken::from_near(1).as_yoctonear()),
+        None,
+    );
+}
+
+#[test]
+#[should_panic(expected = "Cannot withdraw while there are pending refund entries")]
+fn test_disallow_withdrawal_if_refund_list_not_empty() {
+    // Setup context
+    let context = get_context(owner(), NearToken::from_near(5), None);
+    testing_env!(context);
+
+    // Create vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Simulate refund_list has one pending entry
+    insert_refund_entry(
+        &mut vault,
+        0,
+        RefundEntry {
+            token: Some("usdc.near".parse().unwrap()),
+            proposer: alice(),
+            amount: U128(1_000_000),
+        },
+    );
+
+    // Attempt to withdraw 1 NEAR from the vault
+    // Since there is a pending RefundEntry, this should panic
     vault.withdraw_balance(
         None,
         U128::from(NearToken::from_near(1).as_yoctonear()),

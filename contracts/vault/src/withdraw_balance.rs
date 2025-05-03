@@ -92,6 +92,12 @@ impl Vault {
     /// Ensures the vault owner is allowed to withdraw the specified token,
     /// based on the current liquidity request and liquidation status.
     pub fn ensure_owner_can_withdraw(&self, token: Option<&AccountId>) {
+        // 🚫 Disallow withdrawals if refunds are pending
+        require!(
+            self.refund_list.is_empty(),
+            "Cannot withdraw while there are pending refund entries"
+        );
+
         // Attempt to access the liquidity request (if any), otherwise allow withdrawal
         let Some(request) = &self.liquidity_request else {
             return;
