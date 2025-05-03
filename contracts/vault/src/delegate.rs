@@ -45,6 +45,12 @@ impl Vault {
             )
         );
 
+        // 🔒 Prevent delegation when refund_list is not empty
+        require!(
+            self.refund_list.is_empty(),
+            "Cannot delegate while there are pending refund entries"
+        );
+
         // 🔒 Prevent delegation when liquidation is active
         require!(
             self.liquidation.is_none(),

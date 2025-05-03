@@ -1,8 +1,11 @@
 #[path = "test_utils.rs"]
 mod test_utils;
-use crate::{contract::Vault, types::MAX_ACTIVE_VALIDATORS};
-use near_sdk::{testing_env, AccountId, NearToken};
-use test_utils::{alice, get_context, owner};
+use crate::{
+    contract::Vault,
+    types::{RefundEntry, MAX_ACTIVE_VALIDATORS},
+};
+use near_sdk::{json_types::U128, testing_env, AccountId, NearToken};
+use test_utils::{alice, get_context, insert_refund_entry, owner};
 
 #[test]
 #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
@@ -85,6 +88,38 @@ fn test_delegate_fails_if_insufficient_balance() {
 
     // Attempt to delegate 1 NEAR — this should panic
     // because get_available_balance will only allow 0.99 NEAR
+    vault.delegate(
+        "validator.poolv1.near".parse().unwrap(),
+        NearToken::from_near(1),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Cannot delegate while there are pending refund entries")]
+fn test_delegate_fails_when_refund_list_not_empty() {
+    // Setup: 10 NEAR balance, 1 yoctoNEAR attached
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Insert a dummy refund entry
+    insert_refund_entry(
+        &mut vault,
+        0,
+        RefundEntry {
+            proposer: "alice.near".parse().unwrap(),
+            amount: U128(1_000_000),
+            token: Some("usdc.mock.near".parse().unwrap()),
+        },
+    );
+
+    // Attempt delegation while refund_list is not empty — should panic
     vault.delegate(
         "validator.poolv1.near".parse().unwrap(),
         NearToken::from_near(1),
