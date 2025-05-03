@@ -1,96 +1,130 @@
 #![allow(dead_code)]
 
-use near_sdk::json_types::U128;
-use near_sdk::{assert_one_yocto, require, AccountId, NearToken, Promise};
-use near_sdk::{env, near_bindgen};
+use near_sdk::{
+    assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, NearToken, Promise,
+};
 
-use crate::contract::Vault;
-use crate::contract::VaultExt;
-use crate::ext::{ext_fungible_token};
-use crate::types::{RefundEntry, GAS_FOR_FT_TRANSFER};
+use crate::{
+    contract::{Vault, VaultExt},
+    ext::ext_fungible_token,
+    log_event,
+    types::{RefundEntry, GAS_FOR_FT_TRANSFER},
+};
+
+/// Convenient alias for the refund identifier.
+type RefundId = u64;
 
 #[near_bindgen]
 impl Vault {
+    // ---------------------------------------------------------------------
+    //  Callbacks
+    // ---------------------------------------------------------------------
+
+    /// Callback fired after the *initial* refund attempt.
+    ///
+    /// If the transfer failed we persist the entry so that it can be retried
+    /// later via [`retry_refunds`].
     #[private]
     pub fn on_refund_complete(
         &mut self,
         proposer: AccountId,
         amount: U128,
         token_address: AccountId,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
         self.log_gas_checkpoint("on_refund_complete");
 
-        match env::promise_result(0) {
-            near_sdk::PromiseResult::Successful(_) => {
-                // refund succeeded — do nothing
-            }
-            _ => {
-                env::log_str(&format!(
-                    "Refund failed for proposer {}, amount {}, token_address {}",
-                    proposer, amount.0, token_address
-                ));
-
-                // Add to refund_list for retry
-                let id = self.get_refund_nonce();
-                self.refund_list.insert(
-                    &id,
-                    &RefundEntry {
-                        token: Some(token_address),
-                        proposer,
-                        amount,
-                    },
-                );
-            }
+        if result.is_ok() {
+            // 👌 Nothing more to do – the refund was successful.
+            return;
         }
+
+        log_event!(
+            "refund_failed",
+            near_sdk::serde_json::json!({
+                "proposer": proposer,
+                "amount": amount,
+                "token": token_address
+            })
+        );
+
+        let id = self.get_refund_nonce();
+        self.refund_list.insert(
+            &id,
+            &RefundEntry {
+                token: Some(token_address),
+                proposer,
+                amount,
+            },
+        );
     }
 
+    /// Manually retries refunds that previously failed.
+    ///
+    /// - **Access control** – requires `1 yoctoⓃ` and can be called by the
+    ///   contract owner or by the original proposer whose refund failed.
     #[payable]
     pub fn retry_refunds(&mut self) {
-        // Require 1 yoctoNEAR for access control
         assert_one_yocto();
 
-        // Collect refund entries to retry
         let caller = env::predecessor_account_id();
-        let mut to_retry: Vec<(u64, RefundEntry)> = vec![];
-        for (id, entry) in self.refund_list.iter() {
-            if caller == self.owner || caller == entry.proposer {
-                to_retry.push((id, entry));
-            }
-        }
+        let mut to_retry: Vec<(RefundId, RefundEntry)> = self
+            .refund_list
+            .iter()
+            .filter(|(_, entry)| caller == self.owner || caller == entry.proposer)
+            .collect();
 
-        // to_rety list must not be empty
         require!(
             !to_retry.is_empty(),
             "No refundable entries found for caller"
         );
 
-        // Try to refund all entries on the to_retry list
-        for (id, entry) in to_retry {
-            if let Some(token) = &entry.token {
-                ext_fungible_token::ext(token.clone())
-                    .with_attached_deposit(NearToken::from_yoctonear(1))
-                    .with_static_gas(GAS_FOR_FT_TRANSFER)
-                    .ft_transfer(entry.proposer.clone(), entry.amount, None)
-                    .then(Self::ext(env::current_account_id()).on_retry_refund_complete(id));
-            } else {
-                Promise::new(entry.proposer.clone())
-                    .transfer(NearToken::from_yoctonear(entry.amount.0))
-                    .then(Self::ext(env::current_account_id()).on_retry_refund_complete(id));
-            }
+        // Move matching entries into a temporary `to_retry` vector so the immutable
+        // borrow on `refund_list` ends before we call `schedule_refund`, which may
+        // mutate contract state (including `refund_list`).
+        for (id, entry) in to_retry.drain(..) {
+            self.schedule_refund(id, &entry);
         }
     }
+
+    // ---------------------------------------------------------------------
+    //  Internal helpers
+    // ---------------------------------------------------------------------
+
+    /// Schedules a refund promise and attaches the unified callback.
+    fn schedule_refund(&self, id: RefundId, entry: &RefundEntry) {
+        let promise = if let Some(token) = &entry.token {
+            ext_fungible_token::ext(token.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(1))
+                .with_static_gas(GAS_FOR_FT_TRANSFER)
+                .ft_transfer(entry.proposer.clone(), entry.amount, None)
+        } else {
+            Promise::new(entry.proposer.clone()).transfer(NearToken::from_yoctonear(entry.amount.0))
+        };
+
+        promise.then(Self::ext(env::current_account_id()).on_retry_refund_complete(id));
+    }
+
+    /// Callback executed after *each* retry attempt.
+    ///
+    /// Removes the entry from `refund_list` only upon success so that callers
+    /// may attempt again later if needed.
     #[private]
-    pub fn on_retry_refund_complete(&mut self, id: u64) {
+    pub fn on_retry_refund_complete(
+        &mut self,
+        id: RefundId,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    ) {
         self.log_gas_checkpoint("on_retry_refund_complete");
 
-        match env::promise_result(0) {
-            near_sdk::PromiseResult::Successful(_) => {
-                self.refund_list.remove(&id);
-                env::log_str(&format!("Retry refund succeeded and removed for ID {}", id));
-            }
-            _ => {
-                env::log_str(&format!("Retry refund failed again for ID {}", id));
-            }
+        if result.is_err() {
+            env::panic_str(&format!("retry_refund_failed {{ id: {} }}", id));
         }
+
+        log_event!(
+            "retry_refund_succeeded",
+            near_sdk::serde_json::json!({ "id": id })
+        );
+        self.refund_list.remove(&id);
     }
 }
