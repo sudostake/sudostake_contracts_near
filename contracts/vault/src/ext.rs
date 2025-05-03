@@ -25,9 +25,19 @@ pub trait VaultExt {
 
     fn on_check_total_staked(&mut self);
 
-    fn on_refund_complete(&mut self, proposer: AccountId, amount: U128, token_address: AccountId);
+    fn on_refund_complete(
+        &mut self,
+        proposer: AccountId,
+        amount: U128,
+        token_address: AccountId,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    );
 
-    fn on_retry_refund_complete(&mut self, id: u64);
+    fn on_retry_refund_complete(
+        &mut self,
+        id: u64,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    );
 
     fn on_repay_loan(&mut self, #[callback_result] result: Result<(), near_sdk::PromiseError>);
 

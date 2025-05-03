@@ -60,6 +60,14 @@ pub struct VaultViewState {
     pub is_listed_for_takeover: bool,
 }
 
+#[derive(serde::Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct RefundEntry {
+    pub token: Option<AccountId>,
+    pub proposer: AccountId,
+    pub amount: U128,
+}
+
 pub async fn create_test_validator(
     worker: &Worker<Sandbox>,
     root: &Account,

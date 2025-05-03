@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 use near_sdk::{json_types::U128, test_utils::VMContextBuilder, AccountId, NearToken};
 
-use crate::types::LiquidityRequest;
+use crate::{
+    contract::Vault,
+    types::{LiquidityRequest, RefundEntry},
+};
 
 pub fn alice() -> AccountId {
     "alice.near".parse().unwrap()
@@ -68,4 +71,9 @@ pub fn create_valid_liquidity_request(token: AccountId) -> LiquidityRequest {
         duration: 86400,
         created_at: 0,
     }
+}
+
+/// Inserts a test refund entry into the vault's refund list
+pub fn insert_refund_entry(vault: &mut Vault, id: u64, entry: RefundEntry) {
+    vault.refund_list.insert(&id, &entry);
 }

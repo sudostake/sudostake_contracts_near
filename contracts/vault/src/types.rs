@@ -130,7 +130,7 @@ pub struct CounterOffer {
     pub timestamp: u64,
 }
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, Serialize)]
 pub struct RefundEntry {
     pub token: Option<AccountId>,
     pub proposer: AccountId,

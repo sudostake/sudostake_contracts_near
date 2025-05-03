@@ -1,7 +1,7 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::contract::Vault;
+use crate::{contract::Vault, types::RefundEntry};
 use near_sdk::{test_utils::get_logs, testing_env, NearToken, PromiseError};
 use test_utils::{alice, get_context, owner};
 
@@ -109,7 +109,6 @@ fn test_on_claim_vault_complete_succeeds() {
 }
 
 #[test]
-#[should_panic(expected = "Vault takeover failed. You may call retry_refunds later.")]
 fn test_on_claim_vault_complete_refund_and_panics() {
     let old_owner = owner();
     let new_owner = alice();
@@ -126,5 +125,29 @@ fn test_on_claim_vault_complete_refund_and_panics() {
         new_owner.clone(),
         amount,
         Err(PromiseError::Failed), // Simulate failed transfer
+    );
+
+    // Inspect logs
+    let logs = get_logs();
+    let found = logs.iter().any(|log| log.contains("claim_vault_failed"));
+    assert!(
+        found,
+        "Expected 'claim_vault_failed' event not found. Logs: {:?}",
+        logs
+    );
+
+    // Refund should be stored
+    let refunds: Vec<(u64, RefundEntry)> = vault.refund_list.iter().collect();
+    assert_eq!(refunds.len(), 1, "Expected one refund entry");
+
+    let (_, refund) = &refunds[0];
+    assert_eq!(refund.token, None, "Refund should be in native NEAR");
+    assert_eq!(
+        &refund.proposer, &new_owner,
+        "Refund should go to the new_owner"
+    );
+    assert_eq!(
+        refund.amount.0, amount,
+        "Refund amount should match the takeover price"
     );
 }
