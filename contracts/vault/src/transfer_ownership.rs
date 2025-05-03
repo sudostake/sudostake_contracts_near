@@ -130,6 +130,14 @@ impl Vault {
         self.log_gas_checkpoint("on_claim_vault_complete");
 
         if result.is_err() {
+            log_event!(
+                "claim_vault_failed",
+                near_sdk::serde_json::json!({
+                   "new_owner": new_owner,
+                   "amount": amount.to_string()
+                })
+            );
+
             let id = self.get_refund_nonce();
             self.refund_list.insert(
                 &id,
@@ -140,7 +148,7 @@ impl Vault {
                 },
             );
 
-            env::panic_str("Vault takeover failed. You may call retry_refunds later.");
+            return;
         }
 
         self.owner = new_owner.clone();
