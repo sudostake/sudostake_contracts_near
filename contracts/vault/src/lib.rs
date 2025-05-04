@@ -13,6 +13,7 @@ mod repay_loan;
 mod request_liquidity;
 mod retry_refunds;
 mod transfer_ownership;
+mod try_accept_liquidity_request;
 mod types;
 mod undelegate;
 mod view;
