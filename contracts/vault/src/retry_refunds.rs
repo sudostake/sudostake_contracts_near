@@ -8,7 +8,7 @@ use crate::{
     contract::{Vault, VaultExt},
     ext::ext_fungible_token,
     log_event,
-    types::{RefundEntry, GAS_FOR_FT_TRANSFER},
+    types::{RefundEntry, GAS_FOR_FT_TRANSFER, REFUND_EXPIRY_EPOCHS},
 };
 
 /// Convenient alias for the refund identifier.
@@ -16,10 +16,6 @@ type RefundId = u64;
 
 #[near_bindgen]
 impl Vault {
-    // ---------------------------------------------------------------------
-    //  Callbacks
-    // ---------------------------------------------------------------------
-
     /// Callback fired after the *initial* refund attempt.
     ///
     /// If the transfer failed we persist the entry so that it can be retried
@@ -48,15 +44,7 @@ impl Vault {
             })
         );
 
-        let id = self.get_refund_nonce();
-        self.refund_list.insert(
-            &id,
-            &RefundEntry {
-                token: Some(token_address),
-                proposer,
-                amount,
-            },
-        );
+        self.add_refund_entry(Some(token_address), proposer, amount);
     }
 
     /// Manually retries refunds that previously failed.
@@ -87,10 +75,6 @@ impl Vault {
         }
     }
 
-    // ---------------------------------------------------------------------
-    //  Internal helpers
-    // ---------------------------------------------------------------------
-
     /// Schedules a refund promise and attaches the unified callback.
     fn schedule_refund(&self, id: RefundId, entry: &RefundEntry) {
         let promise = if let Some(token) = &entry.token {
@@ -118,7 +102,15 @@ impl Vault {
         self.log_gas_checkpoint("on_retry_refund_complete");
 
         if result.is_err() {
-            env::panic_str(&format!("retry_refund_failed {{ id: {} }}", id));
+            log_event!(
+                "retry_refund_failed",
+                near_sdk::serde_json::json!({
+                    "id": id,
+                })
+            );
+
+            self.remove_expired_refund(id);
+            return;
         }
 
         log_event!(
@@ -126,5 +118,33 @@ impl Vault {
             near_sdk::serde_json::json!({ "id": id })
         );
         self.refund_list.remove(&id);
+    }
+
+    /// Purges refund entries whose receiver accounts are gone, avoiding a
+    /// permanent lock‑up that would stop the vault owner from delegating or
+    /// withdrawing funds.
+    fn remove_expired_refund(&mut self, id: RefundId) {
+        let Some(refund) = self.refund_list.get(&id) else {
+            return; // Not entry with id found
+        };
+
+        let current_epoch = env::epoch_height();
+        if current_epoch < refund.added_at_epoch + REFUND_EXPIRY_EPOCHS {
+            return; // Not expired yet
+        }
+
+        // Expired → remove and log
+        self.refund_list.remove(&id);
+
+        log_event!(
+            "refund_removed",
+            near_sdk::serde_json::json!({
+                "refund_id": id,
+                "recipient": refund.proposer,
+                "added_at_epoch": refund.added_at_epoch,
+                "current_epoch": current_epoch,
+                "expiry_epochs": REFUND_EXPIRY_EPOCHS,
+            })
+        );
     }
 }

@@ -2,8 +2,9 @@ use crate::contract::Vault;
 use crate::ext::{ext_fungible_token, ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    AcceptRequestMessage, CounterOffer, CounterOfferMessage, StorageKey, GAS_FOR_FT_TRANSFER,
-    GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, MAX_COUNTER_OFFERS, STORAGE_BUFFER,
+    AcceptRequestMessage, CounterOffer, CounterOfferMessage, RefundEntry, StorageKey,
+    GAS_FOR_FT_TRANSFER, GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, MAX_COUNTER_OFFERS,
+    STORAGE_BUFFER,
 };
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
@@ -341,5 +342,22 @@ impl Vault {
 
         // Add the final callback to handle results
         chain.then(call_back)
+    }
+    pub(crate) fn add_refund_entry(
+        &mut self,
+        token: Option<AccountId>,
+        proposer: AccountId,
+        amount: U128,
+    ) {
+        let id = self.get_refund_nonce();
+        self.refund_list.insert(
+            &id,
+            &RefundEntry {
+                token,
+                proposer,
+                amount,
+                added_at_epoch: env::epoch_height(),
+            },
+        );
     }
 }

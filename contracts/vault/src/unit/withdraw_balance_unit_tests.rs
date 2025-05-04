@@ -81,6 +81,7 @@ fn test_disallow_withdrawal_if_refund_list_not_empty() {
             token: Some("usdc.near".parse().unwrap()),
             proposer: alice(),
             amount: U128(1_000_000),
+            added_at_epoch: 0,
         },
     );
 
