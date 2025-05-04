@@ -116,6 +116,7 @@ fn test_delegate_fails_when_refund_list_not_empty() {
             proposer: "alice.near".parse().unwrap(),
             amount: U128(1_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
