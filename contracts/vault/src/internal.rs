@@ -10,25 +10,25 @@ use near_sdk::{env, AccountId, NearToken, Promise};
 
 /// Internal utility methods for Vault
 impl Vault {
-    pub fn get_storage_cost(&self) -> u128 {
+    pub(crate) fn get_storage_cost(&self) -> u128 {
         let actual_cost = env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
         actual_cost + STORAGE_BUFFER
     }
 
-    pub fn get_available_balance(&self) -> NearToken {
+    pub(crate) fn get_available_balance(&self) -> NearToken {
         let total = env::account_balance().as_yoctonear();
         let available = total.saturating_sub(self.get_storage_cost());
         NearToken::from_yoctonear(available)
     }
 
-    pub fn get_refund_nonce(&mut self) -> u64 {
+    pub(crate) fn get_refund_nonce(&mut self) -> u64 {
         let id = self.refund_nonce;
         self.refund_nonce += 1;
 
         id
     }
 
-    pub fn log_gas_checkpoint(&self, method: &str) {
+    pub(crate) fn log_gas_checkpoint(&self, method: &str) {
         let gas_left = env::prepaid_gas().as_gas() - env::used_gas().as_gas();
         log_event!(
             "gas_check",
