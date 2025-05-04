@@ -81,7 +81,8 @@ impl Vault {
                     "error": "ft_transfer to lender failed"
                 })
             );
-            env::panic_str("Repayment transfer to lender failed");
+
+            return;
         }
 
         // Loan was successfully repaid — clear loan state

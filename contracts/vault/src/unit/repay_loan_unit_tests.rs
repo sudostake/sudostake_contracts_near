@@ -282,9 +282,7 @@ fn test_on_repay_loan_success_clears_state() {
 }
 
 #[test]
-#[should_panic(expected = "Repayment transfer to lender failed")]
-fn test_on_repay_loan_failure_panics_and_clears_lock() {
-    // Set context as vault owner with 1 yocto
+fn test_on_repay_loan_failure_clears_lock_and_keeps_state() {
     let context = get_context(
         owner(),
         NearToken::from_near(10),
@@ -292,10 +290,8 @@ fn test_on_repay_loan_failure_panics_and_clears_lock() {
     );
     testing_env!(context);
 
-    // Initialize vault with loan and set repaying = true
     let mut vault = Vault::new(owner(), 0, 1);
 
-    // Inject a valid liquidity request
     vault.liquidity_request = Some(LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
@@ -305,7 +301,6 @@ fn test_on_repay_loan_failure_panics_and_clears_lock() {
         created_at: 0,
     });
 
-    // Add a valid accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
         lender: "lender.near".parse().unwrap(),
         accepted_at: 12345678,
@@ -314,20 +309,31 @@ fn test_on_repay_loan_failure_panics_and_clears_lock() {
     // Simulate a repayment lock
     vault.repay_loan();
 
-    // Simulate failed ft_transfer callback
-    // Should panic AND set repaying = false
+    // Simulate failed repayment callback
     vault.on_repay_loan(Err(PromiseError::Failed));
 
-    // Assert repaying is reset to false
-    assert!(!vault.repaying, "repaying flag should be reset to false");
-
-    // Assert loan state remains intact
+    // Assert lock is cleared
     assert!(
-        vault.accepted_offer.is_some(),
-        "accepted_offer should not be cleared"
+        !vault.repaying,
+        "Expected repaying to be false after failure"
     );
+
+    // Assert state is NOT cleared
     assert!(
         vault.liquidity_request.is_some(),
-        "liquidity_request should not be cleared"
+        "Expected liquidity_request to remain on failure"
+    );
+    assert!(
+        vault.accepted_offer.is_some(),
+        "Expected accepted_offer to remain on failure"
+    );
+
+    // Assert log includes repay_loan_failed
+    let logs = near_sdk::test_utils::get_logs();
+    let found = logs.iter().any(|l| l.contains("repay_loan_failed"));
+    assert!(
+        found,
+        "Expected log to contain 'repay_loan_failed'. Logs: {:?}",
+        logs
     );
 }
