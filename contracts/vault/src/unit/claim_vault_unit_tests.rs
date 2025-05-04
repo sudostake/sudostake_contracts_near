@@ -109,7 +109,7 @@ fn test_on_claim_vault_complete_succeeds() {
 }
 
 #[test]
-fn test_on_claim_vault_complete_refund_and_panics() {
+fn test_on_claim_vault_failed() {
     let old_owner = owner();
     let new_owner = alice();
     let amount: u128 = 10_000_000_000_000_000_000_000;

@@ -2,6 +2,7 @@ mod accept_counter_offer;
 mod cancel_counter_offer;
 mod cancel_liquidity_request;
 mod claim_unstaked;
+mod claim_vault;
 mod contract;
 mod delegate;
 mod ext;
