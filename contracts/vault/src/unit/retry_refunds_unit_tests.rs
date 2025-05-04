@@ -85,6 +85,7 @@ fn test_retry_refunds_by_owner_filters_entries_and_schedules() {
             proposer: alice(),
             amount: U128(1_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
@@ -95,6 +96,7 @@ fn test_retry_refunds_by_owner_filters_entries_and_schedules() {
             proposer: owner(),
             amount: U128(2_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
@@ -129,6 +131,7 @@ fn test_retry_refunds_by_proposer_filters_entries_and_schedules() {
             proposer: alice(),
             amount: U128(1_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
@@ -140,6 +143,7 @@ fn test_retry_refunds_by_proposer_filters_entries_and_schedules() {
             proposer: owner(),
             amount: U128(2_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
@@ -174,6 +178,7 @@ fn test_retry_refunds_panics_when_no_entries_found() {
             proposer: alice(),
             amount: U128(1_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
@@ -208,6 +213,7 @@ fn test_on_retry_refund_complete_succeeds_and_removes_entry() {
             proposer: alice(),
             amount: U128(1_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
@@ -233,8 +239,7 @@ fn test_on_retry_refund_complete_succeeds_and_removes_entry() {
 }
 
 #[test]
-#[should_panic(expected = "retry_refund_failed { id: 99 }")]
-fn test_on_retry_refund_complete_panics_on_failure() {
+fn test_on_retry_refund_failed() {
     let context = get_context(owner(), NearToken::from_near(10), None);
     testing_env!(context);
 
@@ -247,9 +252,117 @@ fn test_on_retry_refund_complete_panics_on_failure() {
             proposer: alice(),
             amount: U128(1_000_000),
             token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
         },
     );
 
-    // Simulate a failed refund
     vault.on_retry_refund_complete(99, Err(PromiseError::Failed));
+
+    let logs = get_logs();
+    let found = logs.iter().any(|log| log.contains("retry_refund_failed"));
+    assert!(
+        found,
+        "Expected 'retry_refund_failed' event not found. Logs: {:?}",
+        logs
+    );
+}
+
+#[test]
+fn test_remove_refund_entry_if_expired_removes_entry() {
+    let mut context = get_context(owner(), NearToken::from_near(10), None);
+    context.epoch_height = 15;
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    let refund_nonce = 5;
+    insert_refund_entry(
+        &mut vault,
+        refund_nonce,
+        RefundEntry {
+            proposer: alice(),
+            amount: U128(123),
+            token: None,
+            added_at_epoch: 10, // 5 epochs ago
+        },
+    );
+
+    vault.on_retry_refund_complete(refund_nonce, Err(PromiseError::Failed));
+
+    assert!(
+        vault.refund_list.get(&refund_nonce).is_none(),
+        "Expected expired refund to be removed"
+    );
+
+    let logs = get_logs();
+    let found = logs.iter().any(|log| log.contains("refund_removed"));
+    assert!(
+        found,
+        "Expected 'refund_removed' log not found. Logs: {:?}",
+        logs
+    );
+}
+
+#[test]
+fn test_on_retry_refund_complete_keeps_non_expired_entry() {
+    // Simulate we're at epoch 12 (entry added at 10 → not yet expired)
+    let mut context = get_context(owner(), NearToken::from_near(10), None);
+    context.epoch_height = 12;
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    let refund_nonce = 5;
+    insert_refund_entry(
+        &mut vault,
+        refund_nonce,
+        RefundEntry {
+            proposer: alice(),
+            amount: U128(2_000),
+            token: None,
+            added_at_epoch: 10, // only 2 epochs old
+        },
+    );
+
+    vault.on_retry_refund_complete(refund_nonce, Err(PromiseError::Failed));
+
+    assert!(
+        vault.refund_list.get(&refund_nonce).is_some(),
+        "Expected refund entry to remain (not expired)"
+    );
+
+    let logs = get_logs();
+    let found = logs.iter().any(|log| log.contains("retry_refund_failed"));
+    assert!(
+        found,
+        "Expected 'retry_refund_failed' log not found. Logs: {:?}",
+        logs
+    );
+}
+
+#[test]
+fn test_on_retry_refund_complete_noop_if_entry_missing() {
+    let mut context = get_context(owner(), NearToken::from_near(10), None);
+    context.epoch_height = 20;
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Do not insert any refund entry
+    vault.on_retry_refund_complete(999, Err(PromiseError::Failed));
+
+    // refund_list should remain empty
+    assert_eq!(
+        vault.refund_list.len(),
+        0,
+        "Expected refund_list to remain empty"
+    );
+
+    let logs = get_logs();
+    let found = logs.iter().any(|log| log.contains("retry_refund_failed"));
+    assert!(
+        found,
+        "Expected 'retry_refund_failed' log not found. Logs: {:?}",
+        logs
+    );
 }
