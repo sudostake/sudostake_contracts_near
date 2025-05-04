@@ -64,6 +64,7 @@ impl Vault {
         log_event!(
             "vault_created",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "owner": owner,
                 "index": index,
                 "version": version

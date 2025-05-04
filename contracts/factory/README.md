@@ -68,7 +68,7 @@ Public — any user can call this with exact deposit = `vault_minting_fee`.
   "event": "vault_minted",
   "data": {
     "owner": "caller.near",
-    "vault_id": "vault-0.factory.near",
+    "vault": "vault-0.factory.near",
     "version": 1,
     "index": 0
   }

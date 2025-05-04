@@ -38,6 +38,7 @@ impl Vault {
         log_event!(
             "refund_failed",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "proposer": proposer,
                 "amount": amount,
                 "token": token_address
@@ -105,7 +106,8 @@ impl Vault {
             log_event!(
                 "retry_refund_failed",
                 near_sdk::serde_json::json!({
-                    "id": id,
+                    "vault": env::current_account_id(),
+                    "refund_id": id,
                 })
             );
 
@@ -115,7 +117,10 @@ impl Vault {
 
         log_event!(
             "retry_refund_succeeded",
-            near_sdk::serde_json::json!({ "id": id })
+            near_sdk::serde_json::json!({
+                "id": id,
+                "vault": env::current_account_id(),
+            })
         );
         self.refund_list.remove(&id);
     }
@@ -139,6 +144,7 @@ impl Vault {
         log_event!(
             "refund_removed",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "refund_id": id,
                 "recipient": refund.proposer,
                 "added_at_epoch": refund.added_at_epoch,

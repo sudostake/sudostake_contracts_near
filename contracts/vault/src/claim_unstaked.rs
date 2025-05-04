@@ -70,6 +70,7 @@ impl Vault {
             log_event!(
                 "claim_unstake_failed",
                 near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
                     "validator": validator,
                     "error": "withdraw_all failed"
                 })
@@ -83,6 +84,7 @@ impl Vault {
         log_event!(
             "claim_unstaked_completed",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "validator": validator,
             })
         );

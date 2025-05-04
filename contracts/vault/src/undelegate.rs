@@ -64,6 +64,7 @@ impl Vault {
             log_event!(
                 "undelegate_failed",
                 near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
                     "validator": validator,
                     "amount": amount,
                     "error": "unstake failed"
@@ -78,6 +79,7 @@ impl Vault {
         log_event!(
             "undelegate_completed",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "validator": validator,
                 "amount": amount
             })

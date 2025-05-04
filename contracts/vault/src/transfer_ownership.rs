@@ -34,6 +34,7 @@ impl Vault {
         log_event!(
             "ownership_transferred",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "old_owner": old_owner,
                 "new_owner": new_owner
             })
@@ -60,6 +61,7 @@ impl Vault {
             "vault_listed_for_takeover",
             near_sdk::serde_json::json!({
                 "owner": self.owner,
+                "vault": env::current_account_id(),
                 "storage_cost": self.get_storage_cost().to_string()
             })
         );
@@ -82,6 +84,7 @@ impl Vault {
         log_event!(
             "vault_takeover_cancelled",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "owner": self.owner
             })
         );

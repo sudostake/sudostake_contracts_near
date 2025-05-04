@@ -68,6 +68,7 @@ impl Vault {
         log_event!(
             "counter_offer_accepted",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "accepted_proposer": proposer_id,
                 "accepted_amount": amount.0.to_string(),
                 "timestamp": env::block_timestamp(),

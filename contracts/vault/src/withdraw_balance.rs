@@ -48,6 +48,7 @@ impl Vault {
         log_event!(
             "withdraw_ft",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "token": token,
                 "to": recipient,
                 "amount": amount.0.to_string()
@@ -78,6 +79,7 @@ impl Vault {
         log_event!(
             "withdraw_near",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "to": recipient,
                 "amount": amount.as_yoctonear().to_string()
             })

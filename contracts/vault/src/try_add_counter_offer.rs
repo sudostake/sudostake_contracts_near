@@ -108,6 +108,7 @@ impl Vault {
         log_event!(
             "counter_offer_created",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "proposer": proposer,
                 "amount": offered_amount,
                 "request": {
@@ -129,6 +130,7 @@ impl Vault {
                 log_event!(
                     "counter_offer_evicted",
                     near_sdk::serde_json::json!({
+                        "vault": env::current_account_id(),
                         "proposer": lowest_key,
                         "amount": lowest_offer.amount,
                         "request": {

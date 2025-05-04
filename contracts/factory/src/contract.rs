@@ -58,7 +58,6 @@ impl FactoryContract {
 
         self.vault_minting_fee = new_fee;
 
-        // Emit log
         log_event!(
             "vault_creation_fee_updated",
             near_sdk::serde_json::json!({
@@ -107,12 +106,11 @@ impl FactoryContract {
         // Increment counter to prevent collisions
         self.vault_counter += 1;
 
-        // Emit log
         log_event!(
             "vault_minted",
             near_sdk::serde_json::json!({
                 "owner": caller,
-                "vault_id": vault_account,
+                "vault": vault_account,
                 "index": index,
                 "version": 1,
             })
@@ -201,6 +199,7 @@ impl FactoryContract {
         log_event!(
             "ownership_transferred",
             near_sdk::serde_json::json!({
+                "factory_id": env::current_account_id(),
                 "old_owner": old_owner,
                 "new_owner": new_owner
             })

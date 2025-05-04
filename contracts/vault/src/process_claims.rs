@@ -27,19 +27,19 @@ use near_sdk::{
 };
 
 /**
- * Worse case scenario for MAX_ACTIVE_VALIDATORS = 2
- * Root - 20Tgas
-   batch_claim_unstaked - (35 + 35)Tgas
-   [20 + 70]Tgas
-         ↳(200Tgas):on_batch_claim_unstaked - 20Tgas
-                    batch_query_total_staked - (10 + 10)Tgas
-                    [20 + 20]Tgas
-                        ↳(160Tgas):on_total_staked_process_claims - 20 Tgas 
-                                   batch_unstake - (60 + 60) Tgas
-                                        [20 + 120]Tgas
-                                            ↳(20Tgas):on_batch_unstake - 20Tgas
-                                                      [20]Tgas
- */
+* Worse case scenario for MAX_ACTIVE_VALIDATORS = 2
+* Root - 20Tgas
+  batch_claim_unstaked - (35 + 35)Tgas
+  [20 + 70]Tgas
+        ↳(200Tgas):on_batch_claim_unstaked - 20Tgas
+                   batch_query_total_staked - (10 + 10)Tgas
+                   [20 + 20]Tgas
+                       ↳(160Tgas):on_total_staked_process_claims - 20 Tgas
+                                  batch_unstake - (60 + 60) Tgas
+                                       [20 + 120]Tgas
+                                           ↳(20Tgas):on_batch_unstake - 20Tgas
+                                                     [20]Tgas
+*/
 const GAS_FOR_CALLBACK_ON_BATCH_CLAIM_UNSTAKED: Gas = Gas::from_tgas(200);
 const GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS: Gas = Gas::from_tgas(160);
 
@@ -237,6 +237,7 @@ impl Vault {
                     log_event!(
                         "unstake_recorded",
                         near_sdk::serde_json::json!({
+                            "vault": env::current_account_id(),
                             "validator": validator,
                             "amount": amount.to_string(),
                             "epoch_height": env::epoch_height().to_string()
@@ -248,6 +249,7 @@ impl Vault {
                     log_event!(
                         "unstake_failed",
                         near_sdk::serde_json::json!({
+                            "vault": env::current_account_id(),
                             "validator": validator,
                             "amount": amount.to_string()
                         })
@@ -290,6 +292,7 @@ impl Vault {
             log_event!(
                 "liquidation_started",
                 near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
                     "lender": offer.lender,
                     "at": now.to_string()
                 })
@@ -358,13 +361,16 @@ impl Vault {
 
     fn finalize_liquidation(&mut self, lender: &AccountId, amount: u128) {
         self.transfer_to_lender(lender, amount);
+
         log_event!(
             "liquidation_complete",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "lender": lender,
-                "repaid": amount.to_string()
+                "total_repaid": self.total_debt().to_string()
             })
         );
+
         self.clear_liquidation_state();
     }
 

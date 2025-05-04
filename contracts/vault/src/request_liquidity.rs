@@ -141,6 +141,7 @@ impl Vault {
         log_event!(
             "liquidity_request_opened",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "token": self.liquidity_request.as_ref().unwrap().token,
                 "amount": pending.amount,
                 "interest": pending.interest,

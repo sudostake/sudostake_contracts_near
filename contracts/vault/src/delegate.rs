@@ -84,6 +84,7 @@ impl Vault {
             log_event!(
                 "delegate_failed",
                 near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
                     "validator": validator,
                     "amount": amount,
                     "error": "deposit_and_stake failed"
@@ -101,6 +102,7 @@ impl Vault {
         log_event!(
             "delegate_completed",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "validator": validator,
                 "amount": amount
             })

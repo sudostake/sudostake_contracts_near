@@ -73,11 +73,12 @@ impl Vault {
         // Always clear the lock
         self.repaying = false;
 
-        // Log repay_loan_failed event and panic
+        // Log repay_loan_failed event
         if result.is_err() {
             log_event!(
                 "repay_loan_failed",
                 near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
                     "error": "ft_transfer to lender failed"
                 })
             );
@@ -90,6 +91,11 @@ impl Vault {
         self.liquidity_request = None;
 
         // Log repay_loan_successful event
-        log_event!("repay_loan_successful", near_sdk::serde_json::json!({}));
+        log_event!(
+            "repay_loan_successful",
+            near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
+            })
+        );
     }
 }

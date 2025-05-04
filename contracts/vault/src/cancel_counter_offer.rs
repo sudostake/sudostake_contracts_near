@@ -47,6 +47,7 @@ impl Vault {
         log_event!(
             "counter_offer_cancelled",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "proposer": caller,
                 "amount": offer.amount,
                 "request": {

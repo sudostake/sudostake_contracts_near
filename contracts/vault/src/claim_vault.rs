@@ -54,6 +54,7 @@ impl Vault {
             log_event!(
                 "claim_vault_failed",
                 near_sdk::serde_json::json!({
+                   "vault": env::current_account_id(),
                    "new_owner": new_owner,
                    "amount": amount.to_string()
                 })
@@ -69,6 +70,7 @@ impl Vault {
         log_event!(
             "vault_claimed",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "old_owner": old_owner,
                 "new_owner": new_owner,
                 "amount": amount.to_string()

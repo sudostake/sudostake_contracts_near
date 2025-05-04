@@ -67,6 +67,7 @@ impl Vault {
         log_event!(
             "liquidity_request_accepted",
             near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
                 "lender": lender,
                 "amount": amount.0.to_string(),
                 "timestamp": env::block_timestamp()
