@@ -135,13 +135,15 @@ impl Vault {
 
         // Expired → remove and log
         self.refund_list.remove(&id);
+
         log_event!(
             "refund_removed",
             near_sdk::serde_json::json!({
-                "proposer":          id,
-                "added_at_epoch":    refund.added_at_epoch,
-                "current_epoch":     current_epoch,
-                "expiry_epochs":     REFUND_EXPIRY_EPOCHS,
+                "refund_id": id,
+                "recipient": refund.proposer,
+                "added_at_epoch": refund.added_at_epoch,
+                "current_epoch": current_epoch,
+                "expiry_epochs": REFUND_EXPIRY_EPOCHS,
             })
         );
     }
