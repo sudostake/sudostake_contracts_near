@@ -46,7 +46,7 @@ pub async fn simulate_failed_claim_vault(
         .await?
         .into_result()?;
 
-    // Delete the old owner account to simulate refund failure
+    // Delete the old owner account to simulate claim_vault failure
     worker
         .delete_account(owner.id(), owner.signer(), root.id())
         .await?
@@ -216,6 +216,61 @@ async fn test_withdraw_should_fail_if_refund_list_is_not_empty() -> anyhow::Resu
     assert!(
         failure_text.contains("Cannot withdraw while there are pending refund entries"),
         "Expected failure due to pending refund entries, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_retry_refund_removes_expired_entry() -> anyhow::Result<()> {
+    let (worker, vault, root, _, buyer) = simulate_failed_claim_vault().await?;
+
+    // Recreate the deleted vault owner to simulate a failed claim_vault
+    // that was not caused by a missing vault owner
+    let owner = root
+        .create_subaccount("owner")
+        .initial_balance(NearToken::from_near(5))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Delete the buyer's account to simulate retry_refund failure
+    worker
+        .delete_account(buyer.id(), buyer.signer(), root.id())
+        .await?
+        .into_result()?;
+
+    // Fast-forward 5 epochs
+    worker.fast_forward(5 * 500).await?;
+
+    // Retry refund (should fail and trigger remove logic)
+    let retry_result = owner
+        .call(vault.id(), "retry_refunds")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Get logs
+    let logs = retry_result.logs().join("\n");
+
+    // Assert refund_removed was logged
+    assert!(
+        logs.contains(r#""event":"refund_removed""#),
+        "Expected refund_removed log. Got:\n{logs}"
+    );
+    assert!(
+        logs.contains(r#""event":"retry_refund_failed""#),
+        "Expected retry_refund_failed log. Got:\n{logs}"
+    );
+
+    // Assert refund_list is now empty
+    let refunds_after: Vec<(u64, RefundEntry)> =
+        vault.view("get_all_refund_entries").await?.json()?;
+    assert!(
+        refunds_after.is_empty(),
+        "Expected refund_list to be empty after purging expired entry"
     );
 
     Ok(())
