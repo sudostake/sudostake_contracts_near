@@ -3,8 +3,8 @@ use near_sdk::NearToken;
 use near_workspaces::{network::Sandbox, Account, Contract, Worker};
 use serde_json::json;
 use test_utils::{
-    create_test_validator, initialize_test_vault_on_sub_account, setup_sandbox_and_accounts,
-    RefundEntry, VaultViewState, VAULT_CALL_GAS,
+    create_test_validator, initialize_test_vault_on_sub_account, make_counter_offer_msg,
+    setup_contracts, setup_sandbox_and_accounts, RefundEntry, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -267,6 +267,103 @@ async fn test_retry_refund_removes_expired_entry() -> anyhow::Result<()> {
     assert!(
         refunds_after.is_empty(),
         "Expected refund_list to be empty after purging expired entry"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_cancel_counter_offer_adds_refund_if_user_unregistered() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Delegate to activate the vault
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Request liquidity
+    root.call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": token.id(),
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(5),
+            "duration": 86400
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Match message & make counter offer message
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let request = state
+        .liquidity_request
+        .expect("Liquidity request not found");
+    let msg = make_counter_offer_msg(&request);
+
+    // Lender submits a counter offer
+    lender
+        .call(token.id(), "ft_transfer_call")
+        .args_json(json!({
+            "receiver_id": vault.id(),
+            "amount": "900000",
+            "msg": msg
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Lender unregisters from the token contract
+    lender
+        .call(token.id(), "storage_unregister")
+        .args_json(json!({
+            "force": true,
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Lender cancels her counter offer → refund will fail
+    let result = lender
+        .call(vault.id(), "cancel_counter_offer")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Inspect logs for refund_failed event
+    let logs = result.logs().join("\n");
+    assert!(
+        logs.contains(r#""event":"refund_failed""#),
+        "Expected refund_failed log due to unregistered ft receiver. Logs: {logs}"
+    );
+
+    // Confirm refund_list has 1 entry for lender
+    let refund_list: Vec<(u64, RefundEntry)> =
+        vault.view("get_all_refund_entries").await?.json()?;
+    let refund = &refund_list[0].1;
+    assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
+    assert_eq!(
+        refund.proposer,
+        lender.id().clone(),
+        "Refund should belong to lender"
     );
 
     Ok(())
