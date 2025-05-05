@@ -1,3 +1,4 @@
+use anyhow::Ok;
 use near_sdk::json_types::U128;
 use near_sdk::NearToken;
 use near_workspaces::{network::Sandbox, Account, Contract, Worker};
@@ -354,6 +355,95 @@ async fn test_cancel_counter_offer_adds_refund_if_user_unregistered() -> anyhow:
         logs.contains(r#""event":"refund_failed""#),
         "Expected refund_failed log due to unregistered ft receiver. Logs: {logs}"
     );
+
+    // Confirm refund_list has 1 entry for lender
+    let refund_list: Vec<(u64, RefundEntry)> =
+        vault.view("get_all_refund_entries").await?.json()?;
+    let refund = &refund_list[0].1;
+    assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
+    assert_eq!(
+        refund.proposer,
+        lender.id().clone(),
+        "Refund should belong to lender"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_cancel_liquidity_request_adds_refunds_on_failure() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Delegate to activate the vault
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Request liquidity
+    root.call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": token.id(),
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(5),
+            "duration": 86400
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Match message & make counter offer message
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let request = state
+        .liquidity_request
+        .expect("Liquidity request not found");
+    let msg = make_counter_offer_msg(&request);
+
+    // Lender submits a counter offer
+    lender
+        .call(token.id(), "ft_transfer_call")
+        .args_json(json!({
+            "receiver_id": vault.id(),
+            "amount": "900000",
+            "msg": msg
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Lender unregisters from the token contract
+    lender
+        .call(token.id(), "storage_unregister")
+        .args_json(json!({
+            "force": true,
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Vault owner cancels the liquidity request
+    root.call(vault.id(), "cancel_liquidity_request")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
 
     // Confirm refund_list has 1 entry for lender
     let refund_list: Vec<(u64, RefundEntry)> =
