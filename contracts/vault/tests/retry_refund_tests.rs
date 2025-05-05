@@ -461,8 +461,7 @@ async fn test_cancel_liquidity_request_adds_refunds_on_failure() -> anyhow::Resu
 }
 
 #[tokio::test]
-async fn test_counter_offer_eviction_adds_refund_on_failed_transfer(
-) -> anyhow::Result<()> {
+async fn test_counter_offer_eviction_adds_refund_on_failed_transfer() -> anyhow::Result<()> {
     // Setup sandbox and accounts
     let (worker, root, best_lender) = setup_sandbox_and_accounts().await?;
 
@@ -582,6 +581,124 @@ async fn test_counter_offer_eviction_adds_refund_on_failed_transfer(
         &refund.proposer,
         proposers[0].id(),
         "Refund should belong to lender"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_accept_offer_adds_refund_for_failed_non_winner() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, best_lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator, token, vault) = setup_contracts(&worker, &root, &best_lender).await?;
+
+    // Add another lender account
+    let other_lender = root
+        .create_subaccount(format!("other_lender").as_str())
+        .initial_balance(NearToken::from_near(2))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Register the other_lender with token contract
+    register_account_with_token(&root, &token, other_lender.id()).await?;
+
+    // Transfer some USDC to other_lender for testing
+    root.call(token.id(), "ft_transfer")
+        .args_json(json!({
+            "receiver_id": other_lender.id(),
+            "amount": "1000000"
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Delegate to activate the vault
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(5),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Request liquidity
+    root.call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": token.id(),
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(5),
+            "duration": 86400
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Match message & make counter offer message
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let request = state
+        .liquidity_request
+        .expect("Liquidity request not found");
+    let msg = make_counter_offer_msg(&request);
+
+    // Each lender submits a counter offer
+    let offer_amounts = vec![800_000, 850_000];
+    for (user, amount) in [&other_lender, &best_lender].iter().zip(offer_amounts) {
+        user.call(token.id(), "ft_transfer_call")
+            .args_json(json!({
+                "receiver_id": vault.id(),
+                "amount": amount.to_string(),
+                "msg": msg,
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+    }
+
+    // other_lender, who currently has the worse offer,
+    // unregisters from the token contract
+    other_lender
+        .call(token.id(), "storage_unregister")
+        .args_json(json!({
+            "force": true,
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Vault owner accepts best_lender's offer (highest)
+    root.call(vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": best_lender.id(),
+            "amount": U128(850_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Confirm refund_list has 1 entry for other_lender, who was refunded
+    let refund_list: Vec<(u64, RefundEntry)> =
+        vault.view("get_all_refund_entries").await?.json()?;
+    let refund = &refund_list[0].1;
+    assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
+    assert_eq!(
+        &refund.proposer,
+        other_lender.id(),
+        "Refund should belong to other_lender"
     );
 
     Ok(())
