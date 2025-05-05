@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 use near_sdk::{ext_contract, json_types::U128, AccountId, NearToken, Promise};
 
+use crate::types::RefundEntry;
+
 #[ext_contract(ext_self)]
 pub trait VaultExt {
     fn on_deposit_and_stake(
@@ -36,6 +38,7 @@ pub trait VaultExt {
     fn on_retry_refund_complete(
         &mut self,
         id: u64,
+        entry: RefundEntry,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     );
 

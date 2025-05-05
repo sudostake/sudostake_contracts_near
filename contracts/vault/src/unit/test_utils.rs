@@ -10,6 +10,10 @@ pub fn alice() -> AccountId {
     "alice.near".parse().unwrap()
 }
 
+pub fn bob() -> AccountId {
+    "bob.near".parse().unwrap()
+}
+
 pub fn owner() -> AccountId {
     "owner.near".parse().unwrap()
 }

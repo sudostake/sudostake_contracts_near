@@ -134,8 +134,9 @@ impl Vault {
         token: Option<AccountId>,
         proposer: AccountId,
         amount: U128,
+        refund_id: Option<u64>,
     ) {
-        let id = self.get_refund_nonce();
+        let id = refund_id.unwrap_or_else(|| self.get_refund_nonce());
         self.refund_list.insert(
             &id,
             &RefundEntry {

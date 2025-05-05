@@ -60,7 +60,7 @@ impl Vault {
                 })
             );
 
-            self.add_refund_entry(None, new_owner, U128(amount));
+            self.add_refund_entry(None, new_owner, U128(amount), None);
             return;
         }
 
