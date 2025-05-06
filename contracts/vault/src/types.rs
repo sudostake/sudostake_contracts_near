@@ -54,6 +54,8 @@ pub enum ProcessingState {
     RepayLoan = 2,
     /// Vault is currently processing lender claims during liquidation.
     ProcessClaims = 3,
+    /// Vault is currently processing request liquidity
+    RequestLiquidity = 4,
 }
 
 /// Tracks how much NEAR is unstaked and the epoch when it will be available.

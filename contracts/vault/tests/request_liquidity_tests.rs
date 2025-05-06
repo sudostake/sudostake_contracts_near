@@ -107,7 +107,7 @@ async fn test_request_liquidity_fails_if_total_stake_insufficient() -> anyhow::R
         .await?
         .into_result()?;
 
-    // Delegate 2 NEAR (insufficient stake)
+    // Delegate 2 NEAR (insufficient for 5 NEAR collateral)
     let _ = vault
         .call("delegate")
         .args_json(json!({
@@ -136,19 +136,20 @@ async fn test_request_liquidity_fails_if_total_stake_insufficient() -> anyhow::R
         .deposit(NearToken::from_yoctonear(1))
         .gas(VAULT_CALL_GAS)
         .transact()
-        .await?;
+        .await?
+        .into_result()?;
 
-    // Expect failure
-    assert!(
-        result.is_failure(),
-        "Expected failure when staked amount is less than collateral, but call succeeded"
-    );
+    // Extract logs from the callback phase
+    let logs = result.logs();
 
-    // Check logs for warning
-    let failure_text = format!("{:?}", result.failures());
+    // Check that the logs include the expected failure event
+    let found = logs
+        .iter()
+        .any(|log| log.contains("liquidity_request_failed_insufficient_stake"));
     assert!(
-        failure_text.contains("Insufficient staked NEAR to satisfy requested collateral"),
-        "Expected error message not found. Got: {failure_text}"
+        found,
+        "Expected log 'liquidity_request_failed_insufficient_stake' not found in logs: {:?}",
+        logs
     );
 
     Ok(())

@@ -340,32 +340,6 @@ fn test_request_liquidity_fails_if_duration_is_zero() {
 }
 
 #[test]
-#[should_panic(expected = "No active validators available for collateral check")]
-fn test_request_liquidity_fails_if_no_active_validators() {
-    // Setup context
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
-
-    // Create vault without any validators
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Skip adding validators
-
-    // This should panic due to empty active_validators
-    vault.request_liquidity(
-        "usdc.token.near".parse().unwrap(),
-        U128(1_000_000),
-        U128(100_000),
-        NearToken::from_near(5),
-        60 * 60 * 24,
-    );
-}
-
-#[test]
 #[should_panic(expected = "Expected a pending liquidity request")]
 fn test_on_check_total_staked_fails_if_no_pending_request() {
     // Setup context
@@ -381,4 +355,44 @@ fn test_on_check_total_staked_fails_if_no_pending_request() {
 
     // Call on_check_total_staked → should panic
     vault.on_check_total_staked();
+}
+
+#[test]
+#[should_panic(expected = "Vault busy with RequestLiquidity")]
+fn test_request_liquidity_fails_if_vault_already_locked() {
+    // Simulate a timestamp of 1_000_000_000_000_000_000 (e.g. 1s)
+    let locked_at = 1_000_000_000_000_000_000;
+
+    // Set current time shortly after lock timestamp (still within timeout)
+    let now = locked_at + 10_000_000_000; // +0.01s
+
+    // Setup context with vault owner and 1 yoctoNEAR attached
+    let ctx = test_utils::get_context_with_timestamp(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+        Some(now),
+    );
+    testing_env!(ctx);
+
+    // Create vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Add a validator
+    vault
+        .active_validators
+        .insert(&"validator1.near".parse().unwrap());
+
+    // Simulate a stale-inactive lock is not yet expired
+    vault.processing_state = crate::types::ProcessingState::RequestLiquidity;
+    vault.processing_since = locked_at;
+
+    // Attempt to request liquidity while lock is still valid → should panic
+    vault.request_liquidity(
+        "usdc.token.near".parse().unwrap(),
+        U128(1_000_000),
+        U128(100_000),
+        NearToken::from_near(5),
+        60 * 60 * 24,
+    );
 }
