@@ -4,6 +4,7 @@ use crate::contract::Vault;
 use crate::contract::VaultExt;
 use crate::ext::ext_self;
 use crate::log_event;
+use crate::types::ProcessingState;
 use crate::types::GAS_FOR_CALLBACK;
 use crate::types::{LiquidityRequest, PendingLiquidityRequest};
 use near_sdk::json_types::U128;
@@ -13,6 +14,10 @@ use near_sdk::{assert_one_yocto, env, near_bindgen, AccountId, NearToken, Promis
 
 #[near_bindgen]
 impl Vault {
+    /// Owner requests a loan backed by staked NEAR.
+    ///
+    /// This flow is **mutually exclusive** with every other async workflow
+    /// (undelegate, process_claims, repay, …) thanks to the global lock.
     #[payable]
     pub fn request_liquidity(
         &mut self,
@@ -22,7 +27,6 @@ impl Vault {
         collateral: NearToken,
         duration: u64,
     ) -> Promise {
-        // --- Permission & state checks ---
         assert_one_yocto();
         require!(
             env::predecessor_account_id() == self.owner,
@@ -51,7 +55,10 @@ impl Vault {
         require!(amount.0 > 0, "Requested amount must be greater than zero");
         require!(duration > 0, "Duration must be non-zero");
 
-        // --- Temporarily store the request until stake is verified ---
+        // Lock the vault for **RequestLiquidity** workflow
+        self.acquire_processing_lock(ProcessingState::RequestLiquidity);
+
+        // Temporarily store the request until stake is verified
         self.pending_liquidity_request = Some(PendingLiquidityRequest {
             token,
             amount,
@@ -60,7 +67,7 @@ impl Vault {
             duration,
         });
 
-        // --- Batch query total staked balance across all active validators ---
+        // Batch query total staked balance across all active validators
         self.batch_query_total_staked(
             ext_self::ext(env::current_account_id())
                 .with_static_gas(GAS_FOR_CALLBACK)
@@ -89,43 +96,40 @@ impl Vault {
         // Iterate through the results and calculate total_staked_yocto
         for i in 0..num_results {
             let validator_id = &validator_ids[i as usize];
-
             match env::promise_result(i) {
                 PromiseResult::Successful(bytes) => {
                     if let Ok(U128(staked)) = near_sdk::serde_json::from_slice::<U128>(&bytes) {
                         total_staked_yocto += staked;
-
                         if staked == 0 {
                             zero_balance_validators.push(validator_id.clone());
                         }
-                    } else {
-                        env::log_str(&format!(
-                            "Warning: Could not parse staked balance from result #{}",
-                            i
-                        ));
                     }
                 }
-                _ => {
-                    env::log_str(&format!("Warning: Promise result #{} failed", i));
-                }
+                _ => env::log_str(&format!("Warning: promise result #{} failed", i)),
             }
         }
 
-        // Prune validators with zero staked balance
-        for validator in zero_balance_validators {
-            self.active_validators.remove(&validator);
-            env::log_str(&format!(
-                "Removed validator with zero staked balance: {}",
-                validator
-            ));
+        // prune zero‑stake validators
+        for v in zero_balance_validators {
+            self.active_validators.remove(&v);
         }
 
         // Verify the total staked >= collateral
         let total_staked = NearToken::from_yoctonear(total_staked_yocto);
-        require!(
-            total_staked >= pending.collateral,
-            "Insufficient staked NEAR to satisfy requested collateral"
-        );
+        if total_staked < pending.collateral {
+            log_event!(
+                "liquidity_request_failed_insufficient_stake",
+                near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
+                    "required_collateral": pending.collateral,
+                    "total_staked": total_staked
+                })
+            );
+
+            // release lock & exit
+            self.release_processing_lock();
+            return;
+        }
 
         // Finalize liquidity request
         self.liquidity_request = Some(LiquidityRequest {
@@ -149,5 +153,8 @@ impl Vault {
                 "duration": pending.duration
             })
         );
+
+        // Finally release the lock
+        self.release_processing_lock();
     }
 }
