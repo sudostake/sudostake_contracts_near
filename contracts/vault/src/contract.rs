@@ -11,49 +11,48 @@ use near_sdk::{collections::UnorderedSet, env, near_bindgen, AccountId, PanicOnD
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-/// Represents the complete state of a SudoStake vault instance.
+/// Represents the complete on-chain state of a single SudoStake vault instance.
+/// A vault allows its owner to stake NEAR, request liquidity against it, and manage repayments or liquidation flows.
 pub struct Vault {
-    /// The account ID of the vault owner (borrower/staker).
+    /// Account ID of the vault owner (the borrower/staker).
     pub owner: AccountId,
-    /// The vault's index as assigned by the factory at creation.
+    /// Vault index assigned by the factory at creation (used to generate subaccount name).
     pub index: u64,
-    /// Version of the vault code used during deployment.
+    /// Version of the vault contract code at the time of deployment.
     pub version: u64,
-    /// Set of currently active validators this vault has delegated to.
+    /// Set of validators currently holding delegated stake from this vault.
     pub active_validators: UnorderedSet<AccountId>,
-    /// Tracks unstaked NEAR amounts and the epoch in which they were requested,
-    /// grouped by validator.
+    /// Tracks unstaked NEAR and the epoch in which each unstake was requested, grouped per validator.
     pub unstake_entries: UnorderedMap<AccountId, UnstakeEntry>,
-    /// Temporarily stores a liquidity request while validator stake is being verified.
+    /// Temporary placeholder for a liquidity request before validator balances are verified.
     pub pending_liquidity_request: Option<PendingLiquidityRequest>,
-    /// Active liquidity request created by the vault owner.
-    /// This is what lenders respond to with counter offers.
+    /// Current active liquidity request posted by the vault owner. Only one may exist at a time.
     pub liquidity_request: Option<LiquidityRequest>,
-    /// Map of active counter offers from different lenders.
-    /// Only exists while a liquidity request is open and no offer has been accepted.
+    /// Active counter offers submitted by lenders in response to the open liquidity request.
+    /// This map is cleared when an offer is accepted or the request is canceled.
     pub counter_offers: Option<UnorderedMap<AccountId, CounterOffer>>,
-    /// The lender whose counter offer was accepted by the vault owner.
-    /// This marks the loan as active and enforceable.
+    /// Details of the lender whose offer was accepted, marking the loan as active and enforceable.
     pub accepted_offer: Option<AcceptedOffer>,
-    /// Tracks how much collateral has been liquidated after loan expiration.
-    /// This is initialized when liquidation begins.
+    /// Tracks how much NEAR has been liquidated so far, once the loan defaults past its expiry.
     pub liquidation: Option<Liquidation>,
-    /// Stores refunds that failed (e.g., due to ft_transfer failures),
-    /// allowing them to be retried later.
+    /// Stores refund entries that failed (e.g., due to `ft_transfer` rejections),
+    /// allowing them to be retried later by the vault owner or proposer.
     pub refund_list: UnorderedMap<u64, RefundEntry>,
-    /// Unique incrementing nonce for refund entries to ensure consistent ordering.
+    /// Monotonically increasing counter used as a key for refund entries, ensuring deterministic order.
     pub refund_nonce: u64,
-    /// True while the vault is processing a request
+    /// Current long-running operation in progress (e.g., repay, claim, or undelegate).
     pub processing_state: ProcessingState,
-    /// Prevents deadlock when processing_state is not Idle
+    /// Block timestamp of when the current processing state began. Used to detect stale locks.
     pub processing_since: u64,
-    /// Indicates this vault can be taken over by anyone that pays the
-    /// storage cost to the current owner
+    /// Flag indicating whether this vault is listed for public takeover.
+    /// If true, anyone can buy this vault by paying the listed takeover fee.
     pub is_listed_for_takeover: bool,
 }
 
 #[near_bindgen]
 impl Vault {
+    /// Initializes a new vault instance with the specified owner, index, and version.
+    /// This method is callable only once per vault contract (via `#[init]`).
     #[init]
     pub fn new(owner: AccountId, index: u64, version: u64) -> Self {
         assert!(!env::state_exists(), "Contract already initialized");
@@ -91,7 +90,8 @@ impl Vault {
 #[cfg(feature = "integration-test")]
 #[near_bindgen]
 impl Vault {
-    /// Test-only method: overrides accepted_offer timestamp for liquidation tests
+    /// Test-only method: overrides the timestamp of the accepted offer.
+    /// This is used to simulate time-based behaviors such as loan expiry and liquidation.
     pub fn set_accepted_offer_timestamp(&mut self, timestamp: u64) {
         if let Some(offer) = &mut self.accepted_offer {
             offer.accepted_at = timestamp;
