@@ -17,13 +17,16 @@ impl Vault {
         assert_one_yocto();
 
         // Limit to MAX_ACTIVE_VALIDATORS
-        require!(
-            self.active_validators.len() < MAX_ACTIVE_VALIDATORS,
-            format!(
-                "You can only stake with {:?} validators at a time",
-                MAX_ACTIVE_VALIDATORS
-            ),
-        );
+        // If validator is new, enforce the active‑set size limit.
+        if !self.active_validators.contains(&validator) {
+            require!(
+                self.active_validators.len() < MAX_ACTIVE_VALIDATORS,
+                format!(
+                    "You can only stake with {:?} validators at a time",
+                    MAX_ACTIVE_VALIDATORS
+                ),
+            );
+        }
 
         // Only the vault owner can delegate
         require!(

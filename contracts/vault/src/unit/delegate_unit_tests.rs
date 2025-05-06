@@ -246,3 +246,32 @@ fn test_delegate_fails_if_max_active_validators_reached() {
         NearToken::from_near(1),
     );
 }
+
+#[test]
+fn test_delegate_allows_existing_validator_even_if_maxed() {
+    // Set up context with the vault owner and attach 1 yoctoNEAR
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Insert MAX_ACTIVE_VALIDATORS validators
+    for i in 0..MAX_ACTIVE_VALIDATORS {
+        let validator = format!("v{i}.poolv1.near").parse().unwrap();
+        vault.active_validators.insert(&validator);
+    }
+
+    // Pick one of the existing validators
+    let existing_validator: AccountId = "v0.poolv1.near".parse().unwrap();
+
+    // Attempt to delegate to the existing validator — should succeed
+    let result = vault.delegate(existing_validator.clone(), NearToken::from_near(1));
+
+    // Confirm we get a Promise (i.e., no panic)
+    assert!(matches!(result, near_sdk::Promise { .. }));
+}
