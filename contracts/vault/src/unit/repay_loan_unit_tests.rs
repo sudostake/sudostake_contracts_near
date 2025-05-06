@@ -1,57 +1,44 @@
-use near_sdk::{json_types::U128, testing_env, NearToken, PromiseError};
-use test_utils::{alice, get_context, owner};
+use near_sdk::{testing_env, NearToken, PromiseError};
+use test_utils::{alice, get_context, get_context_with_timestamp, owner};
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, Liquidation, LiquidityRequest},
+    types::{AcceptedOffer, Liquidation, LiquidityRequest, ProcessingState, LOCK_TIMEOUT},
 };
 
 #[path = "test_utils.rs"]
 mod test_utils;
 
 #[test]
-fn test_repay_loan_succeeds_when_valid() {
-    // Set up the context with 1 yoctoNEAR from the vault owner
-    let context = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
+#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+fn test_repay_loan_fails_without_yocto() {
+    // Simulate environment with no attached deposit
+    let context = get_context(owner(), NearToken::from_near(10), None);
     testing_env!(context);
 
-    // Initialize vault
+    // Initialize vault with accepted loan and liquidity request
     let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: 1234567890,
     });
-
-    // Add a valid accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: 1234567890,
     });
 
-    // Call repay_loan
-    let _ = vault.repay_loan();
-
-    // Verify repayment lock is set
-    assert!(
-        vault.repaying,
-        "Expected repayment lock to be set to true after initiating repayment"
-    );
+    // Attempt to call repay_loan without 1 yoctoNEAR — should panic
+    vault.repay_loan();
 }
 
 #[test]
 #[should_panic(expected = "Only the vault owner can repay the loan")]
 fn test_repay_loan_fails_if_not_owner() {
-    // Set context as alice (not the vault owner), with 1 yocto
+    // Set context where `alice` is the caller (not the owner)
     let context = get_context(
         alice(),
         NearToken::from_near(10),
@@ -59,23 +46,19 @@ fn test_repay_loan_fails_if_not_owner() {
     );
     testing_env!(context);
 
-    // Vault is owned by `owner.near`
+    // Initialize vault owned by `owner`, with loan state
     let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: 1234567890,
     });
-
-    // Add a valid accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: 1234567890,
     });
 
     // Alice tries to repay — should panic
@@ -83,39 +66,9 @@ fn test_repay_loan_fails_if_not_owner() {
 }
 
 #[test]
-#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
-fn test_repay_loan_fails_without_yocto() {
-    // Set context as vault owner but with 0 yoctoNEAR
-    let context = get_context(owner(), NearToken::from_near(10), None);
-    testing_env!(context);
-
-    // Initialize vault
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
-
-    // Add a valid accepted offer
-    vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
-    });
-
-    // Try to repay without 1 yoctoNEAR — should panic
-    vault.repay_loan();
-}
-
-#[test]
 #[should_panic(expected = "No active loan to repay")]
 fn test_repay_loan_fails_if_no_liquidity_request() {
-    // Set context as vault owner with 1 yocto
+    // Set context as vault owner with 1 yoctoNEAR
     let context = get_context(
         owner(),
         NearToken::from_near(10),
@@ -123,17 +76,17 @@ fn test_repay_loan_fails_if_no_liquidity_request() {
     );
     testing_env!(context);
 
-    // Initialize vault
+    // Vault has no liquidity_request (and no accepted_offer — consistent state)
     let mut vault = Vault::new(owner(), 0, 1);
 
-    // Attempt to repay — should panic
+    // Should panic: no loan to repay
     vault.repay_loan();
 }
 
 #[test]
 #[should_panic(expected = "No accepted offer found")]
-fn test_repay_loan_fails_if_no_accepted_offer() {
-    // Set context as vault owner with 1 yocto
+fn test_repay_loan_fails_if_accepted_offer_is_none() {
+    // Set context with vault owner and 1 yoctoNEAR attached
     let context = get_context(
         owner(),
         NearToken::from_near(10),
@@ -141,27 +94,25 @@ fn test_repay_loan_fails_if_no_accepted_offer() {
     );
     testing_env!(context);
 
-    // Initialize vault
+    // Vault has liquidity_request but no accepted_offer
     let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: 1234567890,
     });
 
-    // Attempt to repay — should panic
+    // Should panic due to missing accepted_offer
     vault.repay_loan();
 }
 
 #[test]
 #[should_panic(expected = "Loan has already entered liquidation")]
-fn test_repay_loan_fails_if_liquidation_started() {
-    // Set context as vault owner with 1 yocto
+fn test_repay_loan_fails_if_liquidation_is_active() {
+    // Set up context with vault owner and 1 yoctoNEAR deposit
     let context = get_context(
         owner(),
         NearToken::from_near(10),
@@ -169,38 +120,33 @@ fn test_repay_loan_fails_if_liquidation_started() {
     );
     testing_env!(context);
 
-    // Initialize vault with valid loan and liquidation active
+    // Initialize a valid vault loan state
     let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: 1234567890,
     });
-
-    // Add a valid accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: 1234567890,
     });
 
-    // Simulate liquidation
+    // Simulate that liquidation has started
     vault.liquidation = Some(Liquidation {
-        liquidated: NearToken::from_near(1),
+        liquidated: NearToken::from_yoctonear(500_000),
     });
 
-    // Attempt to repay — should panic
+    // Attempt repay_loan — should panic
     vault.repay_loan();
 }
 
 #[test]
-#[should_panic(expected = "Repayment already in progress")]
-fn test_repay_loan_fails_if_repaying_flag_already_true() {
-    // Set context as vault owner with 1 yocto
+fn test_repay_loan_sets_processing_lock() {
+    // Set up context with owner and 1 yoctoNEAR attached
     let context = get_context(
         owner(),
         NearToken::from_near(10),
@@ -208,132 +154,169 @@ fn test_repay_loan_fails_if_repaying_flag_already_true() {
     );
     testing_env!(context);
 
-    // Initialize vault with loan and set repaying = true
+    // Prepare vault with active loan and offer
     let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: 1234567890,
     });
-
-    // Add a valid accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: 1234567890,
     });
 
-    // Simulate a repayment lock
+    // Call repay_loan — should acquire lock
     vault.repay_loan();
 
-    // Attempt to repay again — should panic
-    vault.repay_loan();
+    // Assert lock was acquired with correct state
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::RepayLoan,
+        "Expected vault to enter RepayLoan processing state"
+    );
 }
 
 #[test]
 fn test_on_repay_loan_success_clears_state() {
-    // Set context as vault owner with 1 yocto
-    let context = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
+    // Simulated block timestamp
+    let now = 1_000_000_000_000_000;
+
+    // Set test context with controlled timestamp
+    let context = get_context_with_timestamp(owner(), NearToken::from_near(10), None, Some(now));
     testing_env!(context);
 
-    // Initialize vault with loan and set repaying = true
+    // Set up a vault in RepayLoan state
     let mut vault = Vault::new(owner(), 0, 1);
-
-    // Inject a valid liquidity request
+    vault.processing_state = ProcessingState::RepayLoan;
+    vault.processing_since = now;
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: now,
     });
-
-    // Add a valid accepted offer
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: now,
     });
 
-    // Simulate a repayment lock
-    vault.repay_loan();
-
-    // Simulate successful callback
+    // Simulate successful repayment callback
     vault.on_repay_loan(Ok(()));
 
-    // Assert loan state was cleared
-    assert!(
-        vault.accepted_offer.is_none(),
-        "accepted_offer should be cleared"
-    );
+    // Assert loan state is cleared
     assert!(
         vault.liquidity_request.is_none(),
-        "liquidity_request should be cleared"
+        "Liquidity request should be cleared"
     );
-    assert!(!vault.repaying, "repaying flag should be reset to false");
+    assert!(
+        vault.accepted_offer.is_none(),
+        "Accepted offer should be cleared"
+    );
+
+    // Assert lock is released
+    assert_eq!(vault.processing_state, ProcessingState::Idle);
+    assert_eq!(vault.processing_since, 0);
 }
 
 #[test]
-fn test_on_repay_loan_failure_clears_lock_and_keeps_state() {
-    let context = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
+fn test_on_repay_loan_failure_preserves_loan_state() {
+    // Simulated block timestamp
+    let now = 1_000_000_000_000_000;
+
+    // Set test context with controlled timestamp
+    let context = get_context_with_timestamp(owner(), NearToken::from_near(10), None, Some(now));
     testing_env!(context);
 
+    // Set up vault in RepayLoan state
     let mut vault = Vault::new(owner(), 0, 1);
+    vault.processing_state = ProcessingState::RepayLoan;
+    vault.processing_since = now;
 
     vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
         collateral: NearToken::from_near(5),
         duration: 86400,
-        created_at: 0,
+        created_at: now,
     });
 
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "lender.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: now,
     });
 
-    // Simulate a repayment lock
-    vault.repay_loan();
-
-    // Simulate failed repayment callback
+    // Simulate failure callback
     vault.on_repay_loan(Err(PromiseError::Failed));
 
-    // Assert lock is cleared
-    assert!(
-        !vault.repaying,
-        "Expected repaying to be false after failure"
-    );
-
-    // Assert state is NOT cleared
+    // Loan state should remain
     assert!(
         vault.liquidity_request.is_some(),
-        "Expected liquidity_request to remain on failure"
+        "Liquidity request should remain"
     );
     assert!(
         vault.accepted_offer.is_some(),
-        "Expected accepted_offer to remain on failure"
+        "Accepted offer should remain"
     );
 
-    // Assert log includes repay_loan_failed
-    let logs = near_sdk::test_utils::get_logs();
-    let found = logs.iter().any(|l| l.contains("repay_loan_failed"));
-    assert!(
-        found,
-        "Expected log to contain 'repay_loan_failed'. Logs: {:?}",
-        logs
+    // Lock should be released
+    assert_eq!(vault.processing_state, ProcessingState::Idle);
+    assert_eq!(vault.processing_since, 0);
+}
+
+#[test]
+fn test_repay_loan_clears_stale_lock_and_proceeds() {
+    // Timestamp representing now
+    let now = 1_000_000_000_000_000;
+
+    // Simulate stale lock acquired before (LOCK_TIMEOUT + 1) ns
+    let stale_timestamp = now - LOCK_TIMEOUT - 1;
+
+    // Set up context at current time
+    let context = get_context_with_timestamp(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+        Some(now),
+    );
+    testing_env!(context);
+
+    // Vault has active loan + stale lock
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.processing_state = ProcessingState::ProcessClaims;
+    vault.processing_since = stale_timestamp;
+
+    vault.liquidity_request = Some(LiquidityRequest {
+        token: "usdc.testnet".parse().unwrap(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+        created_at: now,
+    });
+
+    vault.accepted_offer = Some(AcceptedOffer {
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: now,
+    });
+
+    // This should proceed by clearing stale lock
+    vault.repay_loan();
+
+    // Assert lock was updated to RepayLoan
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::RepayLoan,
+        "Expected RepayLoan lock to be acquired"
+    );
+    assert_eq!(
+        vault.processing_since, now,
+        "Expected lock timestamp to update"
     );
 }

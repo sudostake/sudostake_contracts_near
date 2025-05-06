@@ -2,11 +2,11 @@ use crate::contract::Vault;
 use crate::ext::{ext_fungible_token, ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    CounterOffer, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER, GAS_FOR_VIEW_CALL,
-    GAS_FOR_WITHDRAW_ALL, STORAGE_BUFFER,
+    CounterOffer, ProcessingState, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER,
+    GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, LOCK_TIMEOUT, STORAGE_BUFFER,
 };
 use near_sdk::json_types::U128;
-use near_sdk::{env, AccountId, NearToken, Promise};
+use near_sdk::{env, require, AccountId, NearToken, Promise};
 
 /// Internal utility methods for Vault
 impl Vault {
@@ -163,5 +163,59 @@ impl Vault {
         entry.amount += amount;
         entry.epoch_height = env::epoch_height();
         self.unstake_entries.insert(&validator, &entry);
+    }
+
+    /// Attempts to grab the **global processing lock** for a new long‑running
+    /// workflow (`kind`).
+    ///
+    /// * Auto‑clears a stale lock (`LOCK_TIMEOUT` exceeded).
+    /// * Aborts if another fresh workflow is still in‑flight.
+    /// * Records the new state/timestamp and logs a JSON event.
+    pub(crate) fn acquire_processing_lock(&mut self, kind: ProcessingState) {
+        assert!(kind != ProcessingState::Idle, "Cannot lock with Idle");
+
+        let now = env::block_timestamp();
+
+        // Auto‑unlock if the previous holder timed‑out
+        if self.processing_state != ProcessingState::Idle
+            && now - self.processing_since >= LOCK_TIMEOUT
+        {
+            self.processing_state = ProcessingState::Idle;
+            self.processing_since = 0;
+        }
+
+        require!(
+            self.processing_state == ProcessingState::Idle,
+            format!("Vault busy with {:?}", self.processing_state)
+        );
+
+        self.processing_state = kind;
+        self.processing_since = now;
+
+        // Log lock_acquired event
+        log_event!(
+            "lock_acquired",
+            near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
+                "kind": format!("{:?}", kind),
+                "timestamp": now
+            })
+        );
+    }
+
+    pub(crate) fn release_processing_lock(&mut self) {
+        let now = env::block_timestamp();
+
+        log_event!(
+            "lock_released",
+            near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
+                "kind": format!("{:?}", self.processing_state),
+                "timestamp": now
+            })
+        );
+
+        self.processing_state = ProcessingState::Idle;
+        self.processing_since = 0;
     }
 }

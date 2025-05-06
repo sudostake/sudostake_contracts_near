@@ -4,8 +4,8 @@ use crate::contract::Vault;
 use crate::contract::VaultExt;
 use crate::ext::ext_staking_pool;
 use crate::log_event;
+use crate::types::ProcessingState;
 use crate::types::GAS_FOR_VIEW_CALL;
-use crate::types::LOCK_TIMEOUT;
 use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_UNSTAKE};
 use near_sdk::json_types::U128;
 use near_sdk::require;
@@ -39,7 +39,8 @@ impl Vault {
             "Cannot undelegate when a liquidity request is open"
         );
 
-        self.acquire_undelegation_lock();
+        // Lock the vault for **Undelegate** workflow
+        self.acquire_processing_lock(ProcessingState::Undelegate);
 
         // Proceed with unstaking the intended amount
         ext_staking_pool::ext(validator.clone())
@@ -60,7 +61,7 @@ impl Vault {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) -> Promise {
         // Inspect amount of gas left
-        self.log_gas_checkpoint("on_unstake");
+        self.log_gas_checkpoint("on_unstake_complete");
 
         if result.is_err() {
             log_event!(
@@ -74,7 +75,7 @@ impl Vault {
             );
 
             //  Unlock & finish
-            self.processing_undelegation = false;
+            self.release_processing_lock();
             return Promise::new(env::current_account_id());
         }
 
@@ -110,7 +111,7 @@ impl Vault {
         #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     ) {
         self.log_gas_checkpoint("on_account_staked_balance");
-        self.processing_undelegation = false;
+        self.release_processing_lock();
 
         match result {
             Ok(balance) => {
@@ -148,19 +149,5 @@ impl Vault {
                 );
             }
         }
-    }
-}
-
-impl Vault {
-    fn acquire_undelegation_lock(&mut self) {
-        // Abort if an undelegation is already underway and the lock hasn’t expired.
-        let still_locked = self.processing_undelegation
-            && env::block_timestamp() - self.processing_undelegation_since < LOCK_TIMEOUT;
-
-        require!(!still_locked, "Processing undelegation already in progress");
-
-        // Lock vault for processing claims
-        self.processing_undelegation = true;
-        self.processing_undelegation_since = env::block_timestamp();
     }
 }

@@ -3,7 +3,7 @@ mod test_utils;
 
 use crate::{
     contract::Vault,
-    types::{LiquidityRequest, UnstakeEntry},
+    types::{LiquidityRequest, ProcessingState, UnstakeEntry},
 };
 use near_sdk::{env, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
@@ -123,7 +123,7 @@ fn test_undelegate_fails_if_liquidity_request_open() {
 }
 
 #[test]
-#[should_panic(expected = "Processing undelegation already in progress")]
+#[should_panic(expected = "Vault busy with Undelegate")]
 fn test_undelegate_fails_if_lock_active() {
     // Set up context as vault owner with 1 yoctoNEAR attached
     let context = get_context(
@@ -235,8 +235,8 @@ fn test_on_unstake_complete_handles_failure_and_unlocks() {
 
     // Initialize vault with undelegation lock active
     let mut vault = Vault::new(owner(), 0, 1);
-    vault.processing_undelegation = true;
-    vault.processing_undelegation_since = env::block_timestamp();
+    vault.processing_state = ProcessingState::Undelegate;
+    vault.processing_since = env::block_timestamp();
 
     // Define validator and amount
     let validator: AccountId = "validator.poolv1.near".parse().unwrap();
@@ -246,9 +246,10 @@ fn test_on_unstake_complete_handles_failure_and_unlocks() {
     vault.on_unstake_complete(validator, amount, Err(near_sdk::PromiseError::Failed));
 
     // Ensure the undelegation lock was cleared
-    assert!(
-        !vault.processing_undelegation,
-        "Expected lock to be cleared"
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::Idle,
+        "Expected processing lock to be cleared after failed callback"
     );
 }
 

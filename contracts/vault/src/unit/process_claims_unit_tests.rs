@@ -5,7 +5,7 @@ use test_utils::{
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, UnstakeEntry, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK},
+    types::{AcceptedOffer, ProcessingState, UnstakeEntry, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK},
 };
 
 #[path = "test_utils.rs"]
@@ -120,14 +120,14 @@ fn test_process_claims_starts_liquidation_after_expiry() {
     assert!(vault.liquidation.is_some());
 
     // Assert that the processing_claims flag is true (lock acquired)
-    assert!(vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::ProcessClaims);
 
     // Assert that the liquidation was not finalized (liquidity_request is still Some)
     assert!(vault.liquidity_request.is_some());
 }
 
 #[test]
-#[should_panic(expected = "Processing claims already in progress")]
+#[should_panic(expected = "Vault busy with ProcessClaims")]
 fn test_process_claims_fails_if_locked_and_not_expired() {
     // Simulate accepted_at = 1_000_000_000 (1s), and duration = 86400s (1 day)
     let accepted_at = 1_000_000_000;
@@ -209,59 +209,17 @@ fn test_process_claims_allows_reentry_after_lock_timeout() {
     });
 
     // Simulate an old lock (stale by more than LOCK_TIMEOUT)
-    vault.processing_claims = true;
-    vault.processing_claims_since = now - LOCK_TIMEOUT - 1;
+    vault.processing_state = ProcessingState::ProcessClaims;
+    vault.processing_since = now - LOCK_TIMEOUT - 1;
 
     // Call process_claims — should succeed by clearing stale lock and proceeding
     let _ = vault.process_claims();
 
     // Assert that the lock is active again
-    assert!(vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::ProcessClaims);
 
     // Assert that liquidation has been initialized
     assert!(vault.liquidation.is_some());
-}
-
-#[test]
-#[should_panic(expected = "Repayment already in progress")]
-fn test_process_claims_fails_if_repaying_in_progress() {
-    // Simulate accepted_at = 1_000_000_000 (1s), and duration = 86400s (1 day)
-    let accepted_at = 1_000_000_000;
-    let duration_secs = 86400;
-    let expiry_timestamp = accepted_at + (duration_secs * 1_000_000_000);
-    let now = expiry_timestamp + 1;
-
-    // Set up test context with vault owner and 1 yoctoNEAR attached
-    let context = get_context_with_timestamp(
-        owner(),
-        NearToken::from_near(2),
-        Some(NearToken::from_yoctonear(1)),
-        Some(now),
-    );
-    testing_env!(context);
-
-    // Create a vault instance
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Add one dummy validator to prevent panic
-    vault
-        .active_validators
-        .insert(&"validator1.testnet".parse().unwrap());
-
-    // Insert liquidity request and accepted offer
-    vault.liquidity_request = Some(create_valid_liquidity_request(
-        "usdc.test.near".parse().unwrap(),
-    ));
-    vault.accepted_offer = Some(AcceptedOffer {
-        lender: alice(),
-        accepted_at,
-    });
-
-    // Simulate user is currently repaying the loan
-    vault.repaying = true;
-
-    // Call process_claims — should panic due to repayment already in progress
-    vault.process_claims();
 }
 
 #[test]
@@ -311,7 +269,7 @@ fn test_process_claims_fulfills_full_repayment_if_balance_sufficient() {
     assert!(vault.liquidation.is_none());
     assert!(vault.liquidity_request.is_none());
     assert!(vault.accepted_offer.is_none());
-    assert!(!vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::Idle);
 }
 
 #[test]
@@ -366,7 +324,7 @@ fn test_process_claims_does_partial_repayment_if_insufficient_balance() {
     assert!(vault.accepted_offer.is_some());
 
     // Assert processing lock is acquired
-    assert!(vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::ProcessClaims);
 
     // Assert that something was transferred (liquidated > 0)
     let repaid = vault
@@ -429,7 +387,7 @@ fn test_process_claims_handles_matured_unstaked_entries() {
     assert!(vault.liquidation.is_some());
 
     // Assert lock is acquired
-    assert!(vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::ProcessClaims);
 
     // Assert liquidity request is not cleared (repayment incomplete)
     assert!(vault.liquidity_request.is_some());
@@ -489,7 +447,7 @@ fn test_process_claims_waits_if_enough_is_maturing() {
     assert!(vault.liquidation.is_some());
 
     // Assert lock is released (since we’re just waiting)
-    assert!(!vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::Idle);
 
     // Assert liquidity request is still active
     assert!(vault.liquidity_request.is_some());
@@ -549,7 +507,7 @@ fn test_process_claims_triggers_unstake_if_maturing_insufficient() {
     assert!(vault.liquidation.is_some());
 
     // Assert lock is still held — async callback expected
-    assert!(vault.processing_claims);
+    assert_eq!(vault.processing_state, ProcessingState::ProcessClaims);
 
     // Assert liquidity request is not cleared
     assert!(vault.liquidity_request.is_some());

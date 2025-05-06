@@ -19,7 +19,7 @@
 use crate::{
     contract::{Vault, VaultExt},
     log_event,
-    types::{GAS_FOR_CALLBACK, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK},
+    types::{ProcessingState, GAS_FOR_CALLBACK, NUM_EPOCHS_TO_UNLOCK},
 };
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, Gas, NearToken,
@@ -58,7 +58,7 @@ impl Vault {
     pub fn process_claims(&mut self) -> Promise {
         assert_one_yocto();
         let lender = self.ensure_liquidation_ready();
-        self.acquire_processing_lock();
+        self.acquire_processing_lock(ProcessingState::ProcessClaims);
         self.process_repayment(&lender);
         self.next_liquidation_step()
     }
@@ -71,7 +71,7 @@ impl Vault {
     fn next_liquidation_step(&mut self) -> Promise {
         // If fully repaid, nothing more to do.
         if self.liquidity_request.is_none() {
-            self.processing_claims = false;
+            self.release_processing_lock();
             return Promise::new(env::current_account_id());
         }
 
@@ -97,7 +97,7 @@ impl Vault {
             // (B) Nothing matured yet but sufficient funds are maturing.
             (true, true) => {
                 self.log_waiting("NEAR unstaking");
-                self.processing_claims = false;
+                self.release_processing_lock();
                 Promise::new(env::current_account_id())
             }
 
@@ -154,7 +154,7 @@ impl Vault {
         }
 
         //  Unlock & finish
-        self.processing_claims = false;
+        self.release_processing_lock();
         Promise::new(env::current_account_id())
     }
 
@@ -194,7 +194,7 @@ impl Vault {
 
         // If nothing to unstake, just unlock
         if unstake_instructions.is_empty() {
-            self.processing_claims = false;
+            self.release_processing_lock();
             self.log_waiting("no staked NEAR available to unstake");
             return;
         }
@@ -213,7 +213,7 @@ impl Vault {
         self.log_gas_checkpoint("on_batch_unstake");
 
         // Unlock processing claims
-        self.processing_claims = false;
+        self.release_processing_lock();
 
         // Iterate over each (validator, amount) entry
         for (idx, (validator, amount)) in entries.into_iter().enumerate() {
@@ -269,9 +269,6 @@ impl Vault {
                 format!("Liquidation not allowed until {} (now {})", expiration, now)
             );
 
-            // Ensure the vault owner is not trying to repay the loan
-            require!(!self.repaying, "Repayment already in progress");
-
             // Begin tracking liquidation
             self.liquidation = Some(crate::types::Liquidation {
                 liquidated: NearToken::from_yoctonear(0),
@@ -290,18 +287,6 @@ impl Vault {
 
         // Return the lender
         offer.lender.clone()
-    }
-
-    fn acquire_processing_lock(&mut self) {
-        if self.processing_claims
-            && env::block_timestamp() - self.processing_claims_since < LOCK_TIMEOUT
-        {
-            require!(false, "Processing claims already in progress");
-        }
-
-        // Lock vault for processing claims
-        self.processing_claims = true;
-        self.processing_claims_since = env::block_timestamp();
     }
 
     fn total_debt(&self) -> u128 {
@@ -345,7 +330,7 @@ impl Vault {
         self.liquidity_request = None;
         self.accepted_offer = None;
         self.liquidation = None;
-        self.processing_claims = false;
+        self.release_processing_lock();
     }
 
     fn finalize_liquidation(&mut self, lender: &AccountId, amount: u128) {

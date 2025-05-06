@@ -4,7 +4,7 @@ use crate::{
     contract::{Vault, VaultExt},
     ext::ext_fungible_token,
     log_event,
-    types::{GAS_FOR_CALLBACK, GAS_FOR_FT_TRANSFER},
+    types::{ProcessingState, GAS_FOR_CALLBACK, GAS_FOR_FT_TRANSFER},
 };
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, NearToken, Promise,
@@ -42,16 +42,13 @@ impl Vault {
             "Loan has already entered liquidation"
         );
 
-        // Prevent concurrent repayments
-        require!(!self.repaying, "Repayment already in progress");
-
         // Calculate total amount due: principal + interest
         let total_due = U128(request.amount.0 + request.interest.0);
         let lender = offer.lender.clone();
         let token = request.token.clone();
 
-        // Lock repayment flag before external call
-        self.repaying = true;
+        // Lock the vault for **RepayLoan** workflow
+        self.acquire_processing_lock(ProcessingState::RepayLoan);
 
         // Transfer the total repayment to the lender
         ext_fungible_token::ext(token)
@@ -69,9 +66,7 @@ impl Vault {
     pub fn on_repay_loan(&mut self, #[callback_result] result: Result<(), PromiseError>) {
         // Inspect amount of gas left
         self.log_gas_checkpoint("on_repay_loan");
-
-        // Always clear the lock
-        self.repaying = false;
+        self.release_processing_lock();
 
         // Log repay_loan_failed event
         if result.is_err() {

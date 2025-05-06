@@ -19,6 +19,16 @@ pub const MAX_COUNTER_OFFERS: u64 = 7;
 pub const MAX_ACTIVE_VALIDATORS: u64 = 2;
 pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000;
 
+#[derive(BorshSerialize, BorshDeserialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[repr(u8)]
+#[borsh(use_discriminant = true)]
+pub enum ProcessingState {
+    Idle = 0,
+    Undelegate = 1,
+    RepayLoan = 2,
+    ProcessClaims = 3,
+}
+
 #[derive(BorshDeserialize, BorshSerialize, Debug, Clone, serde::Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct UnstakeEntry {

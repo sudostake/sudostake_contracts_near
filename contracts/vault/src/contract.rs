@@ -3,7 +3,7 @@
 use crate::log_event;
 use crate::types::{
     AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
-    RefundEntry, StorageKey, UnstakeEntry,
+    ProcessingState, RefundEntry, StorageKey, UnstakeEntry,
 };
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
@@ -43,17 +43,10 @@ pub struct Vault {
     pub refund_list: UnorderedMap<u64, RefundEntry>,
     /// Unique incrementing nonce for refund entries to ensure consistent ordering.
     pub refund_nonce: u64,
-    /// True while the vault is processing a repayment transfer to the lender.
-    /// Prevents liquidation during this period.
-    pub repaying: bool,
-    /// True while the vault is processing liquidation.
-    pub processing_claims: bool,
-    /// Prevents deadlock after processing_claims is set to true
-    pub processing_claims_since: u64,
-    /// True while the vault is processing undelegation.
-    pub processing_undelegation: bool,
-    /// Prevents deadlock after processing_undelegation is set to true
-    pub processing_undelegation_since: u64,
+    /// True while the vault is processing a request
+    pub processing_state: ProcessingState,
+    /// Prevents deadlock when processing_state is not Idle
+    pub processing_since: u64,
     /// Indicates this vault can be taken over by anyone that pays the
     /// storage cost to the current owner
     pub is_listed_for_takeover: bool,
@@ -88,11 +81,8 @@ impl Vault {
             liquidation: None,
             refund_list: UnorderedMap::new(StorageKey::RefundList),
             refund_nonce: 0,
-            repaying: false,
-            processing_claims: false,
-            processing_claims_since: 0,
-            processing_undelegation: false,
-            processing_undelegation_since: 0,
+            processing_state: ProcessingState::Idle,
+            processing_since: 0,
             is_listed_for_takeover: false,
         }
     }
