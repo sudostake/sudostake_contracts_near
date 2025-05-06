@@ -8,26 +8,32 @@ use crate::types::{
 use near_sdk::json_types::U128;
 use near_sdk::{env, require, AccountId, NearToken, Promise};
 
-/// Internal utility methods for Vault
+/// Internal utility methods for the Vault contract.
 impl Vault {
+    /// Calculates the total storage cost for the contract, including a reserved buffer.
+    /// This is used to prevent accidental contract deletion when reducing balance.
     pub(crate) fn get_storage_cost(&self) -> u128 {
         let actual_cost = env::storage_byte_cost().as_yoctonear() * env::storage_usage() as u128;
         actual_cost + STORAGE_BUFFER
     }
 
+    /// Returns the NEAR balance available for operations, after reserving storage buffer.
     pub(crate) fn get_available_balance(&self) -> NearToken {
         let total = env::account_balance().as_yoctonear();
         let available = total.saturating_sub(self.get_storage_cost());
         NearToken::from_yoctonear(available)
     }
 
+    /// Increments and returns the current refund nonce.
+    /// Used to generate unique keys for refund entries.
     pub(crate) fn get_refund_nonce(&mut self) -> u64 {
         let id = self.refund_nonce;
         self.refund_nonce += 1;
-
         id
     }
 
+    /// Logs a checkpoint showing the remaining prepaid gas for debugging purposes.
+    /// The `method` argument tags the checkpoint for traceability.
     pub(crate) fn log_gas_checkpoint(&self, method: &str) {
         let gas_left = env::prepaid_gas().as_gas() - env::used_gas().as_gas();
         log_event!(
@@ -39,6 +45,8 @@ impl Vault {
         );
     }
 
+    /// Refunds all active counter offers by initiating `ft_transfer` calls
+    /// for each proposer using the provided token contract.
     pub(crate) fn refund_all_counter_offers(&self, token: AccountId) {
         if let Some(counter_offers) = &self.counter_offers {
             for (_, offer) in counter_offers.iter() {
@@ -47,6 +55,8 @@ impl Vault {
         }
     }
 
+    /// Refunds a single counter offer by calling `ft_transfer`.
+    /// A callback is attached to handle the refund result.
     pub(crate) fn refund_counter_offer(&self, token_address: AccountId, offer: CounterOffer) {
         ext_fungible_token::ext(token_address.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
@@ -59,17 +69,17 @@ impl Vault {
             ));
     }
 
+    /// Chains `withdraw_all` calls for the given list of validators,
+    /// and returns a promise that resolves to the provided callback.
     pub(crate) fn batch_claim_unstaked(
         &self,
         validators: Vec<AccountId>,
         call_back: Promise,
     ) -> Promise {
-        // Start the batch chain with the first validator
         let mut chain = ext_staking_pool::ext(validators[0].clone())
             .with_static_gas(GAS_FOR_WITHDRAW_ALL)
             .withdraw_all();
 
-        // Fold the remaining validators into the chain
         for validator in validators.iter().skip(1) {
             chain = chain.and(
                 ext_staking_pool::ext(validator.clone())
@@ -78,23 +88,21 @@ impl Vault {
             );
         }
 
-        // Add the final callback to handle results
         chain.then(call_back)
     }
 
+    /// Calls `get_account_staked_balance` for all active validators,
+    /// and chains them to a final callback to compute total collateral.
     pub(crate) fn batch_query_total_staked(&self, call_back: Promise) -> Promise {
-        // Ensure there are validators to query
         let mut validators = self.active_validators.iter();
         let first = validators
             .next()
             .expect("No active validators available for collateral check");
 
-        // Start staking_pool view call chain
         let initial = ext_staking_pool::ext(first.clone())
             .with_static_gas(GAS_FOR_VIEW_CALL)
             .get_account_staked_balance(env::current_account_id());
 
-        // Fold the remaining instructions into the clain
         let chain = validators.fold(initial, |acc, validator| {
             acc.and(
                 ext_staking_pool::ext(validator.clone())
@@ -103,21 +111,20 @@ impl Vault {
             )
         });
 
-        // Add the final callback to handle results
         chain.then(call_back)
     }
 
+    /// Calls `unstake` for each (validator, amount) pair,
+    /// then chains the results to a single callback promise.
     pub(crate) fn batch_unstake(
         &self,
         unstake_instructions: Vec<(AccountId, u128)>,
         call_back: Promise,
     ) -> Promise {
-        // Build the batch unstake call chain
         let mut chain = ext_staking_pool::ext(unstake_instructions[0].0.clone())
             .with_static_gas(crate::types::GAS_FOR_UNSTAKE)
             .unstake(U128::from(unstake_instructions[0].1));
 
-        // Fold the remaining instructions into the chain
         for (validator, amount) in unstake_instructions.iter().skip(1) {
             chain = chain.and(
                 ext_staking_pool::ext(validator.clone())
@@ -126,10 +133,11 @@ impl Vault {
             );
         }
 
-        // Add the final callback to handle results
         chain.then(call_back)
     }
 
+    /// Records a failed refund operation into `refund_list`.
+    /// Accepts an optional `refund_id`, otherwise assigns a new nonce.
     pub(crate) fn add_refund_entry(
         &mut self,
         token: Option<AccountId>,
@@ -149,8 +157,9 @@ impl Vault {
         );
     }
 
+    /// Updates (or creates) an unstake entry for a given validator by adding the provided amount.
+    /// Overwrites the epoch with the current one.
     pub(crate) fn update_validator_unstake_entry(&mut self, validator: &AccountId, amount: u128) {
-        // Get the validator unstake entry
         let mut entry = self
             .unstake_entries
             .get(&validator)
@@ -159,24 +168,21 @@ impl Vault {
                 epoch_height: 0,
             });
 
-        // Update the entry and save to state
         entry.amount += amount;
         entry.epoch_height = env::epoch_height();
         self.unstake_entries.insert(&validator, &entry);
     }
 
-    /// Attempts to grab the **global processing lock** for a new long‑running
-    /// workflow (`kind`).
+    /// Attempts to acquire the global processing lock for a long-running operation (e.g., repay or claim).
     ///
-    /// * Auto‑clears a stale lock (`LOCK_TIMEOUT` exceeded).
-    /// * Aborts if another fresh workflow is still in‑flight.
-    /// * Records the new state/timestamp and logs a JSON event.
+    /// - Automatically releases stale locks if `LOCK_TIMEOUT` has passed.
+    /// - Aborts if another operation is currently in progress.
+    /// - Logs a `lock_acquired` event.
     pub(crate) fn acquire_processing_lock(&mut self, kind: ProcessingState) {
         assert!(kind != ProcessingState::Idle, "Cannot lock with Idle");
 
         let now = env::block_timestamp();
 
-        // Auto‑unlock if the previous holder timed‑out
         if self.processing_state != ProcessingState::Idle
             && now - self.processing_since >= LOCK_TIMEOUT
         {
@@ -192,7 +198,6 @@ impl Vault {
         self.processing_state = kind;
         self.processing_since = now;
 
-        // Log lock_acquired event
         log_event!(
             "lock_acquired",
             near_sdk::serde_json::json!({
@@ -203,6 +208,8 @@ impl Vault {
         );
     }
 
+    /// Releases the currently held processing lock and resets the state to Idle.
+    /// Logs a `lock_released` event with a timestamp.
     pub(crate) fn release_processing_lock(&mut self) {
         let now = env::block_timestamp();
 
