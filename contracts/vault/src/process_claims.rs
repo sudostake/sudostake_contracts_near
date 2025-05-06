@@ -19,7 +19,7 @@
 use crate::{
     contract::{Vault, VaultExt},
     log_event,
-    types::{UnstakeEntry, GAS_FOR_CALLBACK, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK},
+    types::{GAS_FOR_CALLBACK, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK},
 };
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, Gas, NearToken,
@@ -219,19 +219,8 @@ impl Vault {
         for (idx, (validator, amount)) in entries.into_iter().enumerate() {
             match env::promise_result(idx as u64) {
                 PromiseResult::Successful(_) => {
-                    // Get the validator unstake entry
-                    let mut entry =
-                        self.unstake_entries
-                            .get(&validator)
-                            .unwrap_or_else(|| UnstakeEntry {
-                                amount: 0,
-                                epoch_height: 0,
-                            });
-
-                    // Update the entry and save to state
-                    entry.amount += amount;
-                    entry.epoch_height = env::epoch_height();
-                    self.unstake_entries.insert(&validator, &entry);
+                    // Update unstake_entry for validator
+                    self.update_validator_unstake_entry(&validator, amount);
 
                     // Log unstake_recorded event
                     log_event!(

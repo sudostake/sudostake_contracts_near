@@ -2,8 +2,8 @@ use crate::contract::Vault;
 use crate::ext::{ext_fungible_token, ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    CounterOffer, RefundEntry, GAS_FOR_FT_TRANSFER, GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL,
-    STORAGE_BUFFER,
+    CounterOffer, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER, GAS_FOR_VIEW_CALL,
+    GAS_FOR_WITHDRAW_ALL, STORAGE_BUFFER,
 };
 use near_sdk::json_types::U128;
 use near_sdk::{env, AccountId, NearToken, Promise};
@@ -129,6 +129,7 @@ impl Vault {
         // Add the final callback to handle results
         chain.then(call_back)
     }
+
     pub(crate) fn add_refund_entry(
         &mut self,
         token: Option<AccountId>,
@@ -146,5 +147,21 @@ impl Vault {
                 added_at_epoch: env::epoch_height(),
             },
         );
+    }
+
+    pub(crate) fn update_validator_unstake_entry(&mut self, validator: &AccountId, amount: u128) {
+        // Get the validator unstake entry
+        let mut entry = self
+            .unstake_entries
+            .get(&validator)
+            .unwrap_or_else(|| UnstakeEntry {
+                amount: 0,
+                epoch_height: 0,
+            });
+
+        // Update the entry and save to state
+        entry.amount += amount;
+        entry.epoch_height = env::epoch_height();
+        self.unstake_entries.insert(&validator, &entry);
     }
 }
