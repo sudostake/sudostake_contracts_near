@@ -50,6 +50,10 @@ pub struct Vault {
     pub processing_claims: bool,
     /// Prevents deadlock after processing_claims is set to true
     pub processing_claims_since: u64,
+    /// True while the vault is processing undelegation.
+    pub processing_undelegation: bool,
+    /// Prevents deadlock after processing_undelegation is set to true
+    pub processing_undelegation_since: u64,
     /// Indicates this vault can be taken over by anyone that pays the
     /// storage cost to the current owner
     pub is_listed_for_takeover: bool,
@@ -87,6 +91,8 @@ impl Vault {
             repaying: false,
             processing_claims: false,
             processing_claims_since: 0,
+            processing_undelegation: false,
+            processing_undelegation_since: 0,
             is_listed_for_takeover: false,
         }
     }

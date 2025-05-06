@@ -12,7 +12,7 @@ pub trait VaultExt {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     );
 
-    fn on_unstake(
+    fn on_unstake_complete(
         &mut self,
         validator: AccountId,
         amount: NearToken,
@@ -60,6 +60,12 @@ pub trait VaultExt {
         new_owner: AccountId,
         amount: u128,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    );
+
+    fn on_account_staked_balance(
+        &mut self,
+        validator: AccountId,
+        #[callback_result] result: Result<U128, near_sdk::PromiseError>,
     );
 }
 

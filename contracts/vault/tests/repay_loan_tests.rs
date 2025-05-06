@@ -242,7 +242,7 @@ async fn test_repay_loan_releases_rights_to_undelegate() -> anyhow::Result<()> {
         .await?;
     let failure_text = format!("{:?}", result.failures());
     assert!(
-        failure_text.contains("Cannot undelegate after a liquidity request has been accepted"),
+        failure_text.contains("Cannot undelegate when a liquidity request is open"),
         "Expected undelegate to fail after accepting offer, got: {failure_text}"
     );
 

@@ -2,10 +2,10 @@
 
 use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext::ext_self;
 use crate::ext::ext_staking_pool;
 use crate::log_event;
-use crate::types::UnstakeEntry;
+use crate::types::GAS_FOR_VIEW_CALL;
+use crate::types::LOCK_TIMEOUT;
 use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_UNSTAKE};
 use near_sdk::json_types::U128;
 use near_sdk::require;
@@ -33,30 +33,32 @@ impl Vault {
             "Validator is not currently active"
         );
 
-        // Disallow undelegation if an offer has already been accepted
+        // Disallow undelegation when a liquidity request is open
         require!(
-            self.accepted_offer.is_none(),
-            "Cannot undelegate after a liquidity request has been accepted"
+            self.liquidity_request.is_none(),
+            "Cannot undelegate when a liquidity request is open"
         );
+
+        self.acquire_undelegation_lock();
 
         // Proceed with unstaking the intended amount
         ext_staking_pool::ext(validator.clone())
             .with_static_gas(GAS_FOR_UNSTAKE)
             .unstake(U128::from(amount.as_yoctonear()))
             .then(
-                ext_self::ext(env::current_account_id())
+                Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_unstake(validator, amount),
+                    .on_unstake_complete(validator, amount),
             )
     }
 
     #[private]
-    pub fn on_unstake(
+    pub fn on_unstake_complete(
         &mut self,
         validator: AccountId,
         amount: NearToken,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
-    ) {
+    ) -> Promise {
         // Inspect amount of gas left
         self.log_gas_checkpoint("on_unstake");
 
@@ -71,8 +73,9 @@ impl Vault {
                 })
             );
 
-            // Throws an error
-            env::panic_str("Failed to execute unstake on validator");
+            //  Unlock & finish
+            self.processing_undelegation = false;
+            return Promise::new(env::current_account_id());
         }
 
         // Log undelegate_completed event
@@ -85,18 +88,79 @@ impl Vault {
             })
         );
 
-        // Get the validator unstake entry
-        let mut entry = self
-            .unstake_entries
-            .get(&validator)
-            .unwrap_or_else(|| UnstakeEntry {
-                amount: 0,
-                epoch_height: 0,
-            });
+        // Update unstake_entry for validator
+        self.update_validator_unstake_entry(&validator, amount.as_yoctonear());
 
-        // Update the entry and save to state
-        entry.amount += amount.as_yoctonear();
-        entry.epoch_height = env::epoch_height();
-        self.unstake_entries.insert(&validator, &entry);
+        // Proceed to check the total staked balance
+        // remaining at the validator
+        ext_staking_pool::ext(validator.clone())
+            .with_static_gas(GAS_FOR_VIEW_CALL)
+            .get_account_staked_balance(env::current_account_id())
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .on_account_staked_balance(validator),
+            )
+    }
+
+    #[private]
+    pub fn on_account_staked_balance(
+        &mut self,
+        validator: AccountId,
+        #[callback_result] result: Result<U128, near_sdk::PromiseError>,
+    ) {
+        self.log_gas_checkpoint("on_account_staked_balance");
+        self.processing_undelegation = false;
+
+        match result {
+            Ok(balance) => {
+                log_event!(
+                    "staked_balance_callback_success",
+                    near_sdk::serde_json::json!({
+                        "vault": env::current_account_id(),
+                        "validator": validator,
+                        "staked_balance": balance
+                    })
+                );
+
+                if balance.0 == 0 {
+                    // Remove from active set
+                    self.active_validators.remove(&validator);
+
+                    // Log validator_removed event
+                    log_event!(
+                        "validator_removed",
+                        near_sdk::serde_json::json!({
+                            "vault": env::current_account_id(),
+                            "validator": validator,
+                        })
+                    );
+                }
+            }
+            Err(_) => {
+                log_event!(
+                    "staked_balance_callback_failed",
+                    near_sdk::serde_json::json!({
+                        "vault": env::current_account_id(),
+                        "validator": validator,
+                        "error": "Failed to retrieve staked balance"
+                    })
+                );
+            }
+        }
+    }
+}
+
+impl Vault {
+    fn acquire_undelegation_lock(&mut self) {
+        // Abort if an undelegation is already underway and the lock hasn’t expired.
+        let still_locked = self.processing_undelegation
+            && env::block_timestamp() - self.processing_undelegation_since < LOCK_TIMEOUT;
+
+        require!(!still_locked, "Processing undelegation already in progress");
+
+        // Lock vault for processing claims
+        self.processing_undelegation = true;
+        self.processing_undelegation_since = env::block_timestamp();
     }
 }

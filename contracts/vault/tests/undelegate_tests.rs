@@ -73,6 +73,19 @@ async fn test_undelegate_succeed() -> anyhow::Result<()> {
     let unstake_entry = entry.unwrap();
     assert_eq!(unstake_entry.amount, NearToken::from_near(1).as_yoctonear());
 
+    // Fetch current active validators
+    let active_validators: Vec<String> = vault
+        .view("get_active_validators")
+        .await?
+        .json()
+        .expect("Failed to decode active validators");
+
+    // Assert validator is still in the active set
+    assert!(
+        active_validators.contains(&validator.id().to_string()),
+        "Validator should still remain in the active set"
+    );
+
     Ok(())
 }
 
@@ -328,8 +341,62 @@ async fn test_undelegate_fails_if_offer_already_accepted() -> anyhow::Result<()>
 
     let failure = format!("{:?}", result.failures());
     assert!(
-        failure.contains("Cannot undelegate after a liquidity request has been accepted"),
+        failure.contains("Cannot undelegate when a liquidity request is open"),
         "Expected undelegate to fail after offer acceptance, got: {failure}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_validator_removed_after_unstake_to_zero() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+    let validator = create_test_validator(&worker, &root).await?;
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Delegate 2 NEAR to validator
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(2)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward 1 block
+    worker.fast_forward(1).await?;
+
+    // Undelegate the full 2 NEAR
+    root.call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(2)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast forward 1 block
+    worker.fast_forward(1).await?;
+
+    // Fetch current active validators
+    let active_validators: Vec<String> = vault
+        .view("get_active_validators")
+        .await?
+        .json()
+        .expect("Failed to decode active validators");
+
+    // Assert validator is no longer in the active set
+    assert!(
+        !active_validators.contains(&validator.id().to_string()),
+        "Validator should be removed after unstaking to zero"
     );
 
     Ok(())
