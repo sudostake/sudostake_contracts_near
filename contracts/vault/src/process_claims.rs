@@ -174,7 +174,8 @@ impl Vault {
 
         // Compute how much needs to be unstaked
         let mut deficit = self.remaining_debt().saturating_sub(maturing_total);
-        let mut unstake_instructions: Vec<(AccountId, u128)> = vec![];
+        let mut unstake_instructions: Vec<(AccountId, u128, bool)> = vec![];
+        let mut zero_balance_validators: Vec<AccountId> = vec![];
 
         for (idx, validator_id) in validator_ids.iter().enumerate() {
             if deficit == 0 {
@@ -184,9 +185,19 @@ impl Vault {
             match env::promise_result(idx as u64) {
                 PromiseResult::Successful(bytes) => {
                     if let Ok(U128(staked)) = near_sdk::serde_json::from_slice::<U128>(&bytes) {
+                        // Track zero-stake validators
+                        if staked == 0 {
+                            zero_balance_validators.push(validator_id.clone());
+                        }
+
+                        // Determine amount to unstake
                         let amount = staked.min(deficit);
                         if amount > 0 {
-                            unstake_instructions.push((validator.clone(), amount));
+                            unstake_instructions.push((
+                                validator_id.clone(),
+                                amount,
+                                amount == staked,
+                            ));
                             deficit -= amount;
                         }
                     }
@@ -194,13 +205,18 @@ impl Vault {
                 _ => {
                     env::log_str(&format!(
                         "Warning: staked balance query failed for validator {}",
-                        validator
+                        validator_id
                     ));
                 }
             }
         }
 
-        // If nothing to unstake, just unlock
+        // prune zero‑stake validators
+        for v in zero_balance_validators {
+            self.active_validators.remove(&v);
+        }
+
+        // If nothing to unstake, release lock and return
         if unstake_instructions.is_empty() {
             self.release_processing_lock();
             self.log_waiting("no staked NEAR available to unstake");
@@ -217,13 +233,17 @@ impl Vault {
     /// Callback after [`batch_unstake`]. Updates local state with the new
     /// `UnstakeEntry` records.
     #[private]
-    pub fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128)>) {
+    pub fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128, bool)>) {
         self.log_gas_checkpoint("on_batch_unstake");
 
         // Iterate over each (validator, amount) entry
-        for (idx, (validator, amount)) in entries.into_iter().enumerate() {
+        for (idx, (validator, amount, is_total_stake)) in entries.into_iter().enumerate() {
             match env::promise_result(idx as u64) {
                 PromiseResult::Successful(_) => {
+                    if is_total_stake {
+                        self.active_validators.remove(&validator);
+                    }
+
                     // Update unstake_entry for validator
                     self.update_validator_unstake_entry(&validator, amount);
 
