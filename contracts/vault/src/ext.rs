@@ -25,7 +25,7 @@ pub trait VaultExt {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) -> Promise;
 
-    fn on_check_total_staked(&mut self);
+    fn on_check_total_staked(&mut self, validator_ids: Vec<AccountId>);
 
     fn on_refund_complete(
         &mut self,
@@ -50,9 +50,13 @@ pub trait VaultExt {
         total_maturing: u128,
     ) -> Promise;
 
-    fn on_total_staked_process_claims(&mut self, total_maturing: u128);
+    fn on_total_staked_process_claims(
+        &mut self,
+        validator_ids: Vec<AccountId>,
+        total_maturing: u128,
+    );
 
-    fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128)>);
+    fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128, bool)>);
 
     fn on_claim_vault_complete(
         &mut self,

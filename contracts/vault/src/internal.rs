@@ -91,19 +91,36 @@ impl Vault {
         chain.then(call_back)
     }
 
-    /// Calls `get_account_staked_balance` for all active validators,
-    /// and chains them to a final callback to compute total collateral.
-    pub(crate) fn batch_query_total_staked(&self, call_back: Promise) -> Promise {
-        let mut validators = self.active_validators.iter();
-        let first = validators
-            .next()
-            .expect("No active validators available for collateral check");
+    /// Returns the list of active validators in a stable, deterministic order.
+    /// Currently we just sort lexicographically by the account ID;  
+    /// this costs a few µgas but guarantees repeatable indexing.
+    pub(crate) fn get_ordered_validator_list(&self) -> Vec<AccountId> {
+        let mut list: Vec<AccountId> = self.active_validators.iter().collect();
+        list.sort(); // `AccountId` == `String`, so `Ord` is available
+        list
+    }
 
+    /// Queries `get_account_staked_balance` for every validator in `validator_ids`,
+    /// chaining the results and finally executing `callback`.
+    ///
+    /// * Panics* if `validator_ids` is empty.
+    pub(crate) fn batch_query_total_staked(
+        &self,
+        validator_ids: &[AccountId],
+        callback: Promise,
+    ) -> Promise {
+        // Pre‑checks
+        let mut iter = validator_ids.iter();
+        let first = iter
+            .next()
+            .expect("`validator_ids` must contain at least one validator");
+
+        // Build the promise chain
         let initial = ext_staking_pool::ext(first.clone())
             .with_static_gas(GAS_FOR_VIEW_CALL)
             .get_account_staked_balance(env::current_account_id());
 
-        let chain = validators.fold(initial, |acc, validator| {
+        let chain = iter.fold(initial, |acc, validator| {
             acc.and(
                 ext_staking_pool::ext(validator.clone())
                     .with_static_gas(GAS_FOR_VIEW_CALL)
@@ -111,21 +128,22 @@ impl Vault {
             )
         });
 
-        chain.then(call_back)
+        // Attach final callback
+        chain.then(callback)
     }
 
     /// Calls `unstake` for each (validator, amount) pair,
     /// then chains the results to a single callback promise.
     pub(crate) fn batch_unstake(
         &self,
-        unstake_instructions: Vec<(AccountId, u128)>,
+        unstake_instructions: Vec<(AccountId, u128, bool)>,
         call_back: Promise,
     ) -> Promise {
         let mut chain = ext_staking_pool::ext(unstake_instructions[0].0.clone())
             .with_static_gas(crate::types::GAS_FOR_UNSTAKE)
             .unstake(U128::from(unstake_instructions[0].1));
 
-        for (validator, amount) in unstake_instructions.iter().skip(1) {
+        for (validator, amount, _) in unstake_instructions.iter().skip(1) {
             chain = chain.and(
                 ext_staking_pool::ext(validator.clone())
                     .with_static_gas(crate::types::GAS_FOR_UNSTAKE)

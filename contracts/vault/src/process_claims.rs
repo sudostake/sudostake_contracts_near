@@ -103,10 +103,11 @@ impl Vault {
 
             // (C) Need to unstake additional NEAR.
             (true, false) => {
+                let validators = self.get_ordered_validator_list();
                 let cb = Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS)
-                    .on_total_staked_process_claims(maturing_total);
-                self.batch_query_total_staked(cb)
+                    .on_total_staked_process_claims(validators.clone(), maturing_total);
+                self.batch_query_total_staked(&validators, cb)
             }
         }
     }
@@ -145,10 +146,13 @@ impl Vault {
         if self.liquidity_request.is_some() {
             let remaining = self.remaining_debt();
             if maturing_total < remaining {
+                let validators = self.get_ordered_validator_list();
+
                 let cb = Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS)
-                    .on_total_staked_process_claims(maturing_total);
-                return self.batch_query_total_staked(cb);
+                    .on_total_staked_process_claims(validators.clone(), maturing_total);
+
+                return self.batch_query_total_staked(&validators, cb);
             }
             self.log_waiting("NEAR unstaking");
         }
@@ -161,14 +165,18 @@ impl Vault {
     /// Callback after `batch_query_total_staked`. Determines per‑validator
     /// unstake amounts required and triggers `batch_unstake`.
     #[private]
-    pub fn on_total_staked_process_claims(&mut self, maturing_total: u128) {
+    pub fn on_total_staked_process_claims(
+        &mut self,
+        validator_ids: Vec<AccountId>,
+        maturing_total: u128,
+    ) {
         self.log_gas_checkpoint("on_total_staked_process_claims");
 
         // Compute how much needs to be unstaked
         let mut deficit = self.remaining_debt().saturating_sub(maturing_total);
         let mut unstake_instructions: Vec<(AccountId, u128)> = vec![];
 
-        for (idx, validator) in self.active_validators.iter().enumerate() {
+        for (idx, validator_id) in validator_ids.iter().enumerate() {
             if deficit == 0 {
                 break;
             }
@@ -212,9 +220,6 @@ impl Vault {
     pub fn on_batch_unstake(&mut self, entries: Vec<(AccountId, u128)>) {
         self.log_gas_checkpoint("on_batch_unstake");
 
-        // Unlock processing claims
-        self.release_processing_lock();
-
         // Iterate over each (validator, amount) entry
         for (idx, (validator, amount)) in entries.into_iter().enumerate() {
             match env::promise_result(idx as u64) {
@@ -246,6 +251,9 @@ impl Vault {
                 }
             }
         }
+
+        // Unlock processing claims
+        self.release_processing_lock();
     }
 }
 

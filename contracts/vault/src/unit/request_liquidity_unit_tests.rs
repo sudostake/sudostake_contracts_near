@@ -354,7 +354,7 @@ fn test_on_check_total_staked_fails_if_no_pending_request() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     // Call on_check_total_staked → should panic
-    vault.on_check_total_staked();
+    vault.on_check_total_staked(vec![]);
 }
 
 #[test]
