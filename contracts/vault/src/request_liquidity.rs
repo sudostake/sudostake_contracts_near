@@ -2,7 +2,6 @@
 
 use crate::contract::Vault;
 use crate::contract::VaultExt;
-use crate::ext::ext_self;
 use crate::log_event;
 use crate::types::ProcessingState;
 use crate::types::GAS_FOR_CALLBACK;
@@ -68,15 +67,15 @@ impl Vault {
         });
 
         // Batch query total staked balance across all active validators
-        self.batch_query_total_staked(
-            ext_self::ext(env::current_account_id())
-                .with_static_gas(GAS_FOR_CALLBACK)
-                .on_check_total_staked(),
-        )
+        let validators = self.get_ordered_validator_list();
+        let cb = Self::ext(env::current_account_id())
+            .with_static_gas(GAS_FOR_CALLBACK)
+            .on_check_total_staked(validators.clone());
+        self.batch_query_total_staked(&validators, cb)
     }
 
     #[private]
-    pub fn on_check_total_staked(&mut self) {
+    pub fn on_check_total_staked(&mut self, validator_ids: Vec<AccountId>) {
         self.log_gas_checkpoint("on_check_total_staked");
 
         // Retrieve and remove the pending request
@@ -90,7 +89,6 @@ impl Vault {
         let num_results = env::promise_results_count();
 
         // Track and collect zero balance validators
-        let validator_ids: Vec<AccountId> = self.active_validators.iter().collect();
         let mut zero_balance_validators: Vec<AccountId> = vec![];
 
         // Iterate through the results and calculate total_staked_yocto

@@ -1,4 +1,3 @@
-use anyhow::Ok;
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
 use test_utils::{
@@ -595,6 +594,142 @@ async fn test_process_claims_waits_when_matured_and_maturing_is_sufficient() -> 
         matched,
         "Expected liquidation_progress `NEAR unstaking` log not found: {:#?}",
         result.logs()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_process_claims_prunes_zero_staked_validators() -> anyhow::Result<()> {
+    // Setup sandbox and accounts
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+
+    // Setup contracts
+    let (validator_1, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    // Create another validator_2
+    let validator_2 = create_named_test_validator(&worker, &root, "validator_2").await?;
+
+    // Withdraw all available balance from vault leaving behind only 6NEAR
+    let available: U128 = vault.view("view_available_balance").await?.json()?;
+    let to_withdraw = available.0 - NearToken::from_near(6).as_yoctonear();
+    root.call(vault.id(), "withdraw_balance")
+        .args_json(serde_json::json!({
+            "token_address": null,
+            "amount": to_withdraw.to_string(),
+            "to": root.id()
+        }))
+        .deposit(near_sdk::NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Delegate 3NEAR to validator_1
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_1.id(),
+            "amount": NearToken::from_near(3)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward 1 block
+    worker.fast_forward(1).await?;
+
+    // Delegate 2NEAR to validator_2
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator_2.id(),
+            "amount": NearToken::from_near(2)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Fast-forward 1 block
+    worker.fast_forward(1).await?;
+
+    // Request and accept liquidity request
+    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
+
+    // Patch accepted_at to simulate expiration
+    vault
+        .call("set_accepted_offer_timestamp")
+        .args_json(json!({ "timestamp": 1_000_000_000 }))
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Call process_claims by lender
+    lender
+        .call(vault.id(), "process_claims")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Expect the vault balance to be used
+    let available: U128 = vault.view("view_available_balance").await?.json()?;
+    assert_eq!(
+        available.0, 0,
+        "Expected vault balance to be 0 after partial repayment"
+    );
+
+    // Expect ~3 NEAR to be in unstake_entries for validator_1
+    let entry: UnstakeEntry = vault
+        .view("get_unstake_entry")
+        .args_json(json!({ "validator": validator_1.id() }))
+        .await?
+        .json()?;
+    let unstaked_rounded = entry.amount / 10u128.pow(24);
+    assert_eq!(
+        unstaked_rounded, 3,
+        "Expected ~3 NEAR to be in unstake_entries for validator_1, got: {} yocto",
+        entry.amount
+    );
+
+    // Expect ~1 NEAR to be in unstake_entries for validator_2
+    let entry: UnstakeEntry = vault
+        .view("get_unstake_entry")
+        .args_json(json!({ "validator": validator_2.id() }))
+        .await?
+        .json()?;
+    let unstaked_rounded = entry.amount / 10u128.pow(24);
+    assert_eq!(
+        unstaked_rounded, 1,
+        "Expected ~1 NEAR to be in unstake_entries for validator_2, got: {} yocto",
+        entry.amount
+    );
+
+    // Query active validators list
+    let active_validators: Vec<String> = vault
+        .view("get_active_validators")
+        .await?
+        .json()
+        .expect("Failed to decode active validators");
+    assert_eq!(
+        active_validators.len(),
+        1,
+        "Only one validator should exist",
+    );
+
+    // Assert validator_1 is no longer in the active set
+    assert!(
+        !active_validators.contains(&validator_1.id().to_string()),
+        "Validator_1 should be removed after unstaking to zero"
+    );
+
+    // Assert validator_2 is on the active set
+    assert!(
+        active_validators.contains(&validator_2.id().to_string()),
+        "Validator_2 should remain on the set"
     );
 
     Ok(())
