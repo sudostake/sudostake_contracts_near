@@ -5,6 +5,7 @@ use crate::contract::VaultExt;
 use crate::ext::ext_self;
 use crate::ext::ext_staking_pool;
 use crate::log_event;
+use crate::types::ProcessingState;
 use crate::types::GAS_FOR_CALLBACK;
 use crate::types::GAS_FOR_WITHDRAW_ALL;
 use crate::types::NUM_EPOCHS_TO_UNLOCK;
@@ -24,13 +25,15 @@ impl Vault {
         );
 
         // Get the unstake entry for this validator
-        let entry = self
-            .unstake_entries
-            .get(&validator)
-            .expect("No unstake entry found for validator");
+        let entry = self.unstake_entries.get(&validator);
+        require!(
+            entry.is_some(),
+            format!("No unstake entry found for validator {}", validator)
+        );
 
         // Ensure the required number of epochs has passed
         let current_epoch = env::epoch_height();
+        let entry = entry.unwrap();
         require!(
             current_epoch >= entry.epoch_height + NUM_EPOCHS_TO_UNLOCK,
             format!(
@@ -40,11 +43,14 @@ impl Vault {
             )
         );
 
-        // 🔒 Prevent this action during liquidation
+        // Prevent this action during liquidation
         require!(
             self.liquidation.is_none(),
             "Cannot claim unstaked NEAR while liquidation is in progress"
         );
+
+        // Lock the vault for **ClaimUnstaked** workflow
+        self.acquire_processing_lock(ProcessingState::ClaimUnstaked);
 
         // Trigger withdraw_all → then clear unstake_entries in the callback
         ext_staking_pool::ext(validator.clone())
@@ -65,6 +71,7 @@ impl Vault {
     ) {
         // Inspect amount of gas left
         self.log_gas_checkpoint("on_withdraw_all");
+        self.release_processing_lock();
 
         if result.is_err() {
             log_event!(
@@ -76,8 +83,7 @@ impl Vault {
                 })
             );
 
-            // Throw an error
-            env::panic_str("Failed to execute withdraw_all on validator");
+            return;
         }
 
         // Log claim_unstaked_completed event

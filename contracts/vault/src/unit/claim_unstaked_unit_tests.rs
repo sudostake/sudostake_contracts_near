@@ -1,8 +1,11 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::{contract::Vault, types::UnstakeEntry};
-use near_sdk::{env, testing_env, AccountId, NearToken};
+use crate::{
+    contract::Vault,
+    types::{ProcessingState, UnstakeEntry, NUM_EPOCHS_TO_UNLOCK},
+};
+use near_sdk::{env, test_utils::get_logs, testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
 
 #[test]
@@ -36,40 +39,6 @@ fn test_claim_unstaked_rejects_non_owner() {
 
     // Alice attempts to claim unstaked from the validator
     let validator: AccountId = "validator.poolv1.near".parse().unwrap();
-    vault.claim_unstaked(validator);
-}
-
-#[test]
-#[should_panic(expected = "Cannot claim unstaked NEAR while liquidation is in progress")]
-fn test_claim_unstaked_fails_if_liquidation_active() {
-    // Set up a context with 1 yoctoNEAR and valid epoch
-    let mut context = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    context.epoch_height = 10;
-    testing_env!(context);
-
-    // Initialize the vault
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Insert a claimable unstake entry
-    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
-    vault.unstake_entries.insert(
-        &validator,
-        &UnstakeEntry {
-            amount: NearToken::from_near(2).as_yoctonear(),
-            epoch_height: 5,
-        },
-    );
-
-    // Simulate liquidation being active
-    vault.liquidation = Some(crate::types::Liquidation {
-        liquidated: NearToken::from_yoctonear(0),
-    });
-
-    // Attempt to claim while liquidation is active — should panic
     vault.claim_unstaked(validator);
 }
 
@@ -122,8 +91,72 @@ fn test_claim_unstaked_fails_if_epoch_not_ready() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to execute withdraw_all on validator")]
-fn test_on_withdraw_all_panics_on_error() {
+#[should_panic(expected = "Cannot claim unstaked NEAR while liquidation is in progress")]
+fn test_claim_unstaked_fails_if_liquidation_active() {
+    // Set up a context with 1 yoctoNEAR and valid epoch
+    let mut context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    context.epoch_height = 10;
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    // Insert a claimable unstake entry
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+    vault.unstake_entries.insert(
+        &validator,
+        &UnstakeEntry {
+            amount: NearToken::from_near(2).as_yoctonear(),
+            epoch_height: 5,
+        },
+    );
+
+    // Simulate liquidation being active
+    vault.liquidation = Some(crate::types::Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
+
+    // Attempt to claim while liquidation is active — should panic
+    vault.claim_unstaked(validator);
+}
+
+#[test]
+#[should_panic(expected = "Vault busy with ClaimUnstaked")]
+fn test_claim_unstaked_fails_if_lock_active() {
+    // Set up context with vault owner and 1 yoctoNEAR
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    // Initialize the vault
+    let mut vault = Vault::new(owner(), 0, 1);
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+    // Add a valid unstake entry eligible for claiming
+    vault.unstake_entries.insert(
+        &validator,
+        &UnstakeEntry {
+            amount: NearToken::from_near(2).as_yoctonear(),
+            epoch_height: env::epoch_height() - NUM_EPOCHS_TO_UNLOCK,
+        },
+    );
+
+    // First call — acquires processing lock and returns a promise
+    vault.claim_unstaked(validator.clone());
+
+    // Second call — should panic due to lock still being held
+    vault.claim_unstaked(validator);
+}
+
+#[test]
+fn test_on_withdraw_all_handles_error_without_panic() {
     // Set up context with vault owner
     let context = get_context(owner(), NearToken::from_near(10), None);
     testing_env!(context);
@@ -142,7 +175,27 @@ fn test_on_withdraw_all_panics_on_error() {
     );
 
     // Simulate a failed withdraw_all callback
-    vault.on_withdraw_all(validator, Err(near_sdk::PromiseError::Failed));
+    vault.on_withdraw_all(validator.clone(), Err(near_sdk::PromiseError::Failed));
+
+    // Assert entry is NOT removed
+    assert!(
+        vault.unstake_entries.get(&validator).is_some(),
+        "Entry should remain if withdraw_all fails"
+    );
+
+    // Verify claim_unstake_failed log event
+    let logs = get_logs().join("");
+    assert!(
+        logs.contains("claim_unstake_failed"),
+        "Log should contain 'claim_unstake_failed'"
+    );
+
+    // Check lock is released
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::Idle,
+        "Processing state should be reset to Idle"
+    );
 }
 
 #[test]
@@ -169,6 +222,13 @@ fn test_on_withdraw_all_removes_entry() {
     assert!(
         vault.unstake_entries.get(&validator).is_none(),
         "Expected unstake entry to be removed"
+    );
+
+    // Lock should be released
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::Idle,
+        "Processing state should be reset to Idle"
     );
 }
 
