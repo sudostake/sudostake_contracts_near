@@ -5,6 +5,7 @@ use crate::contract::VaultExt;
 use crate::ext::ext_self;
 use crate::ext::ext_staking_pool;
 use crate::log_event;
+use crate::types::ProcessingState;
 use crate::types::MAX_ACTIVE_VALIDATORS;
 use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_DEPOSIT_AND_STAKE};
 use near_sdk::{assert_one_yocto, env, near_bindgen, require, AccountId, NearToken, Promise};
@@ -15,6 +16,12 @@ impl Vault {
     pub fn delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
         // Require 1 yoctoNEAR for intentional call
         assert_one_yocto();
+
+        // Only the vault owner can delegate
+        require!(
+            env::predecessor_account_id() == self.owner,
+            "Only the vault owner can delegate stake"
+        );
 
         // Limit to MAX_ACTIVE_VALIDATORS
         // If validator is new, enforce the active‑set size limit.
@@ -27,12 +34,6 @@ impl Vault {
                 ),
             );
         }
-
-        // Only the vault owner can delegate
-        require!(
-            env::predecessor_account_id() == self.owner,
-            "Only the vault owner can delegate stake"
-        );
 
         // Amount must be greater than 0
         require!(amount.as_yoctonear() > 0, "Amount must be greater than 0");
@@ -48,17 +49,20 @@ impl Vault {
             )
         );
 
-        // 🔒 Prevent delegation when refund_list is not empty
+        // Prevent delegation when refund_list is not empty
         require!(
             self.refund_list.is_empty(),
             "Cannot delegate while there are pending refund entries"
         );
 
-        // 🔒 Prevent delegation when liquidation is active
+        // Prevent delegation when liquidation is active
         require!(
             self.liquidation.is_none(),
             "Cannot delegate while liquidation is in progress"
         );
+
+        // Lock the vault for **Delegate** workflow
+        self.acquire_processing_lock(ProcessingState::Delegate);
 
         // Initiate deposit_and_stake on validator
         ext_staking_pool::ext(validator.clone())
@@ -81,6 +85,7 @@ impl Vault {
     ) {
         // Inspect amount of gas left
         self.log_gas_checkpoint("on_deposit_and_stake");
+        self.release_processing_lock();
 
         // The attached deposit will be refunded automatically by NEAR runtime
         if result.is_err() {
@@ -94,8 +99,7 @@ impl Vault {
                 })
             );
 
-            // Throws an error
-            env::panic_str("Failed to execute deposit_and_stake on validator");
+            return;
         }
 
         // Add validator to active set

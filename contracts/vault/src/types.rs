@@ -48,16 +48,18 @@ pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000; // 30 minutes
 pub enum ProcessingState {
     /// No operation is currently in progress.
     Idle = 0,
-    /// Vault is currently processing claiming unstaked balance from validator
-    ClaimUnstaked = 1,
-    /// Vault is currently processing request liquidity
-    RequestLiquidity = 2,
+    /// Vault is currently processing delegation.
+    Delegate = 1,
+    /// Vault is currently processing claiming unstaked balance from validator.
+    ClaimUnstaked = 2,
+    /// Vault is currently processing request liquidity.
+    RequestLiquidity = 3,
     /// Vault is currently processing an undelegation.
-    Undelegate = 3,
+    Undelegate = 4,
     /// Vault is currently processing a loan repayment.
-    RepayLoan = 4,
+    RepayLoan = 5,
     /// Vault is currently processing lender claims during liquidation.
-    ProcessClaims = 5,
+    ProcessClaims = 6,
 }
 
 /// Tracks how much NEAR is unstaked and the epoch when it will be available.
