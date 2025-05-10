@@ -8,8 +8,9 @@ use crate::types::ProcessingState;
 use crate::types::GAS_FOR_VIEW_CALL;
 use crate::types::{GAS_FOR_CALLBACK, GAS_FOR_UNSTAKE};
 use near_sdk::json_types::U128;
-use near_sdk::require;
-use near_sdk::{assert_one_yocto, env, near_bindgen, AccountId, NearToken, Promise};
+use near_sdk::{assert_one_yocto, env, near_bindgen, require, AccountId, Gas, NearToken, Promise};
+
+const GAS_FOR_CALLBACK_ON_UNSTAKE_COMPLETE: Gas = Gas::from_tgas(200);
 
 #[near_bindgen]
 impl Vault {
@@ -48,7 +49,7 @@ impl Vault {
             .unstake(U128::from(amount.as_yoctonear()))
             .then(
                 Self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .with_static_gas(GAS_FOR_CALLBACK_ON_UNSTAKE_COMPLETE)
                     .on_unstake_complete(validator, amount),
             )
     }
