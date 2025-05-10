@@ -28,6 +28,7 @@ chmod +x build.sh factory_test.sh vault_test.sh
 
 ## Build SudoStake AI agent
 ```
+python3 -m venv .venv
 source .venv/bin/activate
 pip install semver
 brew install jq  # macOS  (or: sudo apt install jq on Debian/Ubuntu)
