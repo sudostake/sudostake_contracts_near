@@ -34,7 +34,7 @@ pip install semver
 brew install jq  # macOS  (or: sudo apt install jq on Debian/Ubuntu)
 
 chmod +x ./agent/build.sh
-./agent/build.sh patch
+source ~/.zshrc && ./agent/build.sh patch && sudo -E nearai agent interactive --local
 ```
 
 ## Run the agent locally in interractive mode
