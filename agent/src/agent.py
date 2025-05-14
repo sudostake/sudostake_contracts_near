@@ -1,6 +1,7 @@
 from nearai.agents.environment import Environment
 from typing import Optional, Any, Dict, Awaitable, TypeVar
 from py_near.account import Account
+from decimal import Decimal
 
 # `MCPTool` is imported only for static‑type checkers; it isn’t referenced at
 # runtime, so we silence the linter warning with `# noqa:`.
@@ -13,6 +14,9 @@ import os
 
 # Type‐var for our coroutine runner
 T = TypeVar("T")
+
+# NEAR uses 10^24 yoctoNEAR per 1 NEAR
+YOCTO_FACTOR: Decimal = Decimal("1e24")
 
 # --------------------------------------------------------------------------- #
 # Global connection cache                                                     #
@@ -106,6 +110,35 @@ def vault_state(vault_id: str) -> Dict[str, Any]:
         return {"error": "Failed to fetch vault state", "details": str(e)}
 
 
+def view_available_balance(vault_id: str) -> Dict[str, Any]:
+    """
+    Query the vault's available (withdrawable) NEAR balance.
+
+    Args:
+      vault_id: NEAR account ID of the vault.
+    Returns:
+      { "vault_id": vault_id, "available_balance": "<NEAR as string>" }
+    Raises:
+      RuntimeError: if NEAR connection isn't initialised.
+    """
+    
+    if _near is None:
+        raise RuntimeError("NEAR connection not initialised.")
+    
+    try:
+        # call the on-chain view method (contract should expose "view_available_balance")
+        resp = _run(_near.view(vault_id, "view_available_balance", {}))
+        yocto = int(resp.result)
+        near_amount = Decimal(yocto) / YOCTO_FACTOR
+        return {
+            "vault_id": vault_id,
+            "available_balance": str(near_amount),  # in NEAR
+        }
+    except Exception as e:
+        _logger.error("view_available_balance RPC error for %s: %s", vault_id, e, exc_info=True)
+        return {"error": "Failed to fetch available balance", "details": str(e)}
+    
+    
 # --------------------------------------------------------------------------- #
 # Main entry point – executed automatically by NearAI each turn               #
 # --------------------------------------------------------------------------- #
@@ -126,10 +159,17 @@ def run(env: Environment):
     
     # Register tool functions – NearAI introspects the signature/docstrings.
     registry = env.get_tool_registry()
-    registry.register_tool(vault_state)
+    for tool in (vault_state, view_available_balance):
+        registry.register_tool(tool)
         
     # Register the tools with the environment.
-    tool_defs = [registry.get_tool_definition("vault_state")]
+    tool_defs = [
+        registry.get_tool_definition(name)
+        for name in (
+            "vault_state", 
+            "view_available_balance",
+        )
+    ]
     
     # Build the system prompt and hand off to NearAI for inference.
     system_msg = {
