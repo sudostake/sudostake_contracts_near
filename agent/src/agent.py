@@ -1,6 +1,7 @@
 from nearai.agents.environment import Environment
 from typing import Optional, Any, Dict, Awaitable, TypeVar
 from py_near.account import Account
+from py_near.models import TransactionResult
 from decimal import Decimal
 
 # `MCPTool` is imported only for static‑type checkers; it isn’t referenced at
@@ -137,7 +138,60 @@ def view_available_balance(vault_id: str) -> Dict[str, Any]:
     except Exception as e:
         _logger.error("view_available_balance RPC error for %s: %s", vault_id, e, exc_info=True)
         return {"error": "Failed to fetch available balance", "details": str(e)}
+
+
+def delegate(vault_id: str, validator: str, amount: str) -> Dict[str, Any]:
+    """
+    Delegate `amount` NEAR from `vault_id` to `validator`.
+    `amount` is specified in NEAR (e.g. "0.1").
+    Attaches exactly 1 yoctoNEAR as the payable deposit.
+    Returns a dict summarizing the transaction (or error info).
+    """
     
+    if _near is None:
+        raise RuntimeError("NEAR connection not initialised.")
+    
+    # Convert NEAR -> yoctoNEAR
+    try:
+        yocto = int(Decimal(amount) * YOCTO_FACTOR)
+    except Exception:
+        raise ValueError(f"Invalid amount: {amount!r}")
+    
+    # Perform the payable delegate call with 1 yoctoNEAR attached
+    coroutine = _near.call(
+        contract_id=vault_id,
+        method_name="delegate",
+        args={"validator": validator, "amount": str(yocto)},
+        gas=300_000_000_000_000,  # 300 TGas
+        amount=1,                 # 1 yoctoNEAR deposit
+    )
+    
+    try:
+        response: TransactionResult = _run(coroutine)
+
+        # Extract only the primitive fields we care about
+        tx_hash   = response.transaction.hash
+        status    = response.status
+        meta      = response.transaction_outcome.metadata
+        gas_burnt = response.transaction_outcome.gas_burnt
+
+        return {
+            "vault": vault_id,
+            "validator": validator,
+            "amount": f"{amount} NEAR",
+            "transaction_hash": tx_hash,
+            "execution_status": status,
+            "gas_burnt": gas_burnt,
+            "logs": response.logs,
+            "meta": meta
+        }
+    except Exception as e:
+        _logger.error(
+            "delegate transaction error for %s → %s (%s NEAR): %s",
+            vault_id, validator, amount, e, exc_info=True
+        )
+        return {"error": "Delegate transaction failed", "details": str(e)}
+  
     
 # --------------------------------------------------------------------------- #
 # Main entry point – executed automatically by NearAI each turn               #
@@ -159,7 +213,7 @@ def run(env: Environment):
     
     # Register tool functions – NearAI introspects the signature/docstrings.
     registry = env.get_tool_registry()
-    for tool in (vault_state, view_available_balance):
+    for tool in (vault_state, view_available_balance, delegate):
         registry.register_tool(tool)
         
     # Register the tools with the environment.
@@ -168,6 +222,7 @@ def run(env: Environment):
         for name in (
             "vault_state", 
             "view_available_balance",
+            "delegate"
         )
     ]
     
