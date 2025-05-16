@@ -89,6 +89,22 @@ def _set_credentials(env: Environment) -> None:
 # Tool functions (auto‑schema via signature + docstring)                      #
 # --------------------------------------------------------------------------- #
 
+def help() -> str:
+    """
+    Show a list of available tools and what they do.
+    
+    Returns:
+      A markdown-formatted help message.
+    """
+    return (
+        "🛠 **Available Tools:**\n\n"
+        "- `vault_state(vault_id)` → View full vault status (ownership, staking, liquidity).\n"
+        "- `view_available_balance(vault_id)` → Check withdrawable NEAR from a vault.\n"
+        "- `delegate(vault_id, validator, amount)` → Stake NEAR to a validator from the vault.\n"
+        "- `help()` → Show this help message.\n"
+    )
+    
+
 def vault_state(vault_id: str) -> str:
     """
     Fetch and render the on-chain state for a SudoStake vault in Markdown format.
@@ -240,13 +256,14 @@ def run(env: Environment):
     
     # Register tool functions – NearAI introspects the signature/docstrings.
     registry = env.get_tool_registry()
-    for tool in (vault_state, view_available_balance, delegate):
+    for tool in (help, vault_state, view_available_balance, delegate):
         registry.register_tool(tool)
         
     # Register the tools with the environment.
     tool_defs = [
         registry.get_tool_definition(name)
         for name in (
+            "help",
             "vault_state", 
             "view_available_balance",
             "delegate"
