@@ -31,10 +31,28 @@ _logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-
 # --------------------------------------------------------------------------- #
 # Helpers                                                                     #
 # --------------------------------------------------------------------------- #
+
+def get_explorer_url() -> str:
+    """
+    Return the correct NEAR Explorer URL based on NEAR_NETWORK.
+
+    Raises:
+        RuntimeError if NEAR_NETWORK is missing or invalid.
+    """
+    network = os.getenv("NEAR_NETWORK")
+    if not network:
+        raise RuntimeError("Missing required environment variable: NEAR_NETWORK")
+
+    if network not in ("mainnet", "testnet"):
+        raise RuntimeError(f"Unsupported NEAR_NETWORK: {network}")
+
+    return {
+        "mainnet": "https://explorer.near.org",
+        "testnet": "https://explorer.testnet.near.org",
+    }[network]
 
 def _ensure_loop() -> asyncio.AbstractEventLoop:
     """Return a long-lived event loop, creating it once if necessary."""
@@ -218,11 +236,14 @@ def delegate(vault_id: str, validator: str, amount: str) -> str:
         
         # Convert to Tgas
         gas_tgas = gas_burnt / 1e12
+        
+        # Get explorer URL
+        EXPLORER = get_explorer_url()
 
         return (
             f"✅ **Delegation Successful**\n"
-            f"Vault [`{vault_id}`](https://explorer.testnet.near.org/accounts/{vault_id}) delegated **{amount} NEAR** to validator `{validator}`.\n"
-            f"🔹 **Transaction Hash**: [`{tx_hash}`](https://explorer.testnet.near.org/transactions/{tx_hash})  \n"
+            f"Vault [`{vault_id}`]({EXPLORER}/accounts/{vault_id}) delegated **{amount} NEAR** to validator `{validator}`.\n"
+            f"🔹 **Transaction Hash**: [`{tx_hash}`]({EXPLORER}/transactions/{tx_hash})  \n"
             f"⛽ **Gas Burned**: {gas_tgas:.2f} Tgas\n\n"
             f"📄 **Logs**:\n" +
             "\n".join(f"- {line}" for line in parsed_logs) if parsed_logs else "_No log entries found._"
