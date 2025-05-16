@@ -140,6 +140,10 @@ def vault_state(vault_id: str) -> str:
 
     try:
         response = _run(_near.view(vault_id, "get_vault_state", {}))
+        
+        if not response or not hasattr(response, "result") or response.result is None:
+            return f"❌ No data returned for `{vault_id}`. Is the contract deployed?"
+        
         state = response.result
         
         return (
@@ -177,6 +181,10 @@ def view_available_balance(vault_id: str) -> str:
     try:
         # call the on-chain view method (contract should expose "view_available_balance")
         resp = _run(_near.view(vault_id, "view_available_balance", {}))
+        
+        if not resp or not hasattr(resp, "result") or resp.result is None:
+            return f"❌ No data returned for `{vault_id}`. Is the contract deployed?"
+        
         yocto = int(resp.result)
         near_amount = Decimal(yocto) / YOCTO_FACTOR
         
