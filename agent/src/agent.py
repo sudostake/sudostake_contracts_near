@@ -191,7 +191,7 @@ def view_available_balance(vault_id: str) -> str:
         return f"💰 Vault `{vault_id}` has **{near_amount:.5f} NEAR** available for withdrawal."
     except Exception as e:
         _logger.error("view_available_balance RPC error for %s: %s", vault_id, e, exc_info=True)
-        return {"error": "Failed to fetch available balance", "details": str(e)}
+        return f"❌ Failed to fetch balance for `{vault_id}`\n\n**Error:** {e}"
 
 
 def delegate(vault_id: str, validator: str, amount: str) -> str:
