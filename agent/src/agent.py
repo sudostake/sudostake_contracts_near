@@ -71,6 +71,7 @@ def _set_credentials(env: Environment) -> None:
             "NEAR_PRIVATE_KEY": private_key,
             "NEAR_RPC": rpc_addr,
         }.items() if val is None]
+        
         if missing:
             raise RuntimeError(
                 f"Missing required environment variable(s): {', '.join(missing)}"
@@ -88,14 +89,14 @@ def _set_credentials(env: Environment) -> None:
 # Tool functions (auto‑schema via signature + docstring)                      #
 # --------------------------------------------------------------------------- #
 
-def vault_state(vault_id: str) -> Dict[str, Any]:
+def vault_state(vault_id: str) -> str:
     """
-    Fetch the full on-chain state for a SudoStake vault.
+    Fetch and render the on-chain state for a SudoStake vault in Markdown format.
 
     Args:
       vault_id: NEAR account ID of the vault.
     Returns:
-      A dict matching the contract's `get_vault_state` view.
+      A markdown-formatted string showing the vault's state.
     Raises:
       RuntimeError: if NEAR connection isn't initialised.
     """
@@ -105,20 +106,33 @@ def vault_state(vault_id: str) -> Dict[str, Any]:
 
     try:
         response = _run(_near.view(vault_id, "get_vault_state", {}))
-        return response.result
+        state = response.result
+        
+        return (
+            f"✅ **Vault State: `{vault_id}`**\n\n"
+            f"| Field                  | Value                       |\n"
+            f"|------------------------|-----------------------------|\n"
+            f"| Owner                  | `{state['owner']}`          |\n"
+            f"| Index                  | `{state['index']}`          |\n"
+            f"| Version                | `{state['version']}`        |\n"
+            f"| Listed for Takeover    | `{state['is_listed_for_takeover']}` |\n"
+            f"| Pending Request        | `{state['pending_liquidity_request']}` |\n"
+            f"| Active Request         | `{state['liquidity_request']}` |\n"
+            f"| Accepted Offer         | `{state['accepted_offer']}` |\n"
+        )
     except Exception as e:
         _logger.error("vault_state RPC error for %s: %s", vault_id, e, exc_info=True)
-        return {"error": "Failed to fetch vault state", "details": str(e)}
+        return f"❌ Failed to fetch vault state for `{vault_id}`\n\n**Error:** {e}"
 
 
-def view_available_balance(vault_id: str) -> Dict[str, Any]:
+def view_available_balance(vault_id: str) -> str:
     """
-    Query the vault's available (withdrawable) NEAR balance.
+    Return the available NEAR balance in a readable sentence.
 
     Args:
       vault_id: NEAR account ID of the vault.
     Returns:
-      { "vault_id": vault_id, "available_balance": "<NEAR as string>" }
+      A plain string reporting the withdrawable NEAR balance.
     Raises:
       RuntimeError: if NEAR connection isn't initialised.
     """
@@ -131,21 +145,19 @@ def view_available_balance(vault_id: str) -> Dict[str, Any]:
         resp = _run(_near.view(vault_id, "view_available_balance", {}))
         yocto = int(resp.result)
         near_amount = Decimal(yocto) / YOCTO_FACTOR
-        return {
-            "vault_id": vault_id,
-            "available_balance": str(near_amount),  # in NEAR
-        }
+        
+        return f"💰 Vault `{vault_id}` has **{near_amount:.5f} NEAR** available for withdrawal."
     except Exception as e:
         _logger.error("view_available_balance RPC error for %s: %s", vault_id, e, exc_info=True)
         return {"error": "Failed to fetch available balance", "details": str(e)}
 
 
-def delegate(vault_id: str, validator: str, amount: str) -> Dict[str, Any]:
+def delegate(vault_id: str, validator: str, amount: str) -> str:
     """
     Delegate `amount` NEAR from `vault_id` to `validator`.
-    `amount` is specified in NEAR (e.g. "0.1").
-    Attaches exactly 1 yoctoNEAR as the payable deposit.
-    Returns a dict summarizing the transaction (or error info).
+
+    Returns:
+      A markdown summary of the transaction result, formatted for display or piping to glow.
     """
     
     if _near is None:
@@ -157,40 +169,55 @@ def delegate(vault_id: str, validator: str, amount: str) -> Dict[str, Any]:
     except Exception:
         raise ValueError(f"Invalid amount: {amount!r}")
     
-    # Perform the payable delegate call with 1 yoctoNEAR attached
-    coroutine = _near.call(
-        contract_id=vault_id,
-        method_name="delegate",
-        args={"validator": validator, "amount": str(yocto)},
-        gas=300_000_000_000_000,  # 300 TGas
-        amount=1,                 # 1 yoctoNEAR deposit
-    )
-    
     try:
-        response: TransactionResult = _run(coroutine)
+        # Perform the payable delegate call with 1 yoctoNEAR attached        
+        response: TransactionResult = _run(
+            _near.call(
+                contract_id=vault_id,
+                method_name="delegate",
+                args={"validator": validator, "amount": str(yocto)},
+                gas=300_000_000_000_000,  # 300 TGas
+                amount=1,                 # 1 yoctoNEAR deposit
+            )
+        )
 
         # Extract only the primitive fields we care about
         tx_hash   = response.transaction.hash
-        status    = response.status
-        meta      = response.transaction_outcome.metadata
         gas_burnt = response.transaction_outcome.gas_burnt
+        logs      = response.logs
+        
+        # Parse log highlights
+        parsed_logs = []
+        for log in logs:
+            if "lock_acquired" in log:
+                parsed_logs.append("🔒 Lock acquired")
+            elif "lock_released" in log:
+                parsed_logs.append("🔓 Lock released")
+            elif "delegate_completed" in log:
+                parsed_logs.append("✅ Delegate completed")
+            elif "staking" in log.lower():
+                parsed_logs.append("📈 Stake successful")
+            elif "deposited" in log.lower():
+                parsed_logs.append("📥 Deposit received")
+        
+        # Convert to Tgas
+        gas_tgas = gas_burnt / 1e12
 
-        return {
-            "vault": vault_id,
-            "validator": validator,
-            "amount": f"{amount} NEAR",
-            "transaction_hash": tx_hash,
-            "execution_status": status,
-            "gas_burnt": gas_burnt,
-            "logs": response.logs,
-            "meta": meta
-        }
+        return (
+            f"✅ **Delegation Successful**\n"
+            f"Vault [`{vault_id}`](https://explorer.testnet.near.org/accounts/{vault_id}) delegated **{amount} NEAR** to validator `{validator}`.\n"
+            f"🔹 **Transaction Hash**: [`{tx_hash}`](https://explorer.testnet.near.org/transactions/{tx_hash})  \n"
+            f"⛽ **Gas Burned**: {gas_tgas:.2f} Tgas\n\n"
+            f"📄 **Logs**:\n" +
+            "\n".join(f"- {line}" for line in parsed_logs) if parsed_logs else "_No log entries found._"
+        )
     except Exception as e:
         _logger.error(
             "delegate transaction error for %s → %s (%s NEAR): %s",
             vault_id, validator, amount, e, exc_info=True
         )
-        return {"error": "Delegate transaction failed", "details": str(e)}
+        
+        return f"❌ Delegate transaction failed for `{vault_id}` → `{validator}` ({amount} NEAR)\n\n**Error:** {e}"
   
     
 # --------------------------------------------------------------------------- #
