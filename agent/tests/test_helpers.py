@@ -2,18 +2,21 @@ import sys
 import os
 import pytest
 import asyncio
-
 from unittest.mock import MagicMock
 
-# Add src/ to import path
+# Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-import helpers  # type: ignore[import-unresolved]
+import helpers  # type: ignore
 
+
+# ─────────────────────────── async util ───────────────────────────
 async def async_add(a, b):
     await asyncio.sleep(0.01)  # simulate awaitable work
     return a + b
 
+
+# ─────────────────────────── get_explorer_url ─────────────────────
 def test_get_explorer_url_mainnet(monkeypatch):
     monkeypatch.setenv("NEAR_NETWORK", "mainnet")
     assert helpers.get_explorer_url() == "https://explorer.near.org"
@@ -32,6 +35,8 @@ def test_get_explorer_url_invalid(monkeypatch):
     with pytest.raises(RuntimeError, match="Unsupported NEAR_NETWORK"):
         helpers.get_explorer_url()
 
+
+# ─────────────────────────── event-loop helpers ───────────────────
 def test_ensure_loop_returns_event_loop():
     loop1 = helpers.ensure_loop()
     loop2 = helpers.ensure_loop()
@@ -44,32 +49,55 @@ def test_run_coroutine_executes_async_function():
     result = helpers.run_coroutine(async_add(2, 3))
     assert result == 5
     
-def test_set_credentials_calls_env(monkeypatch):
+    
+# ─────────────────────────── init_near (headless) ─────────────────
+def test_init_near_headless(monkeypatch):
     monkeypatch.setenv("NEAR_ACCOUNT_ID", "alice.testnet")
-    monkeypatch.setenv("NEAR_PRIVATE_KEY", "ed25519:fakekey")
+    monkeypatch.setenv("NEAR_PRIVATE_KEY", "ed25519:fake")
     monkeypatch.setenv("NEAR_RPC", "https://rpc.testnet.near.org")
     
     fake_account = MagicMock()
     fake_env = MagicMock()
     fake_env.set_near.return_value = fake_account
     
-    result = helpers.set_credentials(fake_env)
+    account = helpers.init_near(fake_env)
     
     fake_env.set_near.assert_called_once_with(
         account_id="alice.testnet",
-        private_key="ed25519:fakekey",
+        private_key="ed25519:fake",
         rpc_addr="https://rpc.testnet.near.org",
     )
-    assert result is fake_account
+    assert account is fake_account
+    assert helpers.signing_mode() == "headless"
+
+
+# ─────────────────────────── init_near (no creds) ────────────────
+def test_init_near_no_credentials(monkeypatch):
+    """init_near should create a view-only account when no secrets or wallet."""
+    # Clear any credential env-vars
+    for var in ("NEAR_ACCOUNT_ID", "NEAR_PRIVATE_KEY", "NEAR_RPC"):
+        monkeypatch.delenv(var, raising=False)
     
-def test_set_credentials_raises_if_missing(monkeypatch):
-    monkeypatch.delenv("NEAR_ACCOUNT_ID", raising=False)
-    monkeypatch.delenv("NEAR_PRIVATE_KEY", raising=False)
-    monkeypatch.delenv("NEAR_RPC", raising=False)
-    
+    # Give the helper a deterministic RPC endpoint
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")     
+        
+    # Fake Environment
+    fake_account = MagicMock()
     fake_env = MagicMock()
     
-    with pytest.raises(RuntimeError) as e:
-        helpers.set_credentials(fake_env)
+    # Make sure the helper thinks no wallet signer is present
+    if hasattr(fake_env, "signer_account_id"):
+        delattr(fake_env, "signer_account_id")
     
-    assert "Missing required environment variable" in str(e.value)
+    # set_near should be called with only rpc_addr & a dummy ID
+    fake_env.set_near.return_value = fake_account
+    
+    account = helpers.init_near(fake_env)
+    
+    # Called exactly once with an anon account id
+    fake_env.set_near.assert_called_once_with(
+        account_id="anon",
+        rpc_addr="https://rpc.testnet.near.org",
+    )
+    assert account is fake_account
+    assert helpers.signing_mode() is None
