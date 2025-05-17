@@ -73,7 +73,7 @@ def _set_state(mode: Optional[str], acct: Optional[str]):
     
 def init_near(env: Environment) -> Account:
     """
-    Return (pynear_account, has_headless_creds).
+    Initialize and return a pynear_account (an instance of the Account class).
 
     * headless  -> full signing Account, session.signing_mode = 'headless'
     * wallet    -> view-only Account,  session.signing_mode = 'wallet'
