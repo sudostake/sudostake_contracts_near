@@ -116,6 +116,7 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
     # Guard: agent initialised?
     if _near is None or _env is None:
          _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+         return
     
     # 'headless', 'wallet', or None
     if signing_mode() != "headless":
