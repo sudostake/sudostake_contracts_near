@@ -1,7 +1,8 @@
 # stdlib / typing
 from decimal import Decimal
 from typing import Optional
-import logging, sys
+import logging
+import sys
 
 # external
 from py_near.account import Account
@@ -28,7 +29,7 @@ _logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-def help():
+def show_help_menu():
     """
     Show a concise list of the SudoStake tools.
     """
