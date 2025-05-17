@@ -3,12 +3,30 @@ import asyncio
 from typing import  Awaitable, TypeVar, Optional
 from nearai.agents.environment import Environment
 from py_near.account import Account
+from decimal import Decimal
+
+_DEFAULT_RPC = {
+    "mainnet": "https://rpc.mainnet.near.org",
+    "testnet": "https://rpc.testnet.near.org",
+}
+
+# NEAR uses 10^24 yoctoNEAR per 1 NEAR
+YOCTO_FACTOR: Decimal = Decimal("1e24")
 
 # Type‐var for our coroutine runner
 T = TypeVar("T")
 
-# Global event loop
+# ──────────────────────────────────────────────────────────────
+# GLOBAL STATE
+# ──────────────────────────────────────────────────────────────
 _loop: Optional[asyncio.AbstractEventLoop] = None
+_SIGNING_MODE: Optional[str] = None       # "headless", "wallet", or None
+_ACCOUNT_ID: Optional[str] = None         # the user’s account when known
+
+# expose handy getters
+def signing_mode() -> Optional[str]: return _SIGNING_MODE
+def account_id()   -> Optional[str]: return _ACCOUNT_ID
+# ──────────────────────────────────────────────────────────────
 
 def get_explorer_url() -> str:
     """
@@ -48,30 +66,37 @@ def run_coroutine(coroutine: Awaitable[T]) -> T:
     return ensure_loop().run_until_complete(coroutine)
 
 
-def set_credentials(env: Environment) -> Account:
-    """Set the NEAR connection using environment variables."""
+def _set_state(mode: Optional[str], acct: Optional[str]):
+    global _SIGNING_MODE, _ACCOUNT_ID
+    _SIGNING_MODE, _ACCOUNT_ID = mode, acct
     
-    # Pull credentials from environment variables. All are mandatory.
-    account_id = os.environ.get("NEAR_ACCOUNT_ID")
-    private_key = os.environ.get("NEAR_PRIVATE_KEY")
-    rpc_addr = os.environ.get("NEAR_RPC")
     
-    # Check for missing environment variables.
-    missing = [name for name, val in {
-        "NEAR_ACCOUNT_ID": account_id,
-        "NEAR_PRIVATE_KEY": private_key,
-        "NEAR_RPC": rpc_addr,
-    }.items() if val is None]
+def init_near(env: Environment) -> Account:
+    """
+    Initialize and return a pynear_account (an instance of the Account class).
+
+    * headless  -> full signing Account, session.signing_mode = 'headless'
+    * wallet    -> view-only Account,  session.signing_mode = 'wallet'
+    * neither   -> view-only Account,  signing_mode unset
+    """
     
-    if missing:
-        raise RuntimeError(
-            f"Missing required environment variable(s): {', '.join(missing)}"
-        )
-    
-    # Set the NEAR connection using the environment variables.
-    return env.set_near(
-        account_id=account_id,
-        private_key=private_key,
-        rpc_addr=rpc_addr,
+    account_id  = os.getenv("NEAR_ACCOUNT_ID")
+    private_key = os.getenv("NEAR_PRIVATE_KEY")
+    rpc_addr    = os.getenv("NEAR_RPC") or _DEFAULT_RPC.get(
+        os.getenv("NEAR_NETWORK", "testnet")
     )
     
+    # For headless signing, we need both account_id and private_key
+    if account_id and private_key:
+        near = env.set_near(account_id=account_id,
+                            private_key=private_key,
+                            rpc_addr=rpc_addr)
+        _set_state(mode="headless", acct=account_id)
+        return near
+    
+    # For wallet signing, we only need the account_id
+    signer = getattr(env, "signer_account_id", None)
+    _set_state(mode="wallet" if signer else None, acct=signer)
+    near = env.set_near(account_id=signer or "anon", rpc_addr=rpc_addr)
+    
+    return near
