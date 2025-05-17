@@ -22,20 +22,38 @@ chmod +x build.sh
 ## Test all contracts
 ```
 # Standard test
-chmod +x build.sh factory_test.sh vault_test.sh
-./build.sh && ./factory_test.sh && ./vault_test.sh
+chmod +x factory_test.sh vault_test.sh
+./factory_test.sh && ./vault_test.sh
 ```
 
-## Build SudoStake AI agent
+&nbsp;
+
+## Activate python virtual environment
 ```
 python3 -m venv .venv
 source .venv/bin/activate
+```
+
+&nbsp;
+
+## Test SudoStake AI agent
+```
+pip install -r requirements.txt
+pytest -v
+```
+
+&nbsp;
+
+## Build SudoStake AI agent
+```
 pip install semver
 brew install jq  # macOS  (or: sudo apt install jq on Debian/Ubuntu)
 
 chmod +x ./agent/build.sh
 source ~/.zshrc && ./agent/build.sh patch && sudo -E nearai agent interactive --local
 ```
+
+&nbsp;
 
 ## Run the agent locally in interractive mode
 ```
