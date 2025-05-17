@@ -1,19 +1,25 @@
-import logging
-import sys
-
+# stdlib / typing
 from decimal import Decimal
 from typing import Optional
+import logging, sys
+
+# external
 from py_near.account import Account
 from nearai.agents.environment import Environment
 from nearai.agents.models.tool_definition import MCPTool
 from py_near.models import TransactionResult
-from helpers import run_coroutine, get_explorer_url
 
-# NEAR uses 10^24 yoctoNEAR per 1 NEAR
-YOCTO_FACTOR: Decimal = Decimal("1e24")
+# project helpers
+from helpers import (
+    run_coroutine,
+    get_explorer_url,
+    signing_mode,
+    YOCTO_FACTOR,
+)
 
 # Global NEAR connection
-_near: Optional[Account] = None  # Global NEAR connection, set in run()
+_near: Optional[Account] = None # NEAR connection (headless or wallet)
+_env:  Optional[Environment] = None  # NEAR AI Agent environment
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
@@ -22,14 +28,11 @@ _logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-def help() -> str:
+def help():
     """
-    Show a list of available tools and what they do.
-    
-    Returns:
-      A markdown-formatted help message.
+    Show a concise list of the SudoStake tools.
     """
-    return (
+    _env.add_reply(
         "🛠 **Available Tools:**\n\n"
         "- `vault_state(vault_id)` → View full vault status (ownership, staking, liquidity).\n"
         "- `view_available_balance(vault_id)` → Check withdrawable NEAR from a vault.\n"
@@ -38,30 +41,27 @@ def help() -> str:
     )
     
 
-def vault_state(vault_id: str) -> str:
+def vault_state(vault_id: str) -> None:
     """
-    Fetch and render the on-chain state for a SudoStake vault in Markdown format.
+    Fetch the on-chain state for `vault_id` and send it to the user.
 
     Args:
       vault_id: NEAR account ID of the vault.
-    Returns:
-      A markdown-formatted string showing the vault's state.
-    Raises:
-      RuntimeError: if NEAR connection isn't initialised.
     """
     
     if _near is None:
-        raise RuntimeError("NEAR connection not initialised.")
+        _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+        return
 
     try:
         response = run_coroutine(_near.view(vault_id, "get_vault_state", {}))
-        
         if not response or not hasattr(response, "result") or response.result is None:
-            return f"❌ No data returned for `{vault_id}`. Is the contract deployed?"
+            _env.add_reply(f"❌ No data returned for `{vault_id}`. Is the contract deployed?")
+            return
         
+        # Get the result state from the response
         state = response.result
-        
-        return (
+        _env.add_reply(
             f"✅ **Vault State: `{vault_id}`**\n\n"
             f"| Field                  | Value                       |\n"
             f"|------------------------|-----------------------------|\n"
@@ -75,19 +75,15 @@ def vault_state(vault_id: str) -> str:
         )
     except Exception as e:
         _logger.error("vault_state RPC error for %s: %s", vault_id, e, exc_info=True)
-        return f"❌ Failed to fetch vault state for `{vault_id}`\n\n**Error:** {e}"
+        _env.add_reply(f"❌ Failed to fetch vault state for `{vault_id}`\n\n**Error:** {e}")
 
 
-def view_available_balance(vault_id: str) -> str:
+def view_available_balance(vault_id: str):
     """
     Return the available NEAR balance in a readable sentence.
 
     Args:
       vault_id: NEAR account ID of the vault.
-    Returns:
-      A plain string reporting the withdrawable NEAR balance.
-    Raises:
-      RuntimeError: if NEAR connection isn't initialised.
     """
     
     if _near is None:
@@ -98,33 +94,44 @@ def view_available_balance(vault_id: str) -> str:
         resp = run_coroutine(_near.view(vault_id, "view_available_balance", {}))
         
         if not resp or not hasattr(resp, "result") or resp.result is None:
-            return f"❌ No data returned for `{vault_id}`. Is the contract deployed?"
+            _env.add_reply(f"❌ No data returned for `{vault_id}`. Is the contract deployed?")
         
         yocto = int(resp.result)
         near_amount = Decimal(yocto) / YOCTO_FACTOR
         
-        return f"💰 Vault `{vault_id}` has **{near_amount:.5f} NEAR** available for withdrawal."
+        _env.add_reply(f"💰 Vault `{vault_id}` has **{near_amount:.5f} NEAR** available for withdrawal.")
     except Exception as e:
         _logger.error("view_available_balance RPC error for %s: %s", vault_id, e, exc_info=True)
-        return f"❌ Failed to fetch balance for `{vault_id}`\n\n**Error:** {e}"
+        _env.add_reply(f"❌ Failed to fetch balance for `{vault_id}`\n\n**Error:** {e}")
 
 
-def delegate(vault_id: str, validator: str, amount: str) -> str:
+def delegate(vault_id: str, validator: str, amount: str) -> None:
     """
     Delegate `amount` NEAR from `vault_id` to `validator`.
 
-    Returns:
-      A markdown summary of the transaction result, formatted for display or piping to glow.
+    • Available only in *head-less* mode (NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY).
+    • Replies are pushed with _env.add_reply(); nothing is returned.
     """
     
-    if _near is None:
-        raise RuntimeError("NEAR connection not initialised.")
+    # Guard: agent initialised?
+    if _near is None or _env is None:
+         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
     
-    # Convert NEAR -> yoctoNEAR
+    # 'headless', 'wallet', or None
+    if signing_mode() != "headless":
+        _env.add_reply(
+            "⚠️ I can't sign transactions in this session.\n "
+            "Add `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` to your run's "
+            "secrets, then try again."
+        )
+        return
+    
+    # Parse amount (NEAR → yocto)
     try:
-        yocto = int(Decimal(amount) * YOCTO_FACTOR)
+        yocto = int((Decimal(amount) * YOCTO_FACTOR).quantize(Decimal("1")))
     except Exception:
-        raise ValueError(f"Invalid amount: {amount!r}")
+        _env.add_reply(f"❌ Invalid amount: {amount!r}")
+        return
     
     try:
         # Perform the payable delegate call with 1 yoctoNEAR attached        
@@ -140,49 +147,33 @@ def delegate(vault_id: str, validator: str, amount: str) -> str:
 
         # Extract only the primitive fields we care about
         tx_hash   = response.transaction.hash
-        gas_burnt = response.transaction_outcome.gas_burnt
-        logs      = response.logs
-        
-        # Parse log highlights
-        parsed_logs = []
-        for log in logs:
-            if "lock_acquired" in log:
-                parsed_logs.append("🔒 Lock acquired")
-            elif "lock_released" in log:
-                parsed_logs.append("🔓 Lock released")
-            elif "delegate_completed" in log:
-                parsed_logs.append("✅ Delegate completed")
-            elif "staking" in log.lower():
-                parsed_logs.append("📈 Stake successful")
-            elif "deposited" in log.lower():
-                parsed_logs.append("📥 Deposit received")
-        
-        # Convert to Tgas
-        gas_tgas = gas_burnt / 1e12
-        
-        # Get explorer URL
+        gas_tgas = response.transaction_outcome.gas_burnt / 1e12
         explorer = get_explorer_url()
 
-        return (
-            f"✅ **Delegation Successful**\n"
-            f"Vault [`{vault_id}`]({explorer}/accounts/{vault_id}) delegated **{amount} NEAR** to validator `{validator}`.\n"
-            f"🔹 **Transaction Hash**: [`{tx_hash}`]({explorer}/transactions/{tx_hash})  \n"
-            f"⛽ **Gas Burned**: {gas_tgas:.2f} Tgas\n\n"
-            f"📄 **Logs**:\n" +
-            "\n".join(f"- {line}" for line in parsed_logs) if parsed_logs else "_No log entries found._"
+        _env.add_reply(
+            "✅ **Delegation Successful**\n"
+            f"Vault [`{vault_id}`]({explorer}/accounts/{vault_id}) delegated "
+            f"**{amount} NEAR** to validator `{validator}`.\n"
+            f"🔹 **Transaction Hash**: "
+            f"[`{tx_hash}`]({explorer}/transactions/{tx_hash})\n"
+            f"⛽ **Gas Burned**: {gas_tgas:.2f} Tgas"
         )
+        
     except Exception as e:
         _logger.error(
-            "delegate transaction error for %s → %s (%s NEAR): %s",
+            "delegate error %s → %s (%s NEAR): %s",
             vault_id, validator, amount, e, exc_info=True
         )
         
-        return f"❌ Delegate transaction failed for `{vault_id}` → `{validator}` ({amount} NEAR)\n\n**Error:** {e}"
+        _env.add_reply(
+            f"❌ Delegate failed for `{vault_id}` → `{validator}` "
+            f"({amount} NEAR)\n\n**Error:** {e}"
+        )
   
 
 def register_tools(env: Environment, near: Account) -> list[MCPTool]:
-    global _near
-    _near = near
+    global _near, _env
+    _near, _env = near, env
 
     registry = env.get_tool_registry()
     for tool in (help, vault_state, view_available_balance, delegate):
