@@ -79,7 +79,7 @@ def vault_state(vault_id: str) -> None:
         _env.add_reply(f"❌ Failed to fetch vault state for `{vault_id}`\n\n**Error:** {e}")
 
 
-def view_available_balance(vault_id: str):
+def view_available_balance(vault_id: str) -> None:
     """
     Return the available NEAR balance in a readable sentence.
 
@@ -88,7 +88,8 @@ def view_available_balance(vault_id: str):
     """
     
     if _near is None:
-        raise RuntimeError("NEAR connection not initialised.")
+        _env.add_reply(f"❌ Agent not initialised. Please retry in a few seconds.")
+        return
     
     try:
         # call the on-chain view method (contract should expose "view_available_balance")
@@ -96,6 +97,7 @@ def view_available_balance(vault_id: str):
         
         if not resp or not hasattr(resp, "result") or resp.result is None:
             _env.add_reply(f"❌ No data returned for `{vault_id}`. Is the contract deployed?")
+            return
         
         yocto = int(resp.result)
         near_amount = Decimal(yocto) / YOCTO_FACTOR
