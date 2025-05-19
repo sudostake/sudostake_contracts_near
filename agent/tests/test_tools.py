@@ -252,3 +252,38 @@ def test_mint_vault_missing_event(monkeypatch, mock_near):
     
     err_msg = dummy_env.add_reply.call_args[0][0].lower()
     assert "vault minting failed" in err_msg
+
+
+def test_view_main_balance_headless(monkeypatch, mock_near):
+    """Head-less mode: tool should return the correct NEAR balance."""
+    yocto_five = int(5 * 1e24)
+    mock_near.get_balance = AsyncMock(return_value=yocto_five)
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID", "alice.testnet", raising=False)
+    
+    tools.view_main_balance()
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "**5.00000 NEAR**" in msg
+    mock_near.get_balance.assert_awaited_once()
+    
+
+def test_view_main_balance_no_credentials(monkeypatch, mock_near):
+    """No signing keys: tool should warn and never call get_balance()."""
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
+    
+    tools.view_main_balance()
+    
+    dummy_env.add_reply.assert_called_once()
+    warn = dummy_env.add_reply.call_args[0][0].lower()
+    assert "no signing keys" in warn
+    mock_near.get_balance.assert_not_called()
