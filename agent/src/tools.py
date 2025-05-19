@@ -366,7 +366,7 @@ def undelegate(vault_id: str, validator: str, amount: str) -> None:
     Undelegate `amount` NEAR from `validator` for `vault_id`.
 
     • **Head-less mode only** - requires `NEAR_ACCOUNT_ID` + `NEAR_PRIVATE_KEY`.
-    • Uses the vault contrac's `undelegate` method.  
+    • Uses the vault contract's `undelegate` method.  
     • Sends exactly **one** `_env.add_reply()` message; returns `None`.  
     • Detects and surfaces contract panics (require!/assert! failures).
     """
