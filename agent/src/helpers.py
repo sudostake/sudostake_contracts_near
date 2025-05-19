@@ -12,6 +12,16 @@ _DEFAULT_RPC = {
     "testnet": "https://rpc.testnet.near.org",
 }
 
+# Factory contract addresses per network
+FACTORY_CONTRACTS = {
+    "mainnet": "sudostake.near",
+    "testnet": "vaultmint.testnet",
+}
+
+# Define current vault_minting_fee
+# TODO Later we can dynamically get this from the factory contract itself
+VAULT_MINT_FEE_NEAR: Decimal = Decimal("10")
+
 # NEAR uses 10^24 yoctoNEAR per 1 NEAR
 YOCTO_FACTOR: Decimal = Decimal("1e24")
 

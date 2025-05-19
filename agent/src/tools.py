@@ -3,6 +3,8 @@ from decimal import Decimal
 from typing import Optional
 import logging
 import sys
+import os
+import json
 
 # external
 from py_near.account import Account
@@ -16,6 +18,8 @@ from helpers import (
     get_explorer_url,
     signing_mode,
     YOCTO_FACTOR,
+    FACTORY_CONTRACTS,
+    VAULT_MINT_FEE_NEAR
 )
 
 # Global NEAR connection
@@ -29,17 +33,82 @@ _logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-def show_help_menu():
-    """
-    Show a concise list of the SudoStake tools.
-    """
+def show_help_menu() -> None:
+    """Send a concise list of available SudoStake tools."""
     _env.add_reply(
         "🛠 **Available Tools:**\n\n"
-        "- `vault_state(vault_id)` → View full vault status (ownership, staking, liquidity).\n"
-        "- `view_available_balance(vault_id)` → Check withdrawable NEAR from a vault.\n"
-        "- `delegate(vault_id, validator, amount)` → Stake NEAR to a validator from the vault.\n"
-        "- `show_help_menu()` → Show this help message.\n"
+        "- `vault_state(vault_id)` → View a vault's owner, staking and liquidity status.\n"
+        "- `view_available_balance(vault_id)` → Show withdrawable NEAR for a vault.\n"
+        "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
+        "- `mint_vault()` → Create a new vault (fixed 10 NEAR minting fee).\n"
+        "- `show_help_menu()` → Display this help.\n"
     )
+    
+
+def mint_vault() -> None:
+    """
+    Mint a new SudoStake vault.
+
+    • Head-less signing required (NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY).  
+    • Uses the fixed 10 NEAR fee ( `VAULT_MINT_FEE_NEAR` ).  
+    • Factory account is derived from `NEAR_NETWORK`.
+    """
+    
+    # Guard: agent initialised?
+    if _near is None or _env is None:
+         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+         return
+    
+    # 'headless', 'wallet', or None
+    if signing_mode() != "headless":
+        _env.add_reply(
+            "⚠️ I can't sign transactions in this session.\n "
+            "Add `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` to your run's "
+            "secrets, then try again."
+        )
+        return
+    
+    # Prepare call params
+    factory_id = FACTORY_CONTRACTS[os.getenv("NEAR_NETWORK")]
+    yocto_fee  = int((VAULT_MINT_FEE_NEAR * YOCTO_FACTOR).quantize(VAULT_MINT_FEE_NEAR))
+    
+    try:
+        # Perform the payable delegate call with yocto_fee attached
+        response: TransactionResult = run_coroutine(
+            _near.call(
+                contract_id=factory_id,
+                method_name="mint_vault",
+                args={},
+                gas=300_000_000_000_000,        # 300 Tgas
+                amount=yocto_fee,               # 10 NEAR in yocto
+            )
+        )
+        
+        # Extract tx_hash from the response
+        tx_hash  = response.transaction.hash
+        explorer = get_explorer_url()
+        
+        # Extract new vault account from EVENT_JSON log
+        vault_acct = None
+        for log in response.logs:
+            if log.startswith("EVENT_JSON:"):
+                payload = json.loads(log.split("EVENT_JSON:")[1])
+                if payload.get("event") == "vault_minted":
+                    vault_acct = payload["data"]["vault"]
+                    break
+            
+        if vault_acct is None:
+            raise RuntimeError("vault_minted log not found in transaction logs")
+        
+        _env.add_reply(
+            "🏗️ **Vault Minted**\n"
+            f"🔑 Vault account: [`{vault_acct}`]({explorer}/accounts/{vault_acct})\n"
+            f"🔹 Tx: [{tx_hash}]({explorer}/transactions/{tx_hash})"
+        )
+    
+    except Exception as e:
+        _logger.error("mint_vault error: %s", e, exc_info=True)
+        _env.add_reply(f"❌ Vault minting failed\n\n**Error:** {e}")
     
 
 def vault_state(vault_id: str) -> None:
@@ -180,13 +249,14 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     _near, _env = near, env
 
     registry = env.get_tool_registry()
-    for tool in (show_help_menu, vault_state, view_available_balance, delegate):
+    for tool in (show_help_menu, mint_vault, vault_state, view_available_balance, delegate):
         registry.register_tool(tool)
 
     return [
         registry.get_tool_definition(name)
         for name in (
             "show_help_menu",
+            "mint_vault",
             "vault_state",
             "view_available_balance",
             "delegate",
