@@ -115,7 +115,7 @@ def mint_vault() -> None:
     
     # Prepare call params
     factory_id = FACTORY_CONTRACTS[os.getenv("NEAR_NETWORK")]
-    yocto_fee  = int((VAULT_MINT_FEE_NEAR * YOCTO_FACTOR).quantize(VAULT_MINT_FEE_NEAR))
+    yocto_fee  = int((VAULT_MINT_FEE_NEAR * YOCTO_FACTOR).quantize(Decimal('1')))
     
     try:
         # Perform the payable delegate call with yocto_fee attached
