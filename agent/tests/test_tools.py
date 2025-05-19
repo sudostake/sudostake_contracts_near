@@ -137,3 +137,118 @@ def test_delegate_no_credentials(monkeypatch, mock_near):
 
     warning = dummy_env.add_reply.call_args[0][0]
     assert "can't sign" in warning or "can't sign" in warning.lower()
+    
+    
+def test_mint_vault_headless(monkeypatch, mock_near):
+    """
+    mint_vault() should succeed when head-less credentials exist.
+    It must push a single success message that contains:
+      • the 'Vault Minted' banner
+      • the new vault account id parsed from EVENT_JSON
+      • the tx-hash link
+    """
+    
+    # Pretend the chain call succeeded and emitted the standard macro log
+    mock_near.call = AsyncMock(
+        return_value=MagicMock(
+            transaction=MagicMock(hash="tx123"),
+            transaction_outcome=MagicMock(gas_burnt=1),
+            logs=[
+                'EVENT_JSON:{"event":"vault_minted",'
+                '"data":{"vault":"vault-0.vaultmint.testnet"}}'
+            ],
+        )
+    )
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    # Provide a dummy Environment so tools._env.add_reply works
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    
+    # Force head-less signing mode
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    
+    # Select network → resolves factory_id internally
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+     # Run the tool
+    tools.mint_vault()
+    
+    # Verify exactly one user reply with expected fragments
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Vault Minted" in msg
+    assert "vault-0.vaultmint.testnet" in msg
+    
+    # Verify the expected tx_hash link
+    expected_url = f"{helpers.get_explorer_url()}/transactions/tx123"
+    assert expected_url in msg
+
+
+def test_mint_vault_no_credentials(monkeypatch, mock_near):
+    """
+    When signing is disabled, mint_vault() must:
+      • NOT call _near.call()
+      • emit exactly one warning via _env.add_reply()
+      • return None
+    """
+    
+    # Stub _near so agent init guard passes, but ensure .call is never used
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    # Dummy env to capture reply
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    
+    # No credentials / wallet → signing_mode == None
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
+    
+    # Network still needed for factory lookup
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Invoke tool
+    result = tools.mint_vault()
+    
+    # Assertions
+    assert result is None
+    mock_near.call.assert_not_called()            # nothing signed
+    dummy_env.add_reply.assert_called_once()
+    assert "can't sign" in dummy_env.add_reply.call_args[0][0].lower()
+    
+
+def test_mint_vault_missing_event(monkeypatch, mock_near):
+    """
+    If the tx logs do not include a vault_minted EVENT_JSON entry,
+    mint_vault() must:
+      • send a single error reply via _env.add_reply()
+      • still return None
+    """
+    
+    # Mock py_near.call() with NO event log
+    mock_near.call = AsyncMock(
+        return_value=MagicMock(
+            transaction=MagicMock(hash="tx999"),
+            transaction_outcome=MagicMock(gas_burnt=1),
+            logs=[],          # ← no EVENT_JSON at all
+        )
+    )
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    # Dummy env
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    
+    # Head-less signing enabled
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Run the tool
+    result = tools.mint_vault()
+    
+    # Assertions
+    assert result is None
+    mock_near.call.assert_called_once()           # call attempted
+    dummy_env.add_reply.assert_called_once()      # one error message
+    
+    err_msg = dummy_env.add_reply.call_args[0][0].lower()
+    assert "vault minting failed" in err_msg
