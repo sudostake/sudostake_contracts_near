@@ -413,3 +413,74 @@ def test_undelegate_no_credentials(monkeypatch, mock_near):
     assert "no signing keys" in warning.lower()
     mock_near.call.assert_not_called()
     
+
+def test_withdraw_balance_self(monkeypatch, mock_near):
+    """Withdraw NEAR to the vault's own account (no to_address)."""
+    
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="tx789"),
+        transaction_outcome=MagicMock(gas_burnt=100_000_000_000_000),
+        logs=[],
+        status={}
+    ))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.withdraw_balance("vault-1.testnet", "1", "")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Withdrawal Successful" in msg
+    assert "vault-1.testnet" in msg
+    assert "1 NEAR" in msg
+    assert "tx789" in msg
+    mock_near.call.assert_awaited_once()
+
+
+def test_withdraw_balance_to_address(monkeypatch, mock_near):
+    """Withdraw NEAR to a specific recipient address."""
+    
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="tx999"),
+        transaction_outcome=MagicMock(gas_burnt=150_000_000_000_000),
+        logs=[],
+        status={}
+    ))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.withdraw_balance("vault-1.testnet", "2.5", to_address="palingram.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Withdrawal Successful" in msg
+    assert "palingram.testnet" in msg
+    assert "2.5 NEAR" in msg
+    assert "tx999" in msg
+    mock_near.call.assert_awaited_once()
+    called_args = mock_near.call.call_args[1]["args"]
+    assert called_args["to"] == "palingram.testnet"
+
+
+def test_withdraw_balance_no_creds(monkeypatch, mock_near):
+    """Withdraw should fail when not in headless mode."""
+    
+    monkeypatch.setattr(tools, "_near", mock_near)
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None)  # simulate missing keys
+    
+    tools.withdraw_balance("vault-1.testnet", "1", "")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "can't sign" in msg.lower()
+    mock_near.call.assert_not_called()
