@@ -82,7 +82,8 @@ def test_delegate_headless(monkeypatch, mock_near):
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="abc123"),
         transaction_outcome=MagicMock(gas_burnt=310_000_000_000_000),
-        logs=[]
+        logs=[],
+        status={}
     ))
     monkeypatch.setattr(tools, "_near", mock_near)
     
@@ -157,6 +158,7 @@ def test_mint_vault_headless(monkeypatch, mock_near):
                 'EVENT_JSON:{"event":"vault_minted",'
                 '"data":{"vault":"vault-0.vaultmint.testnet"}}'
             ],
+            status={}
         )
     )
     monkeypatch.setattr(tools, "_near", mock_near)
@@ -230,6 +232,7 @@ def test_mint_vault_missing_event(monkeypatch, mock_near):
             transaction=MagicMock(hash="tx999"),
             transaction_outcome=MagicMock(gas_burnt=1),
             logs=[],          # ← no EVENT_JSON at all
+            status={}
         )
     )
     monkeypatch.setattr(tools, "_near", mock_near)
