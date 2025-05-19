@@ -50,11 +50,13 @@ def test_run_coroutine_executes_async_function():
     assert result == 5
     
     
-# ─────────────────────────── init_near (headless) ─────────────────
+# ----------------------------------------------------------------------
+# init_near happy-path: headless (creds + network)
+# ----------------------------------------------------------------------
 def test_init_near_headless(monkeypatch):
     monkeypatch.setenv("NEAR_ACCOUNT_ID", "alice.testnet")
     monkeypatch.setenv("NEAR_PRIVATE_KEY", "ed25519:fake")
-    monkeypatch.setenv("NEAR_RPC", "https://rpc.testnet.near.org")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     fake_account = MagicMock()
     fake_env = MagicMock()
@@ -71,33 +73,44 @@ def test_init_near_headless(monkeypatch):
     assert helpers.signing_mode() == "headless"
 
 
-# ─────────────────────────── init_near (no creds) ────────────────
-def test_init_near_no_credentials(monkeypatch):
-    """init_near should create a view-only account when no secrets or wallet."""
-    # Clear any credential env-vars
-    for var in ("NEAR_ACCOUNT_ID", "NEAR_PRIVATE_KEY", "NEAR_RPC"):
+# ----------------------------------------------------------------------
+# init_near happy-path: view-only (no creds, but network set)
+# ----------------------------------------------------------------------
+def test_init_near_view_only(monkeypatch):
+    # ensure creds absent
+    for var in ("NEAR_ACCOUNT_ID", "NEAR_PRIVATE_KEY"):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    # Give the helper a deterministic RPC endpoint
-    monkeypatch.setenv("NEAR_NETWORK", "testnet")     
-        
-    # Fake Environment
-    fake_account = MagicMock()
     fake_env = MagicMock()
-    
-    # Make sure the helper thinks no wallet signer is present
-    if hasattr(fake_env, "signer_account_id"):
-        delattr(fake_env, "signer_account_id")
-    
-    # set_near should be called with only rpc_addr & a dummy ID
+    fake_account = MagicMock()
     fake_env.set_near.return_value = fake_account
     
     account = helpers.init_near(fake_env)
     
-    # Called exactly once with an anon account id
     fake_env.set_near.assert_called_once_with(
-        account_id="anon",
         rpc_addr="https://rpc.testnet.near.org",
     )
     assert account is fake_account
     assert helpers.signing_mode() is None
+    
+
+# ----------------------------------------------------------------------
+# init_near error: NEAR_NETWORK missing
+# ----------------------------------------------------------------------
+def test_init_near_missing_network(monkeypatch):
+    for var in ("NEAR_NETWORK", "NEAR_ACCOUNT_ID", "NEAR_PRIVATE_KEY"):
+        monkeypatch.delenv(var, raising=False)
+        
+    with pytest.raises(RuntimeError, match="NEAR_NETWORK must be set"):
+        helpers.init_near(MagicMock())
+
+
+# ----------------------------------------------------------------------
+# init_near error: NEAR_NETWORK invalid
+# ----------------------------------------------------------------------
+def test_init_near_invalid_network(monkeypatch):
+    monkeypatch.setenv("NEAR_NETWORK", "betanet")  # unsupported
+    
+    with pytest.raises(RuntimeError, match="NEAR_NETWORK must be set"):
+        helpers.init_near(MagicMock())

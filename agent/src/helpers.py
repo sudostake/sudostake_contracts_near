@@ -5,6 +5,8 @@ from nearai.agents.environment import Environment
 from py_near.account import Account
 from decimal import Decimal
 
+
+# maybe switch to rpc.fastnear.com
 _DEFAULT_RPC = {
     "mainnet": "https://rpc.mainnet.near.org",
     "testnet": "https://rpc.testnet.near.org",
@@ -73,30 +75,36 @@ def _set_state(mode: Optional[str], acct: Optional[str]):
     
 def init_near(env: Environment) -> Account:
     """
-    Initialize and return a pynear_account (an instance of the Account class).
+    Create a py-near Account.
 
-    * headless  -> full signing Account, session.signing_mode = 'headless'
-    * wallet    -> view-only Account,  session.signing_mode = 'wallet'
-    * neither   -> view-only Account,  signing_mode unset
+    * headless  - secret key in env   → signing_mode = 'headless'
+    * view-only - no key / wallet     → signing_mode None
     """
+    
+    # Check for required NEAR_NETWORK env variable
+    network = os.getenv("NEAR_NETWORK")
+    if network not in _DEFAULT_RPC:
+        raise RuntimeError(
+            "NEAR_NETWORK must be set to 'mainnet' or 'testnet' (got: "
+            f"{network or 'unset'})"
+        )
     
     account_id  = os.getenv("NEAR_ACCOUNT_ID")
     private_key = os.getenv("NEAR_PRIVATE_KEY")
-    rpc_addr    = os.getenv("NEAR_RPC") or _DEFAULT_RPC.get(
-        os.getenv("NEAR_NETWORK", "testnet")
-    )
+    rpc_addr    = _DEFAULT_RPC.get(network)
     
     # For headless signing, we need both account_id and private_key
     if account_id and private_key:
-        near = env.set_near(account_id=account_id,
-                            private_key=private_key,
-                            rpc_addr=rpc_addr)
+        near = env.set_near(
+            account_id=account_id,
+            private_key=private_key,
+            rpc_addr=rpc_addr
+        )
         _set_state(mode="headless", acct=account_id)
         return near
     
-    # For wallet signing, we only need the account_id
+    # view-only fallback
     signer = getattr(env, "signer_account_id", None)
-    _set_state(mode="wallet" if signer else None, acct=signer)
-    near = env.set_near(account_id=signer or "anon", rpc_addr=rpc_addr)
-    
+    _set_state(mode=None, acct=signer)
+    near = env.set_near(rpc_addr=rpc_addr)
     return near
