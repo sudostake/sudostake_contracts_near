@@ -40,10 +40,10 @@ def show_help_menu() -> None:
         "🛠 **Available Tools:**\n\n"
         "- `view_main_balance()` → Show the balance of your main wallet (requires signing keys).\n"
         "- `mint_vault()` → Create a new vault (fixed 10 NEAR minting fee).\n"
+        "- `transfer_near_to_vault(vault_id, amount)` → Send NEAR from your wallet to a vault.\n"
         "- `vault_state(vault_id)` → View a vault's owner, staking and liquidity status.\n"
         "- `view_available_balance(vault_id)` → Show withdrawable NEAR for a vault.\n"
         "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
-       
         "- `show_help_menu()` → Display this help.\n"
     )
 
@@ -155,7 +155,56 @@ def mint_vault() -> None:
         _env.add_reply(f"❌ Vault minting failed\n\n**Error:** {e}")
     
     
-# TODO add transfer_near_to_vault tool
+def transfer_near_to_vault(vault_id: str, amount: str) -> None:
+    """
+    Transfer `amount` NEAR from the main wallet to `vault_id`.
+
+    • Head-less signing required (NEAR_ACCOUNT_ID & NEAR_PRIVATE_KEY).
+    • Uses py-near `send_money` (amount must be in yocto).
+    """
+    
+    # Guard: agent initialised?
+    if _near is None or _env is None:
+         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+         return
+     
+    # 'headless' or None
+    if signing_mode() != "headless":
+        _env.add_reply(
+            "⚠️ No signing keys available. Add `NEAR_ACCOUNT_ID` and "
+            "`NEAR_PRIVATE_KEY` to secrets, then try again."
+        )
+        return
+    
+    # Parse amount (NEAR → yocto)
+    try:
+        yocto = int((Decimal(amount) * YOCTO_FACTOR).quantize(Decimal("1")))
+    except Exception:
+        _env.add_reply(f"❌ Invalid amount: {amount!r}")
+        return
+    
+    try:
+        tx: TransactionResult = run_coroutine(
+            _near.send_money(account_id=vault_id, amount=yocto)
+        )
+        
+        tx_hash  = tx.transaction.hash
+        explorer = get_explorer_url()
+        
+        _env.add_reply(
+            "💸 **Transfer Submitted**\n"
+            f"Sent **{Decimal(amount):.5f} NEAR** to `{vault_id}`.\n"
+            f"🔹 Tx: [{tx_hash}]({explorer}/transactions/{tx_hash})"
+        )
+        
+    except Exception as e:
+        _logger.error(
+            "transfer_near_to_vault error → %s (%s NEAR): %s",
+            vault_id, amount, e, exc_info=True
+        )
+        _env.add_reply(
+            f"❌ Transfer failed for `{vault_id}` ({amount} NEAR)\n\n**Error:** {e}"
+        )
 
 
 def vault_state(vault_id: str) -> None:
@@ -299,7 +348,8 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     for tool in (
         show_help_menu, 
         view_main_balance,
-        mint_vault, 
+        mint_vault,
+        transfer_near_to_vault,
         vault_state, 
         view_available_balance, 
         delegate
@@ -312,6 +362,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
             "show_help_menu",
             "view_main_balance",
             "mint_vault",
+            "transfer_near_to_vault",
             "vault_state",
             "view_available_balance",
             "delegate",
