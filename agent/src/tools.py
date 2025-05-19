@@ -38,7 +38,7 @@ def show_help_menu():
         "- `vault_state(vault_id)` → View full vault status (ownership, staking, liquidity).\n"
         "- `view_available_balance(vault_id)` → Check withdrawable NEAR from a vault.\n"
         "- `delegate(vault_id, validator, amount)` → Stake NEAR to a validator from the vault.\n"
-        "- `help()` → Show this help message.\n"
+        "- `show_help_menu()` → Show this help message.\n"
     )
     
 
@@ -180,13 +180,13 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     _near, _env = near, env
 
     registry = env.get_tool_registry()
-    for tool in (help, vault_state, view_available_balance, delegate):
+    for tool in (show_help_menu, vault_state, view_available_balance, delegate):
         registry.register_tool(tool)
 
     return [
         registry.get_tool_definition(name)
         for name in (
-            "help",
+            "show_help_menu",
             "vault_state",
             "view_available_balance",
             "delegate",
