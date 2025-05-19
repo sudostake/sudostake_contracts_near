@@ -126,7 +126,7 @@ def test_delegate_no_credentials(monkeypatch, mock_near):
     # Force helpers.signing_mode() → None  (no creds, no wallet)
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
     
-    # Ensure explorer URL can format
+    # Ensures correct RPC call
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Call the tool
@@ -137,7 +137,7 @@ def test_delegate_no_credentials(monkeypatch, mock_near):
     dummy_env.add_reply.assert_called_once()     # one warning sent
 
     warning = dummy_env.add_reply.call_args[0][0]
-    assert "can't sign" in warning or "can't sign" in warning.lower()
+    assert "can't sign" in warning.lower()
     
     
 def test_mint_vault_headless(monkeypatch, mock_near):
@@ -343,3 +343,73 @@ def test_transfer_near_no_creds(monkeypatch, mock_near):
     dummy_env.add_reply.assert_called_once()
     assert "no signing keys" in dummy_env.add_reply.call_args[0][0].lower()
     mock_near.send_money.assert_not_called()
+
+
+def test_undelegate_headless(monkeypatch, mock_near):
+    """
+    undelegate() should succeed in head-less mode (secrets present) and
+    embed the tx-hash plus success banner in the returned markdown.
+    """
+    
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="abc123"),
+        transaction_outcome=MagicMock(gas_burnt=310_000_000_000_000),
+        logs=[],
+        status={}
+    ))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    # Inject a dummy Environment so _env guard passes
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    
+    # Force helpers.signing_mode() → "headless"
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    
+    # Needed for explorer link formatting
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Execute the undelegate command
+    result = tools.undelegate("vault-0.testnet", "validator.near", "2")
+    
+    # Assertions
+    assert result is None
+    dummy_env.add_reply.assert_called_once()
+    
+    # grab the message text and check key fragments
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "✅ **Undelegation Successful**" in msg
+    assert "2 NEAR" in msg
+    assert "abc123" in msg
+    
+    
+def test_undelegate_no_credentials(monkeypatch, mock_near):
+    """
+    undelegate() should refuse to sign when signing_mode != 'headless'
+    and emit a single warning via _env.add_reply().
+    """
+    
+    # Provide mocked _near so the init guard passes
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    # Dummy Environment with add_reply
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    
+    # Force helpers.signing_mode() → None  (no creds, no wallet)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
+    
+    # Ensures correct RPC call
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Execute the undelegate command
+    result = tools.undelegate("vault-0.testnet", "validator.near", "2")
+    
+    # Assertions
+    assert result is None                        # function returns nothing
+    dummy_env.add_reply.assert_called_once()     # one warning sent
+    
+    warning = dummy_env.add_reply.call_args[0][0]
+    assert "no signing keys" in warning.lower()
+    mock_near.call.assert_not_called()
+    
