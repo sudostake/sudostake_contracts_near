@@ -45,13 +45,14 @@ def show_help_menu() -> None:
         "- `vault_state(vault_id)` → View a vault's owner, staking and liquidity status.\n"
         "- `view_available_balance(vault_id)` → Show withdrawable NEAR for a vault.\n"
         "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
+        "- `undelegate(vault_id, validator, amount)` → Unstake NEAR from a validator for a vault.\n"
         "- `show_help_menu()` → Display this help.\n"
     )
 
 
 def view_main_balance() -> None:
     """
-    Show the balance of the user’s main wallet (the account whose key
+    Show the balance of the user's main wallet (the account whose key
     is loaded for head-less mode).
 
     • Works only when `signing_mode() == "headless"`.
@@ -359,6 +360,81 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
             f"({amount} NEAR)\n\n**Error:** {e}"
         )
   
+  
+def undelegate(vault_id: str, validator: str, amount: str) -> None:
+    """
+    Undelegate `amount` NEAR from `validator` for `vault_id`.
+
+    • **Head-less mode only** - requires `NEAR_ACCOUNT_ID` + `NEAR_PRIVATE_KEY`.
+    • Uses the vault contrac's `undelegate` method.  
+    • Sends exactly **one** `_env.add_reply()` message; returns `None`.  
+    • Detects and surfaces contract panics (require!/assert! failures).
+    """
+    
+    # Guard: agent initialised?
+    if _near is None or _env is None:
+         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+         return
+    
+    # 'headless' or None
+    if signing_mode() != "headless":
+        _env.add_reply(
+            "⚠️ No signing keys available. Add `NEAR_ACCOUNT_ID` and "
+            "`NEAR_PRIVATE_KEY` to secrets, then try again."
+        )
+        return
+    
+    # Parse amount (NEAR → yocto)
+    try:
+        yocto = int((Decimal(amount) * YOCTO_FACTOR).quantize(Decimal("1")))
+    except Exception:
+        _env.add_reply(f"❌ Invalid amount: {amount!r}")
+        return
+    
+    try:
+        # Perform the payable undelegate call with 1 yoctoNEAR attached        
+        response: TransactionResult = run_coroutine(
+            _near.call(
+                contract_id=vault_id,
+                method_name="undelegate",
+                args={"validator": validator, "amount": str(yocto)},
+                gas=300_000_000_000_000,  # 300 TGas
+                amount=1,                 # 1 yoctoNEAR deposit
+            )
+        )
+        
+        # Inspect execution outcome for Failure / Panic
+        failure = get_failure_message_from_tx_status(response.status)
+        if failure:
+            _env.add_reply(
+                "❌ Undelegate failed with **contract panic**:\n\n"
+                f"> {failure}"
+            )
+            return
+        
+        # Extract only the primitive fields we care about
+        tx_hash  = response.transaction.hash
+        gas_tgas = response.transaction_outcome.gas_burnt / 1e12
+        explorer = get_explorer_url()
+        
+        _env.add_reply(
+            "✅ **Undelegation Successful**\n"
+            f"Vault [`{vault_id}`]({explorer}/accounts/{vault_id}) undelegated "
+            f"**{amount} NEAR** from `{validator}`.\n"
+            f"🔹 **Transaction Hash**: "
+            f"[`{tx_hash}`]({explorer}/transactions/{tx_hash})\n"
+            f"⛽ **Gas Burned**: {gas_tgas:.2f} Tgas"
+        )
+    
+    except Exception as e:
+        _logger.error(
+            "undelegate error %s ← %s (%s NEAR): %s",
+            vault_id, validator, amount, e, exc_info=True
+        )
+        _env.add_reply(
+            f"❌ Undelegate failed for `{vault_id}` ← `{validator}` "
+            f"({amount} NEAR)\n\n**Error:** {e}"
+        )
 
 def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     global _near, _env
@@ -372,7 +448,8 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         transfer_near_to_vault,
         vault_state, 
         view_available_balance, 
-        delegate
+        delegate,
+        undelegate
     ):
         registry.register_tool(tool)
 
@@ -386,5 +463,6 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
             "vault_state",
             "view_available_balance",
             "delegate",
+            "undelegate"
         )
     ]
