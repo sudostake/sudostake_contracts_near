@@ -118,3 +118,13 @@ def init_near(env: Environment) -> Account:
     _set_state(mode=None, acct=signer)
     near = env.set_near(rpc_addr=rpc_addr)
     return near
+
+
+def get_failure_message_from_tx_status(status: dict) -> str:
+    failure = status.get("Failure")
+    if failure:
+        action_err = failure.get("ActionError", {})
+        kind       = action_err.get("kind", {})
+        func_err   = kind.get("FunctionCallError", {})
+        
+        return func_err.get("ExecutionError")

@@ -18,6 +18,7 @@ from helpers import (
     get_explorer_url,
     signing_mode,
     account_id,
+    get_failure_message_from_tx_status,
     YOCTO_FACTOR,
     FACTORY_CONTRACTS,
     VAULT_MINT_FEE_NEAR
@@ -127,6 +128,15 @@ def mint_vault() -> None:
                 amount=yocto_fee,               # 10 NEAR in yocto
             )
         )
+        
+        # Inspect execution outcome for Failure / Panic
+        failure = get_failure_message_from_tx_status(response.status)
+        if failure:
+            _env.add_reply(
+                "❌ Mint vault failed with **contract panic**:\n\n"
+                f"> {failure}"
+            )
+            return
         
         # Extract tx_hash from the response
         tx_hash  = response.transaction.hash
@@ -277,8 +287,9 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
     """
     Delegate `amount` NEAR from `vault_id` to `validator`.
 
-    • Available only in *head-less* mode (NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY).
-    • Replies are pushed with _env.add_reply(); nothing is returned.
+    • **Head-less mode only** - requires `NEAR_ACCOUNT_ID` + `NEAR_PRIVATE_KEY`.  
+    • Sends exactly **one** `_env.add_reply()` message; returns `None`.  
+    • Detects and surfaces contract panics (require!/assert! failures).
     """
     
     # Guard: agent initialised?
@@ -313,9 +324,18 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
                 amount=1,                 # 1 yoctoNEAR deposit
             )
         )
+        
+        # Inspect execution outcome for Failure / Panic
+        failure = get_failure_message_from_tx_status(response.status)
+        if failure:
+            _env.add_reply(
+                "❌ Delegate failed with **contract panic**:\n\n"
+                f"> {failure}"
+            )
+            return
 
         # Extract only the primitive fields we care about
-        tx_hash   = response.transaction.hash
+        tx_hash  = response.transaction.hash
         gas_tgas = response.transaction_outcome.gas_burnt / 1e12
         explorer = get_explorer_url()
 
