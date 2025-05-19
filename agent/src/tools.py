@@ -17,6 +17,7 @@ from helpers import (
     run_coroutine,
     get_explorer_url,
     signing_mode,
+    account_id,
     YOCTO_FACTOR,
     FACTORY_CONTRACTS,
     VAULT_MINT_FEE_NEAR
@@ -37,13 +38,56 @@ def show_help_menu() -> None:
     """Send a concise list of available SudoStake tools."""
     _env.add_reply(
         "🛠 **Available Tools:**\n\n"
+        "- `view_main_balance()` → Show the balance of your main wallet (requires signing keys).\n"
+        "- `mint_vault()` → Create a new vault (fixed 10 NEAR minting fee).\n"
         "- `vault_state(vault_id)` → View a vault's owner, staking and liquidity status.\n"
         "- `view_available_balance(vault_id)` → Show withdrawable NEAR for a vault.\n"
         "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
-        "- `mint_vault()` → Create a new vault (fixed 10 NEAR minting fee).\n"
+       
         "- `show_help_menu()` → Display this help.\n"
     )
+
+
+def view_main_balance() -> None:
+    """
+    Show the balance of the user’s main wallet (the account whose key
+    is loaded for head-less mode).
+
+    • Works only when `signing_mode() == "headless"`.
+    • Replies are sent via `_env.add_reply()`; nothing is returned.
+    """
     
+    # Guard: agent initialised?
+    if _near is None or _env is None:
+         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+         return
+    
+    # 'headless' or None
+    if signing_mode() != "headless":
+        _env.add_reply(
+            "⚠️ No signing keys available. Add `NEAR_ACCOUNT_ID` and "
+            "`NEAR_PRIVATE_KEY` to secrets, then try again."
+        )
+        return
+    
+    # Get the signer's account id
+    acct_id = account_id()
+    
+    try:
+        # py_near.Account.get_balance() -> int with 'amount' in yocto
+        yocto = run_coroutine(_near.get_balance())
+        near_bal = Decimal(yocto) / YOCTO_FACTOR
+        
+        _env.add_reply(
+            f"💼 **Main Account Balance**\n"
+            f"Account: `{acct_id}`\n"
+            f"Available: **{near_bal:.5f} NEAR**"
+        )
+    
+    except Exception as e:
+        _logger.error("view_main_balance error: %s", e, exc_info=True)
+        _env.add_reply(f"❌ Failed to fetch balance\n\n**Error:** {e}")
+
 
 def mint_vault() -> None:
     """
@@ -59,7 +103,7 @@ def mint_vault() -> None:
          _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
          return
     
-    # 'headless', 'wallet', or None
+    # 'headless' or None
     if signing_mode() != "headless":
         _env.add_reply(
             "⚠️ I can't sign transactions in this session.\n "
@@ -110,6 +154,9 @@ def mint_vault() -> None:
         _logger.error("mint_vault error: %s", e, exc_info=True)
         _env.add_reply(f"❌ Vault minting failed\n\n**Error:** {e}")
     
+    
+# TODO add transfer_near_to_vault tool
+
 
 def vault_state(vault_id: str) -> None:
     """
@@ -190,7 +237,7 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
          _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
          return
     
-    # 'headless', 'wallet', or None
+    # 'headless' or None
     if signing_mode() != "headless":
         _env.add_reply(
             "⚠️ I can't sign transactions in this session.\n "
@@ -249,13 +296,21 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     _near, _env = near, env
 
     registry = env.get_tool_registry()
-    for tool in (show_help_menu, mint_vault, vault_state, view_available_balance, delegate):
+    for tool in (
+        show_help_menu, 
+        view_main_balance,
+        mint_vault, 
+        vault_state, 
+        view_available_balance, 
+        delegate
+    ):
         registry.register_tool(tool)
 
     return [
         registry.get_tool_definition(name)
         for name in (
             "show_help_menu",
+            "view_main_balance",
             "mint_vault",
             "vault_state",
             "view_available_balance",
