@@ -287,3 +287,56 @@ def test_view_main_balance_no_credentials(monkeypatch, mock_near):
     warn = dummy_env.add_reply.call_args[0][0].lower()
     assert "no signing keys" in warn
     mock_near.get_balance.assert_not_called()
+
+
+def test_transfer_near_headless(monkeypatch, mock_near):
+    """Head-less: transfer should call send_money and emit success reply."""
+    
+    # Mock the send_money call to simulate a successful transaction
+    mock_near.send_money = AsyncMock(
+        return_value=MagicMock(
+            transaction=MagicMock(hash="tx456"),
+            transaction_outcome=MagicMock(gas_burnt=1),
+            logs=[],
+        )
+    )
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    # Set up a dummy environment to capture the reply
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    
+    # Force helpers.signing_mode() → "headless"
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    
+    # Set the network to testnet for explorer URL formatting
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Call the transfer_near function
+    tools.transfer_near_to_vault("vault-0.testnet", "3")
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Transfer Submitted" in msg and "3.00000 NEAR" in msg
+    assert "tx456" in msg
+    
+    mock_near.send_money.assert_awaited_once()
+    
+
+def test_transfer_near_no_creds(monkeypatch, mock_near):
+    """No signing keys: tool should warn and skip RPC call."""
+    
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
+    
+    tools.transfer_near_to_vault("vault-0.testnet", "2")
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    assert "no signing keys" in dummy_env.add_reply.call_args[0][0].lower()
+    mock_near.send_money.assert_not_called()
