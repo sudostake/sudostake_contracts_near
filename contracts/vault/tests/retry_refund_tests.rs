@@ -83,7 +83,11 @@ pub async fn simulate_failed_claim_vault(
     assert!(state.is_listed_for_takeover, "Vault should still be listed");
 
     // Fetch refund list from the contract
-    let refunds: Vec<(u64, RefundEntry)> = vault.view("get_all_refund_entries").await?.json()?;
+    let refunds: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
 
     // There should be exactly 1 refund entry recorded
     assert_eq!(refunds.len(), 1, "Expected one refund entry");
@@ -122,8 +126,11 @@ async fn test_claim_vault_fallback_when_old_owner_deleted() -> anyhow::Result<()
         .into_result()?;
 
     // Refund list should now be empty
-    let refunds_after: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refunds_after: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
     assert!(
         refunds_after.is_empty(),
         "Refund list should be empty after retry"
@@ -264,8 +271,11 @@ async fn test_retry_refund_removes_expired_entry() -> anyhow::Result<()> {
     );
 
     // Assert refund_list is now empty
-    let refunds_after: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refunds_after: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
     assert!(
         refunds_after.is_empty(),
         "Expected refund_list to be empty after purging expired entry"
@@ -358,8 +368,11 @@ async fn test_cancel_counter_offer_adds_refund_if_user_unregistered() -> anyhow:
     );
 
     // Confirm refund_list has 1 entry for lender
-    let refund_list: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refund_list: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": lender.id() }))
+        .await?
+        .json()?;
     let refund = &refund_list[0].1;
     assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
     assert_eq!(
@@ -447,8 +460,11 @@ async fn test_cancel_liquidity_request_adds_refunds_on_failure() -> anyhow::Resu
         .into_result()?;
 
     // Confirm refund_list has 1 entry for lender
-    let refund_list: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refund_list: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": lender.id() }))
+        .await?
+        .json()?;
     let refund = &refund_list[0].1;
     assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
     assert_eq!(
@@ -573,8 +589,11 @@ async fn test_counter_offer_eviction_adds_refund_on_failed_transfer() -> anyhow:
 
     // Confirm refund_list has 1 entry for proposers[0], who just got
     // kicked out
-    let refund_list: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refund_list: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": proposers[0].id() }))
+        .await?
+        .json()?;
     let refund = &refund_list[0].1;
     assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
     assert_eq!(
@@ -691,8 +710,11 @@ async fn test_accept_offer_adds_refund_for_failed_non_winner() -> anyhow::Result
         .into_result()?;
 
     // Confirm refund_list has 1 entry for other_lender, who was refunded
-    let refund_list: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refund_list: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": other_lender.id() }))
+        .await?
+        .json()?;
     let refund = &refund_list[0].1;
     assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
     assert_eq!(
@@ -809,8 +831,11 @@ async fn test_accept_liquidity_request_adds_refunds_on_failure() -> anyhow::Resu
         .into_result()?;
 
     // Confirm refund_list has 1 entry for lender, who was refunded
-    let refund_list: Vec<(u64, RefundEntry)> =
-        vault.view("get_all_refund_entries").await?.json()?;
+    let refund_list: Vec<(u64, RefundEntry)> = vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": lender.id() }))
+        .await?
+        .json()?;
     let refund = &refund_list[0].1;
     assert_eq!(refund_list.len(), 1, "Expected 1 refund entry");
     assert_eq!(

@@ -48,7 +48,14 @@ impl Vault {
         U128(self.get_storage_cost())
     }
 
-    pub fn get_all_refund_entries(&self) -> Vec<(u64, RefundEntry)> {
-        self.refund_list.iter().collect()
+    pub fn get_refund_entries(&self, account_id: Option<AccountId>) -> Vec<(u64, RefundEntry)> {
+        match account_id {
+            Some(target) => self
+                .refund_list
+                .iter()
+                .filter(|(_, entry)| entry.proposer == target)
+                .collect(),
+            None => self.refund_list.iter().collect(),
+        }
     }
 }
