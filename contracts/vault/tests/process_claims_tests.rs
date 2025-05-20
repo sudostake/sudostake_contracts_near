@@ -136,21 +136,37 @@ async fn test_process_claims_triggers_unstake_after_partial_repayment() -> anyho
         "Accepted offer should still be active"
     );
 
+    // Check validator is listed in active_validators
+    let validator_id = validator.id().to_string();
+    assert!(
+        state.active_validators.contains(&validator_id),
+        "Validator should be listed in active_validators"
+    );
+
+    // Check unstake_entries has correct validator + ~3 NEAR
+    let unstaked_entry = state
+        .unstake_entries
+        .iter()
+        .find(|(v, _)| v == &validator_id)
+        .expect("Expected unstake entry for validator");
+    let rounded = unstaked_entry.1.amount / 10u128.pow(24);
+    assert_eq!(rounded, 3, "Expected 3 NEAR in unstake_entries");
+
+    // Check epoch is non-zero
+    assert!(state.current_epoch > 0, "Current epoch should be set");
+
+    // Check liquidation flag (should be true after expiration + process_claims)
+    assert!(
+        state.liquidation.is_some(),
+        "Vault should be in liquidation mode"
+    );
+
     // Available balance should now be 0 (after partial repayment)
     let remaining: U128 = vault.view("view_available_balance").await?.json()?;
     assert_eq!(
         remaining.0, 0,
         "Expected available balance to be 0 after partial repayment"
     );
-
-    // Check vault state to make sure there is an unstaked entry that is ~3NEAR
-    let entry: UnstakeEntry = vault
-        .view("get_unstake_entry")
-        .args_json(json!({ "validator": validator.id() }))
-        .await?
-        .json()?;
-    let rounded = entry.amount / 10u128.pow(24);
-    assert_eq!(rounded, 3, "Expected 3 NEAR to be unstaked");
 
     Ok(())
 }

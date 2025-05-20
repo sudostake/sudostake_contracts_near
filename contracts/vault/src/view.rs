@@ -3,7 +3,7 @@
 use crate::contract::{Vault, VaultExt};
 use crate::types::{CounterOffer, RefundEntry, UnstakeEntry, VaultViewState};
 use near_sdk::json_types::U128;
-use near_sdk::{near_bindgen, AccountId};
+use near_sdk::{env, near_bindgen, AccountId};
 
 #[near_bindgen]
 impl Vault {
@@ -12,10 +12,13 @@ impl Vault {
             owner: self.owner.clone(),
             index: self.index,
             version: self.version,
-            pending_liquidity_request: self.pending_liquidity_request.clone(),
             liquidity_request: self.liquidity_request.clone(),
             accepted_offer: self.accepted_offer.clone(),
             is_listed_for_takeover: self.is_listed_for_takeover,
+            active_validators: self.active_validators.to_vec(),
+            unstake_entries: self.unstake_entries.iter().collect(),
+            liquidation: self.liquidation.clone(),
+            current_epoch: env::epoch_height(),
         }
     }
 

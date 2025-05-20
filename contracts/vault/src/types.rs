@@ -63,7 +63,7 @@ pub enum ProcessingState {
 }
 
 /// Tracks how much NEAR is unstaked and the epoch when it will be available.
-#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, serde::Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct UnstakeEntry {
     pub amount: u128,
@@ -92,10 +92,13 @@ pub struct VaultViewState {
     pub owner: AccountId,
     pub index: u64,
     pub version: u64,
-    pub pending_liquidity_request: Option<PendingLiquidityRequest>,
     pub liquidity_request: Option<LiquidityRequest>,
     pub accepted_offer: Option<AcceptedOffer>,
     pub is_listed_for_takeover: bool,
+    pub active_validators: Vec<AccountId>,
+    pub unstake_entries: Vec<(AccountId, UnstakeEntry)>,
+    pub liquidation: Option<Liquidation>,
+    pub current_epoch: EpochHeight,
 }
 
 /// Liquidity request under construction — not yet validated or accepted.
