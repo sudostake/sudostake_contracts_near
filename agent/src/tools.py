@@ -61,11 +61,6 @@ def view_main_balance() -> None:
     • Replies are sent via `_env.add_reply()`; nothing is returned.
     """
     
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
-    
     # 'headless' or None
     if signing_mode() != "headless":
         _env.add_reply(
@@ -101,11 +96,6 @@ def mint_vault() -> None:
     • Uses the fixed 10 NEAR fee ( `VAULT_MINT_FEE_NEAR` ).  
     • Factory account is derived from `NEAR_NETWORK`.
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     # 'headless' or None
     if signing_mode() != "headless":
@@ -175,11 +165,6 @@ def transfer_near_to_vault(vault_id: str, amount: str) -> None:
     • Head-less signing required (NEAR_ACCOUNT_ID & NEAR_PRIVATE_KEY).
     • Uses py-near `send_money` (amount must be in yocto).
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
      
     # 'headless' or None
     if signing_mode() != "headless":
@@ -227,10 +212,6 @@ def vault_state(vault_id: str) -> None:
     Args:
       vault_id: NEAR account ID of the vault.
     """
-    
-    if _near is None:
-        _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-        return
 
     try:
         response = run_coroutine(_near.view(vault_id, "get_vault_state", {}))
@@ -265,10 +246,6 @@ def view_available_balance(vault_id: str) -> None:
       vault_id: NEAR account ID of the vault.
     """
     
-    if _near is None:
-        _env.add_reply(f"❌ Agent not initialised. Please retry in a few seconds.")
-        return
-    
     try:
         # call the on-chain view method (contract should expose "view_available_balance")
         resp = run_coroutine(_near.view(vault_id, "view_available_balance", {}))
@@ -294,11 +271,6 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
     • Sends exactly **one** `_env.add_reply()` message; returns `None`.  
     • Detects and surfaces contract panics (require!/assert! failures).
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     # 'headless' or None
     if signing_mode() != "headless":
@@ -373,11 +345,6 @@ def undelegate(vault_id: str, validator: str, amount: str) -> None:
     • Detects and surfaces contract panics (require!/assert! failures).
     """
     
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
-    
     # 'headless' or None
     if signing_mode() != "headless":
         _env.add_reply(
@@ -447,11 +414,6 @@ def withdraw_balance(vault_id: str, amount: str, to_address: str) -> None:
     • Uses 1 yoctoNEAR for call.
     • Calls the `withdraw_balance` method on the vault contract.
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     # 'headless' or None
     if signing_mode() != "headless":
@@ -526,11 +488,6 @@ def view_vault_status_with_validator(vault_id: str, validator_id: str) -> None:
       - Unstaked balance
       - Withdrawable status
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     try:
         response = run_coroutine(
