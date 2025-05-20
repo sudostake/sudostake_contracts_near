@@ -575,3 +575,101 @@ def test_view_vault_status_with_validator_exception(monkeypatch, mock_near):
     assert "vault-y.testnet" in msg
     assert "broken.pool.testnet" in msg
     assert "Contract not deployed" in msg
+
+
+def test_claim_unstaked_balance_success(monkeypatch, mock_near):
+    """Should successfully call claim_unstaked and return a transaction link."""
+    
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="claimtx123"),
+        transaction_outcome=MagicMock(gas_burnt=120_000_000_000_000),
+        logs=[],
+        status={}
+    ))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Claim Initiated" in msg
+    assert "vault-1.vaultmint.testnet" in msg
+    assert "aurora.pool.f863973.m0" in msg
+    assert "claimtx123" in msg
+    
+
+def test_claim_unstaked_balance_contract_panic(monkeypatch, mock_near):
+    """Should detect contract panic and emit the failure message."""
+    
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="panic123"),
+        transaction_outcome=MagicMock(gas_burnt=130_000_000_000_000),
+        logs=[],
+        status={
+            "Failure": {
+                "ActionError": {
+                    "kind": {
+                        "FunctionCallError": {
+                            "ExecutionError": "Unstaked funds not yet claimable"
+                        }
+                    }
+                }
+            }
+        }
+    ))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Claim failed with" in msg
+    assert "Unstaked funds not yet claimable" in msg
+    
+
+def test_claim_unstaked_balance_no_credentials(monkeypatch, mock_near):
+    """Should refuse to sign when not in headless mode."""
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None)  # Simulate missing creds
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0].lower()
+    assert "can't sign" in msg
+    mock_near.call.assert_not_called()
+
+
+def test_claim_unstaked_balance_runtime_exception(monkeypatch, mock_near):
+    """Should catch unexpected exceptions and display error message."""
+    
+    mock_near.call = AsyncMock(side_effect=RuntimeError("Network error: node unreachable"))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Failed to claim unstaked NEAR" in msg
+    assert "Network error" in msg
+    assert "vault-1.vaultmint.testnet" in msg
+    assert "aurora.pool.f863973.m0" in msg

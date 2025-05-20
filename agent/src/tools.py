@@ -48,6 +48,7 @@ def show_help_menu() -> None:
         "- `undelegate(vault_id, validator, amount)` → Unstake NEAR from a validator for a vault.\n"
         "- `withdraw_balance(vault_id, amount, to_address=None)` → Withdraw NEAR from the vault. Optionally specify a recipient.\n"
         "- `view_vault_status_with_validator(vault_id, validator_id)` → Check vault's staking info with a validator (staked, unstaked, can withdraw).\n"
+        "- `claim_unstaked_balance(vault_id, validator)` → Claim matured unstaked NEAR from a validator.\n"
         "- `show_help_menu()` → Display this help.\n"
     )
 
@@ -521,6 +522,58 @@ def view_vault_status_with_validator(vault_id: str, validator_id: str) -> None:
         )
 
 
+def claim_unstaked_balance(vault_id: str, validator: str) -> None:
+    """
+    Call the `claim_unstaked` method on the vault to withdraw matured unstaked NEAR.
+
+    • Must be the vault owner.
+    • Requires 1 yoctoNEAR.
+    • Will only succeed if the unstaked balance is available.
+    """
+    
+    # 'headless' or None
+    if signing_mode() != "headless":
+        _env.add_reply(
+            "⚠️ I can't sign transactions in this session.\n"
+            "Add `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` to your run's "
+            "secrets, then try again."
+        )
+        return
+    
+    try:
+        response: TransactionResult = run_coroutine(
+            _near.call(
+                contract_id=vault_id,
+                method_name="claim_unstaked",
+                args={"validator": validator},
+                gas=300_000_000_000_000,
+                amount=1  # 1 yoctoNEAR
+            )
+        )
+        
+        failure = get_failure_message_from_tx_status(response.status)
+        if failure:
+            _env.add_reply(
+                f"❌ Claim failed with **contract panic**:\n\n> {failure}"
+            )
+            return
+        
+        tx_hash = response.transaction.hash
+        explorer = get_explorer_url()
+        
+        _env.add_reply(
+            "📥 **Claim Initiated**\n"
+            f"Vault `{vault_id}` is claiming matured unstaked NEAR from `{validator}`.\n"
+            f"🔹 [View Tx]({explorer}/transactions/{tx_hash})"
+        )
+    
+    except Exception as e:
+        _logger.error("claim_unstaked_balance error: %s", e, exc_info=True)
+        _env.add_reply(
+            f"❌ Failed to claim unstaked NEAR from `{validator}` for `{vault_id}`\n\n**Error:** {e}"
+        )
+        
+
 def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     global _near, _env
     _near, _env = near, env
@@ -537,6 +590,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         undelegate,
         withdraw_balance,
         view_vault_status_with_validator,
+        claim_unstaked_balance,
     ):
         registry.register_tool(tool)
 
@@ -552,6 +606,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
             "delegate",
             "undelegate",
             "withdraw_balance",
-            "view_vault_status_with_validator"
+            "view_vault_status_with_validator",
+            "claim_unstaked_balance"
         )
     ]
