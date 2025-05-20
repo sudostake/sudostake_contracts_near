@@ -47,6 +47,7 @@ def show_help_menu() -> None:
         "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
         "- `undelegate(vault_id, validator, amount)` → Unstake NEAR from a validator for a vault.\n"
         "- `withdraw_balance(vault_id, amount, to_address=None)` → Withdraw NEAR from the vault. Optionally specify a recipient.\n"
+        "- `view_vault_status_with_validator(vault_id, validator_id)` → Check vault's staking info with a validator (staked, unstaked, can withdraw).\n"
         "- `show_help_menu()` → Display this help.\n"
     )
 
@@ -59,11 +60,6 @@ def view_main_balance() -> None:
     • Works only when `signing_mode() == "headless"`.
     • Replies are sent via `_env.add_reply()`; nothing is returned.
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     # 'headless' or None
     if signing_mode() != "headless":
@@ -100,11 +96,6 @@ def mint_vault() -> None:
     • Uses the fixed 10 NEAR fee ( `VAULT_MINT_FEE_NEAR` ).  
     • Factory account is derived from `NEAR_NETWORK`.
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     # 'headless' or None
     if signing_mode() != "headless":
@@ -174,11 +165,6 @@ def transfer_near_to_vault(vault_id: str, amount: str) -> None:
     • Head-less signing required (NEAR_ACCOUNT_ID & NEAR_PRIVATE_KEY).
     • Uses py-near `send_money` (amount must be in yocto).
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
      
     # 'headless' or None
     if signing_mode() != "headless":
@@ -226,10 +212,6 @@ def vault_state(vault_id: str) -> None:
     Args:
       vault_id: NEAR account ID of the vault.
     """
-    
-    if _near is None:
-        _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-        return
 
     try:
         response = run_coroutine(_near.view(vault_id, "get_vault_state", {}))
@@ -264,10 +246,6 @@ def view_available_balance(vault_id: str) -> None:
       vault_id: NEAR account ID of the vault.
     """
     
-    if _near is None:
-        _env.add_reply(f"❌ Agent not initialised. Please retry in a few seconds.")
-        return
-    
     try:
         # call the on-chain view method (contract should expose "view_available_balance")
         resp = run_coroutine(_near.view(vault_id, "view_available_balance", {}))
@@ -293,11 +271,6 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
     • Sends exactly **one** `_env.add_reply()` message; returns `None`.  
     • Detects and surfaces contract panics (require!/assert! failures).
     """
-    
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
     
     # 'headless' or None
     if signing_mode() != "headless":
@@ -372,11 +345,6 @@ def undelegate(vault_id: str, validator: str, amount: str) -> None:
     • Detects and surfaces contract panics (require!/assert! failures).
     """
     
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
-    
     # 'headless' or None
     if signing_mode() != "headless":
         _env.add_reply(
@@ -447,11 +415,6 @@ def withdraw_balance(vault_id: str, amount: str, to_address: str) -> None:
     • Calls the `withdraw_balance` method on the vault contract.
     """
     
-    # Guard: agent initialised?
-    if _near is None or _env is None:
-         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
-         return
-    
     # 'headless' or None
     if signing_mode() != "headless":
         _env.add_reply(
@@ -514,6 +477,48 @@ def withdraw_balance(vault_id: str, amount: str, to_address: str) -> None:
             vault_id, to_address, amount, e, exc_info=True
         )
         _env.add_reply(f"❌ Withdraw failed for `{vault_id}` → `{to_address or 'self'}`\n\n**Error:** {e}")
+        
+        
+def view_vault_status_with_validator(vault_id: str, validator_id: str) -> None:
+    """
+    Query the `get_account` view method on a validator contract to get vault staking info.
+
+    Shows:
+      - Staked balance
+      - Unstaked balance
+      - Withdrawable status
+    """
+    
+    try:
+        response = run_coroutine(
+            _near.view(
+                contract_id=validator_id,
+                method_name="get_account",
+                args={"account_id": vault_id}
+            )
+        )
+        
+        if not response or not hasattr(response, "result") or response.result is None:
+            _env.add_reply(f"❌ No data returned for `{vault_id}` at validator `{validator_id}`.")
+            return
+        
+        data = response.result
+        staked = Decimal(data["staked_balance"]) / YOCTO_FACTOR
+        unstaked = Decimal(data["unstaked_balance"]) / YOCTO_FACTOR
+        can_withdraw = "✅ Yes" if data["can_withdraw"] else "❌ No"
+        
+        _env.add_reply(
+            f"📊 **Delegation Status** for `{vault_id}` at `{validator_id}`\n\n"
+            f"- **Staked Balance**: {staked:.5f} NEAR\n"
+            f"- **Unstaked Balance**: {unstaked:.5f} NEAR\n"
+            f"- **Withdrawable Now**: {can_withdraw}"
+        )
+        
+    except Exception as e:
+        _logger.error("view_vault_status_with_validator error: %s", e, exc_info=True)
+        _env.add_reply(
+            f"❌ Failed to get delegation status for `{vault_id}` at `{validator_id}`\n\n**Error:** {e}"
+        )
 
 
 def register_tools(env: Environment, near: Account) -> list[MCPTool]:
@@ -531,6 +536,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         delegate,
         undelegate,
         withdraw_balance,
+        view_vault_status_with_validator,
     ):
         registry.register_tool(tool)
 
@@ -546,5 +552,6 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
             "delegate",
             "undelegate",
             "withdraw_balance",
+            "view_vault_status_with_validator"
         )
     ]
