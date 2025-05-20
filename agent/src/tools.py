@@ -47,6 +47,7 @@ def show_help_menu() -> None:
         "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
         "- `undelegate(vault_id, validator, amount)` → Unstake NEAR from a validator for a vault.\n"
         "- `withdraw_balance(vault_id, amount, to_address=None)` → Withdraw NEAR from the vault. Optionally specify a recipient.\n"
+        "- `view_vault_status_with_validator(vault_id, validator_id)` → Check vault's staking info with a validator (staked, unstaked, can withdraw).\n"
         "- `show_help_menu()` → Display this help.\n"
     )
 
@@ -514,6 +515,53 @@ def withdraw_balance(vault_id: str, amount: str, to_address: str) -> None:
             vault_id, to_address, amount, e, exc_info=True
         )
         _env.add_reply(f"❌ Withdraw failed for `{vault_id}` → `{to_address or 'self'}`\n\n**Error:** {e}")
+        
+        
+def view_vault_status_with_validator(vault_id: str, validator_id: str) -> None:
+    """
+    Query the `get_account` view method on a validator contract to get vault staking info.
+
+    Shows:
+      - Staked balance
+      - Unstaked balance
+      - Withdrawable status
+    """
+    
+    # Guard: agent initialised?
+    if _near is None or _env is None:
+         _env.add_reply("❌ Agent not initialised. Please retry in a few seconds.")
+         return
+    
+    try:
+        response = run_coroutine(
+            _near.view(
+                contract_id=validator_id,
+                method_name="get_account",
+                args={"account_id": vault_id}
+            )
+        )
+        
+        if not response or not hasattr(response, "result") or response.result is None:
+            _env.add_reply(f"❌ No data returned for `{vault_id}` at validator `{validator_id}`.")
+            return
+        
+        data = response.result
+        staked = Decimal(data["staked_balance"]) / YOCTO_FACTOR
+        unstaked = Decimal(data["unstaked_balance"]) / YOCTO_FACTOR
+        can_withdraw = "✅ Yes" if data["can_withdraw"] else "❌ No"
+        
+        _env.add_reply(
+            f"📊 **Delegation Status** for `{vault_id}` at `{validator_id}`\n\n"
+            f"- **Staked Balance**: {staked:.5f} NEAR\n"
+            f"- **Unstaked Balance**: {unstaked:.5f} NEAR\n"
+            f"- **Withdrawable Now**: {can_withdraw}"
+        )
+        
+    except Exception as e:
+        _logger.error("view_vault_status_with_validator error: %s", e, exc_info=True)
+        _env.add_reply(
+            f"❌ Failed to get delegation status for `{vault_id}` at `{validator_id}`\n\n**Error:** {e}"
+        )
 
 
 def register_tools(env: Environment, near: Account) -> list[MCPTool]:
@@ -531,6 +579,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         delegate,
         undelegate,
         withdraw_balance,
+        view_vault_status_with_validator,
     ):
         registry.register_tool(tool)
 
@@ -546,5 +595,6 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
             "delegate",
             "undelegate",
             "withdraw_balance",
+            "view_vault_status_with_validator"
         )
     ]
