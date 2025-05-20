@@ -484,3 +484,94 @@ def test_withdraw_balance_no_creds(monkeypatch, mock_near):
     msg = dummy_env.add_reply.call_args[0][0]
     assert "can't sign" in msg.lower()
     mock_near.call.assert_not_called()
+
+
+def test_view_vault_status_with_validator_success(monkeypatch, mock_near):
+    """Should display staked/unstaked/can_withdraw for a given vault+validator pair."""
+    
+    # Simulated return from staking pool
+    mock_near.view = AsyncMock(return_value=MagicMock(result={
+        "account_id": "vault-1.vaultmint.testnet",
+        "staked_balance": str(int(Decimal("3") * Decimal("1e24"))),
+        "unstaked_balance": str(int(Decimal("1.5") * Decimal("1e24"))),
+        "can_withdraw": True
+    }))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.view_vault_status_with_validator("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Delegation Status" in msg
+    assert "3.00000 NEAR" in msg
+    assert "1.50000 NEAR" in msg
+    assert "✅ Yes" in msg
+    
+
+def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_near):
+    """Should display ❌ No when can_withdraw is False."""
+    
+    mock_near.view = AsyncMock(return_value=MagicMock(result={
+        "account_id": "vault-2.vaultmint.testnet",
+        "staked_balance": str(int(Decimal("5") * Decimal("1e24"))),
+        "unstaked_balance": str(int(Decimal("0.25") * Decimal("1e24"))),
+        "can_withdraw": False
+    }))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.view_vault_status_with_validator("vault-2.vaultmint.testnet", "meta.pool.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "5.00000 NEAR" in msg
+    assert "0.25000 NEAR" in msg
+    assert "❌ No" in msg
+    
+
+def test_view_vault_status_with_validator_no_data(monkeypatch, mock_near):
+    """Should show error when validator returns no data for vault."""
+    
+    mock_near.view = AsyncMock(return_value=MagicMock(result=None))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.view_vault_status_with_validator("vault-x.testnet", "unknown.pool.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "No data returned" in msg
+    assert "vault-x.testnet" in msg
+    assert "unknown.pool.testnet" in msg
+
+
+def test_view_vault_status_with_validator_exception(monkeypatch, mock_near):
+    """Should catch and report unexpected RPC errors (e.g. network or contract panic)."""
+    
+    mock_near.view = AsyncMock(side_effect=RuntimeError("Contract not deployed"))
+    monkeypatch.setattr(tools, "_near", mock_near)
+    
+    dummy_env = MagicMock()
+    monkeypatch.setattr(tools, "_env", dummy_env)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    tools.view_vault_status_with_validator("vault-y.testnet", "broken.pool.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Failed to get delegation status" in msg
+    assert "vault-y.testnet" in msg
+    assert "broken.pool.testnet" in msg
+    assert "Contract not deployed" in msg
