@@ -16,6 +16,7 @@ const FT_TOTAL_SUPPLY: &str = "1000000000000"; // 1,000,000 USDC (1_000_000 × 1
 const FT_DECIMALS: u8 = 6;
 pub const VAULT_CALL_GAS: Gas = Gas::from_tgas(300);
 pub const MAX_COUNTER_OFFERS: u64 = 7;
+pub const YOCTO_NEAR: u128 = 10u128.pow(24);
 
 pub struct InstantiateTestVaultResult {
     pub execution_result: ExecutionFinalResult,

@@ -2,7 +2,7 @@ use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
 use test_utils::{
     create_named_test_validator, request_and_accept_liquidity, setup_contracts,
-    setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
+    setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS, YOCTO_NEAR,
 };
 
 #[path = "test_utils.rs"]
@@ -149,7 +149,7 @@ async fn test_process_claims_triggers_unstake_after_partial_repayment() -> anyho
         .iter()
         .find(|(v, _)| v == &validator_id)
         .expect("Expected unstake entry for validator");
-    let rounded = unstaked_entry.1.amount / 10u128.pow(24);
+    let rounded = unstaked_entry.1.amount / YOCTO_NEAR;
     assert_eq!(rounded, 3, "Expected 3 NEAR in unstake_entries");
 
     // Check epoch is non-zero
@@ -409,7 +409,7 @@ async fn test_process_claims_triggers_fallback_unstake_when_maturing_insufficien
         .args_json(json!({ "validator": validator.id() }))
         .await?
         .json()?;
-    let unstaked_rounded = entry.amount / 10u128.pow(24);
+    let unstaked_rounded = entry.amount / YOCTO_NEAR;
     assert_eq!(
         unstaked_rounded, 3,
         "Expected ~3 NEAR to be in unstake_entries, got: {} yocto",
@@ -499,7 +499,7 @@ async fn test_process_claims_triggers_fallback_unstake_when_matured_insufficient
         .args_json(json!({ "validator": validator.id() }))
         .await?
         .json()?;
-    let unstaked_rounded = entry.amount / 10u128.pow(24);
+    let unstaked_rounded = entry.amount / YOCTO_NEAR;
     assert_eq!(
         unstaked_rounded, 1,
         "Expected ~1 NEAR to be in unstake_entries, got: {} yocto",
@@ -704,7 +704,7 @@ async fn test_process_claims_prunes_zero_staked_validators() -> anyhow::Result<(
         .args_json(json!({ "validator": validator_1.id() }))
         .await?
         .json()?;
-    let unstaked_rounded = entry.amount / 10u128.pow(24);
+    let unstaked_rounded = entry.amount / YOCTO_NEAR;
     assert_eq!(
         unstaked_rounded, 3,
         "Expected ~3 NEAR to be in unstake_entries for validator_1, got: {} yocto",
@@ -717,7 +717,7 @@ async fn test_process_claims_prunes_zero_staked_validators() -> anyhow::Result<(
         .args_json(json!({ "validator": validator_2.id() }))
         .await?
         .json()?;
-    let unstaked_rounded = entry.amount / 10u128.pow(24);
+    let unstaked_rounded = entry.amount / YOCTO_NEAR;
     assert_eq!(
         unstaked_rounded, 1,
         "Expected ~1 NEAR to be in unstake_entries for validator_2, got: {} yocto",
