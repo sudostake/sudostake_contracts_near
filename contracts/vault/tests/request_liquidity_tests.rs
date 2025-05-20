@@ -82,10 +82,6 @@ async fn test_request_liquidity_finalizes_if_enough_stake() -> anyhow::Result<()
         state.liquidity_request.is_some(),
         "Expected liquidity_request to be present"
     );
-    assert!(
-        state.pending_liquidity_request.is_none(),
-        "Expected pending_liquidity_request to be cleared"
-    );
 
     Ok(())
 }

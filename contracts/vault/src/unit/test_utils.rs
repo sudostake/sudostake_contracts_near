@@ -6,6 +6,8 @@ use crate::{
     types::{LiquidityRequest, RefundEntry},
 };
 
+pub const YOCTO_NEAR: u128 = 10u128.pow(24);
+
 pub fn alice() -> AccountId {
     "alice.near".parse().unwrap()
 }

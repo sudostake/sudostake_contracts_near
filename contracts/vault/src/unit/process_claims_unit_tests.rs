@@ -1,6 +1,7 @@
 use near_sdk::{env, testing_env, AccountId, NearToken};
 use test_utils::{
     alice, create_valid_liquidity_request, get_context, get_context_with_timestamp, owner,
+    YOCTO_NEAR,
 };
 
 use crate::{
@@ -333,7 +334,7 @@ fn test_process_claims_does_partial_repayment_if_insufficient_balance() {
         .unwrap()
         .liquidated
         .as_yoctonear();
-    assert!(repaid > 0 && repaid < 5 * 10u128.pow(24));
+    assert!(repaid > 0 && repaid < 5 * YOCTO_NEAR);
 }
 
 #[test]
@@ -375,7 +376,7 @@ fn test_process_claims_handles_matured_unstaked_entries() {
     vault.unstake_entries.insert(
         &validator,
         &UnstakeEntry {
-            amount: 3 * 10u128.pow(24),
+            amount: 3 * YOCTO_NEAR,
             epoch_height: env::epoch_height() - NUM_EPOCHS_TO_UNLOCK,
         },
     );
@@ -435,7 +436,7 @@ fn test_process_claims_waits_if_enough_is_maturing() {
     vault.unstake_entries.insert(
         &validator,
         &UnstakeEntry {
-            amount: 5 * 10u128.pow(24),
+            amount: 5 * YOCTO_NEAR,
             epoch_height: env::epoch_height(),
         },
     );
@@ -495,7 +496,7 @@ fn test_process_claims_triggers_unstake_if_maturing_insufficient() {
     vault.unstake_entries.insert(
         &validator,
         &UnstakeEntry {
-            amount: 1 * 10u128.pow(24),
+            amount: 1 * YOCTO_NEAR,
             epoch_height: env::epoch_height(),
         },
     );
