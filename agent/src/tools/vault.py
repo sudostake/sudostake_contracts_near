@@ -1,27 +1,39 @@
-import json
-
-from decimal import Decimal
+import textwrap
 from logging import Logger
 from .context import get_env, get_near, get_logger
 from helpers import run_coroutine
 
 def show_help_menu() -> None:
-    """Send a concise list of available SudoStake tools."""
+    """
+    Display a list of supported commands the agent can respond to.
+    This is shown when the user types `help`.
+    """
     
-    get_env().add_reply(
-        "🛠 **Available Tools:**\n\n"
-        "- `view_main_balance()` → Show the balance of your main wallet (requires signing keys).\n"
-        "- `mint_vault()` → Create a new vault (fixed 10 NEAR minting fee).\n"
-        "- `transfer_near_to_vault(vault_id, amount)` → Send NEAR from your wallet to a vault.\n"
-        "- `vault_state(vault_id)` → View a vault's owner, staking and liquidity status.\n"
-        "- `view_available_balance(vault_id)` → Show withdrawable NEAR for a vault.\n"
-        "- `delegate(vault_id, validator, amount)` → Stake NEAR from the vault to a validator.\n"
-        "- `undelegate(vault_id, validator, amount)` → Unstake NEAR from a validator for a vault.\n"
-        "- `withdraw_balance(vault_id, amount, to_address=None)` → Withdraw NEAR from the vault. Optionally specify a recipient.\n"
-        "- `view_vault_status_with_validator(vault_id, validator_id)` → Check vault's staking info with a validator (staked, unstaked, can withdraw).\n"
-        "- `claim_unstaked_balance(vault_id, validator)` → Claim matured unstaked NEAR from a validator.\n"
-        "- `show_help_menu()` → Display this help.\n"
-    )
+    help_text = textwrap.dedent("""
+        🛠 **SudoStake Agent Commands**
+
+        __Vaults__
+        • mint vault  
+        • view vault state for <vault>  
+        • view available balance in <vault>  
+        • transfer <amount> to <vault>  
+        • withdraw <amount> from <vault>  
+        • withdraw <amount> from <vault> to <receiver>  
+
+        __Staking__
+        • delegate <amount> to <validator> from <vault>  
+        • undelegate <amount> from <validator> in <vault>  
+        • claim unstaked balance from <validator> for <vault>  
+        • show vault delegation summary for <vault> ← 🆕  
+        • show <vault> delegation status with <validator>  
+
+        __Main Account__
+        • what's my main account balance?
+
+        _You can type any of these in plain English to get started._
+    """)
+
+    get_env().add_reply(help_text.strip())
 
 
 def vault_state(vault_id: str) -> None:
