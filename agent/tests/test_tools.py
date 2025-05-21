@@ -8,16 +8,20 @@ from unittest.mock import AsyncMock, MagicMock
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-import tools            # type: ignore
-import helpers          # type: ignore
+import helpers # type: ignore
+from tools import ( # type: ignore[import]
+    context,
+    balance,
+    minting,
+    delegation,
+    transfer,
+    vault,
+    withdrawal,
+    summary,
+)
 
 
 # ─────────────────────────── fixtures ───────────────────────────
-@pytest.fixture
-def mock_near():
-    mock = MagicMock()
-    return mock
-
 @pytest.fixture
 def headless_mode(monkeypatch):
     """Force helpers.signing_mode() → 'headless' for mutating tool tests."""
@@ -27,15 +31,21 @@ def headless_mode(monkeypatch):
     # cleanup (pytest will restore monkeypatch state automatically)
     
 @pytest.fixture
-def mock_env(monkeypatch):
-    """Dummy Environment instance captured by tools._env."""
+def mock_setup():
+    """Initialize mock environment, logger, and near — then set context."""
     env = MagicMock()
-    monkeypatch.setattr(tools, "_env", env, raising=False)
-    return env
+    near = MagicMock()
+
+    # Set the context globally for tools
+    context.set_context(env=env, near=near)
+
+    return (env, near)
 
 
 # ─────────────────────────── tests ──────────────────────────────
-def test_vault_state(monkeypatch, mock_near):
+def test_vault_state(mock_setup):
+    (dummy_env, mock_near) = mock_setup
+    
     mock_near.view = AsyncMock(return_value=MagicMock(result={
         "owner": "alice.near",
         "index": 0,
@@ -45,39 +55,37 @@ def test_vault_state(monkeypatch, mock_near):
         "liquidity_request": None,
         "accepted_offer": None
     }))
-    monkeypatch.setattr(tools, "_near", mock_near)
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    # Call the vault_state function
+    vault.vault_state("vault-0.testnet")
     
-    tools.vault_state("vault-0.testnet")
-    
+    # Assertions
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
     assert "✅ **Vault State" in msg
     assert "`alice.near`" in msg
     
 
-def test_view_available_balance(monkeypatch, mock_near):
+def test_view_available_balance(mock_setup):
+    (dummy_env, mock_near) = mock_setup
+    
     yocto_balance = int(Decimal("1.25") * Decimal("1e24"))
     mock_near.view = AsyncMock(return_value=MagicMock(result=str(yocto_balance)))
-    monkeypatch.setattr(tools, "_near", mock_near)
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
-    
-    tools.view_available_balance("vault-0.testnet")
+    balance.view_available_balance("vault-0.testnet")
 
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
     assert "**1.25000 NEAR**" in msg
     
 
-def test_delegate_headless(monkeypatch, mock_near):
+def test_delegate_headless(monkeypatch, mock_setup):
     """
     delegate() should succeed in head-less mode (secrets present) and
     embed the tx-hash plus success banner in the returned markdown.
     """
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="abc123"),
@@ -85,11 +93,6 @@ def test_delegate_headless(monkeypatch, mock_near):
         logs=[],
         status={}
     ))
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Inject a dummy Environment so _env guard passes
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
     
     # Force helpers.signing_mode() → "headless"
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
@@ -98,7 +101,7 @@ def test_delegate_headless(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Execute the delegate command
-    result = tools.delegate("vault-0.testnet", "validator.near", "1")
+    result = delegation.delegate("vault-0.testnet", "validator.near", "1")
     
     # Assertions
     assert result is None
@@ -110,18 +113,13 @@ def test_delegate_headless(monkeypatch, mock_near):
     assert "abc123" in msg
 
 
-def test_delegate_no_credentials(monkeypatch, mock_near):
+def test_delegate_no_credentials(monkeypatch, mock_setup):
     """
     delegate() should refuse to sign when signing_mode != 'headless'
     and emit a single warning via _env.add_reply().
     """
     
-    # Provide mocked _near so the init guard passes
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Dummy Environment with add_reply
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    (dummy_env, _) = mock_setup
     
     # Force helpers.signing_mode() → None  (no creds, no wallet)
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
@@ -130,7 +128,7 @@ def test_delegate_no_credentials(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Call the tool
-    result = tools.delegate("vault-0.testnet", "validator.near", "1")
+    result = delegation.delegate("vault-0.testnet", "validator.near", "1")
     
     # Assertions
     assert result is None                        # function returns nothing
@@ -140,7 +138,7 @@ def test_delegate_no_credentials(monkeypatch, mock_near):
     assert "can't sign" in warning.lower()
     
     
-def test_mint_vault_headless(monkeypatch, mock_near):
+def test_mint_vault_headless(monkeypatch, mock_setup):
     """
     mint_vault() should succeed when head-less credentials exist.
     It must push a single success message that contains:
@@ -148,6 +146,8 @@ def test_mint_vault_headless(monkeypatch, mock_near):
       • the new vault account id parsed from EVENT_JSON
       • the tx-hash link
     """
+    
+    (dummy_env, mock_near) = mock_setup
     
     # Pretend the chain call succeeded and emitted the standard macro log
     mock_near.call = AsyncMock(
@@ -161,11 +161,6 @@ def test_mint_vault_headless(monkeypatch, mock_near):
             status={}
         )
     )
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Provide a dummy Environment so tools._env.add_reply works
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
     
     # Force head-less signing mode
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
@@ -174,7 +169,7 @@ def test_mint_vault_headless(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
      # Run the tool
-    tools.mint_vault()
+    minting.mint_vault()
     
     # Verify exactly one user reply with expected fragments
     dummy_env.add_reply.assert_called_once()
@@ -187,7 +182,7 @@ def test_mint_vault_headless(monkeypatch, mock_near):
     assert expected_url in msg
 
 
-def test_mint_vault_no_credentials(monkeypatch, mock_near):
+def test_mint_vault_no_credentials(monkeypatch, mock_setup):
     """
     When signing is disabled, mint_vault() must:
       • NOT call _near.call()
@@ -195,12 +190,7 @@ def test_mint_vault_no_credentials(monkeypatch, mock_near):
       • return None
     """
     
-    # Stub _near so agent init guard passes, but ensure .call is never used
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Dummy env to capture reply
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    (dummy_env, mock_near) = mock_setup
     
     # No credentials / wallet → signing_mode == None
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
@@ -209,7 +199,7 @@ def test_mint_vault_no_credentials(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Invoke tool
-    result = tools.mint_vault()
+    result = minting.mint_vault()
     
     # Assertions
     assert result is None
@@ -218,13 +208,15 @@ def test_mint_vault_no_credentials(monkeypatch, mock_near):
     assert "can't sign" in dummy_env.add_reply.call_args[0][0].lower()
     
 
-def test_mint_vault_missing_event(monkeypatch, mock_near):
+def test_mint_vault_missing_event(monkeypatch, mock_setup):
     """
     If the tx logs do not include a vault_minted EVENT_JSON entry,
     mint_vault() must:
       • send a single error reply via _env.add_reply()
       • still return None
     """
+    
+    (dummy_env, mock_near) = mock_setup
     
     # Mock py_near.call() with NO event log
     mock_near.call = AsyncMock(
@@ -235,18 +227,13 @@ def test_mint_vault_missing_event(monkeypatch, mock_near):
             status={}
         )
     )
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Dummy env
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
     
     # Head-less signing enabled
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Run the tool
-    result = tools.mint_vault()
+    result = minting.mint_vault()
     
     # Assertions
     assert result is None
@@ -257,18 +244,17 @@ def test_mint_vault_missing_event(monkeypatch, mock_near):
     assert "vault minting failed" in err_msg
 
 
-def test_view_main_balance_headless(monkeypatch, mock_near):
+def test_view_main_balance_headless(monkeypatch, mock_setup):
     """Head-less mode: tool should return the correct NEAR balance."""
+    (dummy_env, mock_near) = mock_setup
+    
     yocto_five = int(5 * 1e24)
     mock_near.get_balance = AsyncMock(return_value=yocto_five)
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
     monkeypatch.setattr(helpers, "_ACCOUNT_ID", "alice.testnet", raising=False)
     
-    tools.view_main_balance()
+    balance.view_main_balance()
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -276,15 +262,12 @@ def test_view_main_balance_headless(monkeypatch, mock_near):
     mock_near.get_balance.assert_awaited_once()
     
 
-def test_view_main_balance_no_credentials(monkeypatch, mock_near):
+def test_view_main_balance_no_credentials(monkeypatch, mock_setup):
     """No signing keys: tool should warn and never call get_balance()."""
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    (dummy_env, mock_near) = mock_setup
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
     
-    tools.view_main_balance()
+    balance.view_main_balance()
     
     dummy_env.add_reply.assert_called_once()
     warn = dummy_env.add_reply.call_args[0][0].lower()
@@ -292,8 +275,10 @@ def test_view_main_balance_no_credentials(monkeypatch, mock_near):
     mock_near.get_balance.assert_not_called()
 
 
-def test_transfer_near_headless(monkeypatch, mock_near):
+def test_transfer_near_headless(monkeypatch, mock_setup):
     """Head-less: transfer should call send_money and emit success reply."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     # Mock the send_money call to simulate a successful transaction
     mock_near.send_money = AsyncMock(
@@ -303,11 +288,6 @@ def test_transfer_near_headless(monkeypatch, mock_near):
             logs=[],
         )
     )
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Set up a dummy environment to capture the reply
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
     
     # Force helpers.signing_mode() → "headless"
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
@@ -316,7 +296,7 @@ def test_transfer_near_headless(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Call the transfer_near function
-    tools.transfer_near_to_vault("vault-0.testnet", "3")
+    transfer.transfer_near_to_vault("vault-0.testnet", "3")
     
     # Assertions
     dummy_env.add_reply.assert_called_once()
@@ -328,16 +308,13 @@ def test_transfer_near_headless(monkeypatch, mock_near):
     mock_near.send_money.assert_awaited_once()
     
 
-def test_transfer_near_no_creds(monkeypatch, mock_near):
+def test_transfer_near_no_creds(monkeypatch, mock_setup):
     """No signing keys: tool should warn and skip RPC call."""
     
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    (dummy_env, mock_near) = mock_setup
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
     
-    tools.transfer_near_to_vault("vault-0.testnet", "2")
+    transfer.transfer_near_to_vault("vault-0.testnet", "2")
     
     # Assertions
     dummy_env.add_reply.assert_called_once()
@@ -345,11 +322,13 @@ def test_transfer_near_no_creds(monkeypatch, mock_near):
     mock_near.send_money.assert_not_called()
 
 
-def test_undelegate_headless(monkeypatch, mock_near):
+def test_undelegate_headless(monkeypatch, mock_setup):
     """
     undelegate() should succeed in head-less mode (secrets present) and
     embed the tx-hash plus success banner in the returned markdown.
     """
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="abc123"),
@@ -357,11 +336,6 @@ def test_undelegate_headless(monkeypatch, mock_near):
         logs=[],
         status={}
     ))
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Inject a dummy Environment so _env guard passes
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
     
     # Force helpers.signing_mode() → "headless"
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
@@ -370,7 +344,7 @@ def test_undelegate_headless(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Execute the undelegate command
-    result = tools.undelegate("vault-0.testnet", "validator.near", "2")
+    result = delegation.undelegate("vault-0.testnet", "validator.near", "2")
     
     # Assertions
     assert result is None
@@ -383,18 +357,13 @@ def test_undelegate_headless(monkeypatch, mock_near):
     assert "abc123" in msg
     
     
-def test_undelegate_no_credentials(monkeypatch, mock_near):
+def test_undelegate_no_credentials(monkeypatch, mock_setup):
     """
     undelegate() should refuse to sign when signing_mode != 'headless'
     and emit a single warning via _env.add_reply().
     """
     
-    # Provide mocked _near so the init guard passes
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    # Dummy Environment with add_reply
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env, raising=False)
+    (dummy_env, mock_near) = mock_setup
     
     # Force helpers.signing_mode() → None  (no creds, no wallet)
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
@@ -403,7 +372,7 @@ def test_undelegate_no_credentials(monkeypatch, mock_near):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     # Execute the undelegate command
-    result = tools.undelegate("vault-0.testnet", "validator.near", "2")
+    result = delegation.undelegate("vault-0.testnet", "validator.near", "2")
     
     # Assertions
     assert result is None                        # function returns nothing
@@ -414,8 +383,10 @@ def test_undelegate_no_credentials(monkeypatch, mock_near):
     mock_near.call.assert_not_called()
     
 
-def test_withdraw_balance_self(monkeypatch, mock_near):
+def test_withdraw_balance_self(monkeypatch, mock_setup):
     """Withdraw NEAR to the vault's own account (no to_address)."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="tx789"),
@@ -423,14 +394,11 @@ def test_withdraw_balance_self(monkeypatch, mock_near):
         logs=[],
         status={}
     ))
-    monkeypatch.setattr(tools, "_near", mock_near)
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.withdraw_balance("vault-1.testnet", "1", "")
+    withdrawal.withdraw_balance("vault-1.testnet", "1", "")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -441,8 +409,10 @@ def test_withdraw_balance_self(monkeypatch, mock_near):
     mock_near.call.assert_awaited_once()
 
 
-def test_withdraw_balance_to_address(monkeypatch, mock_near):
+def test_withdraw_balance_to_address(monkeypatch, mock_setup):
     """Withdraw NEAR to a specific recipient address."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="tx999"),
@@ -450,14 +420,11 @@ def test_withdraw_balance_to_address(monkeypatch, mock_near):
         logs=[],
         status={}
     ))
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+   
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.withdraw_balance("vault-1.testnet", "2.5", to_address="palingram.testnet")
+    withdrawal.withdraw_balance("vault-1.testnet", "2.5", to_address="palingram.testnet")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -470,15 +437,13 @@ def test_withdraw_balance_to_address(monkeypatch, mock_near):
     assert called_args["to"] == "palingram.testnet"
 
 
-def test_withdraw_balance_no_creds(monkeypatch, mock_near):
+def test_withdraw_balance_no_creds(monkeypatch, mock_setup):
     """Withdraw should fail when not in headless mode."""
     
-    monkeypatch.setattr(tools, "_near", mock_near)
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+    (dummy_env, mock_near) = mock_setup
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None)  # simulate missing keys
     
-    tools.withdraw_balance("vault-1.testnet", "1", "")
+    withdrawal.withdraw_balance("vault-1.testnet", "1", "")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -486,8 +451,10 @@ def test_withdraw_balance_no_creds(monkeypatch, mock_near):
     mock_near.call.assert_not_called()
 
 
-def test_view_vault_status_with_validator_success(monkeypatch, mock_near):
+def test_view_vault_status_with_validator_success(monkeypatch, mock_setup):
     """Should display staked/unstaked/can_withdraw for a given vault+validator pair."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     # Simulated return from staking pool
     mock_near.view = AsyncMock(return_value=MagicMock(result={
@@ -496,14 +463,11 @@ def test_view_vault_status_with_validator_success(monkeypatch, mock_near):
         "unstaked_balance": str(int(Decimal("1.5") * Decimal("1e24"))),
         "can_withdraw": True
     }))
-    monkeypatch.setattr(tools, "_near", mock_near)
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.view_vault_status_with_validator("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    summary.view_vault_status_with_validator("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -513,8 +477,10 @@ def test_view_vault_status_with_validator_success(monkeypatch, mock_near):
     assert "✅ Yes" in msg
     
 
-def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_near):
+def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_setup):
     """Should display ❌ No when can_withdraw is False."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.view = AsyncMock(return_value=MagicMock(result={
         "account_id": "vault-2.vaultmint.testnet",
@@ -522,14 +488,11 @@ def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_nea
         "unstaked_balance": str(int(Decimal("0.25") * Decimal("1e24"))),
         "can_withdraw": False
     }))
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+  
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.view_vault_status_with_validator("vault-2.vaultmint.testnet", "meta.pool.testnet")
+    summary.view_vault_status_with_validator("vault-2.vaultmint.testnet", "meta.pool.testnet")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -538,17 +501,16 @@ def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_nea
     assert "❌ No" in msg
     
 
-def test_view_vault_status_with_validator_no_data(monkeypatch, mock_near):
+def test_view_vault_status_with_validator_no_data(monkeypatch, mock_setup):
     """Should show error when validator returns no data for vault."""
     
-    mock_near.view = AsyncMock(return_value=MagicMock(result=None))
-    monkeypatch.setattr(tools, "_near", mock_near)
+    (dummy_env, mock_near) = mock_setup
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+    mock_near.view = AsyncMock(return_value=MagicMock(result=None))
+    
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.view_vault_status_with_validator("vault-x.testnet", "unknown.pool.testnet")
+    summary.view_vault_status_with_validator("vault-x.testnet", "unknown.pool.testnet")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -557,17 +519,16 @@ def test_view_vault_status_with_validator_no_data(monkeypatch, mock_near):
     assert "unknown.pool.testnet" in msg
 
 
-def test_view_vault_status_with_validator_exception(monkeypatch, mock_near):
+def test_view_vault_status_with_validator_exception(monkeypatch, mock_setup):
     """Should catch and report unexpected RPC errors (e.g. network or contract panic)."""
     
-    mock_near.view = AsyncMock(side_effect=RuntimeError("Contract not deployed"))
-    monkeypatch.setattr(tools, "_near", mock_near)
+    (dummy_env, mock_near) = mock_setup
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+    mock_near.view = AsyncMock(side_effect=RuntimeError("Contract not deployed"))
+
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.view_vault_status_with_validator("vault-y.testnet", "broken.pool.testnet")
+    summary.view_vault_status_with_validator("vault-y.testnet", "broken.pool.testnet")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -577,8 +538,10 @@ def test_view_vault_status_with_validator_exception(monkeypatch, mock_near):
     assert "Contract not deployed" in msg
 
 
-def test_claim_unstaked_balance_success(monkeypatch, mock_near):
+def test_claim_unstaked_balance_success(monkeypatch, mock_setup):
     """Should successfully call claim_unstaked and return a transaction link."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="claimtx123"),
@@ -586,14 +549,11 @@ def test_claim_unstaked_balance_success(monkeypatch, mock_near):
         logs=[],
         status={}
     ))
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -603,8 +563,10 @@ def test_claim_unstaked_balance_success(monkeypatch, mock_near):
     assert "claimtx123" in msg
     
 
-def test_claim_unstaked_balance_contract_panic(monkeypatch, mock_near):
+def test_claim_unstaked_balance_contract_panic(monkeypatch, mock_setup):
     """Should detect contract panic and emit the failure message."""
+    
+    (dummy_env, mock_near) = mock_setup
     
     mock_near.call = AsyncMock(return_value=MagicMock(
         transaction=MagicMock(hash="panic123"),
@@ -622,14 +584,11 @@ def test_claim_unstaked_balance_contract_panic(monkeypatch, mock_near):
             }
         }
     ))
-    monkeypatch.setattr(tools, "_near", mock_near)
-    
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -637,16 +596,15 @@ def test_claim_unstaked_balance_contract_panic(monkeypatch, mock_near):
     assert "Unstaked funds not yet claimable" in msg
     
 
-def test_claim_unstaked_balance_no_credentials(monkeypatch, mock_near):
+def test_claim_unstaked_balance_no_credentials(monkeypatch, mock_setup):
     """Should refuse to sign when not in headless mode."""
-    monkeypatch.setattr(tools, "_near", mock_near)
+   
+    (dummy_env, mock_near) = mock_setup
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None)  # Simulate missing creds
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0].lower()
@@ -654,18 +612,17 @@ def test_claim_unstaked_balance_no_credentials(monkeypatch, mock_near):
     mock_near.call.assert_not_called()
 
 
-def test_claim_unstaked_balance_runtime_exception(monkeypatch, mock_near):
+def test_claim_unstaked_balance_runtime_exception(monkeypatch, mock_setup):
     """Should catch unexpected exceptions and display error message."""
     
-    mock_near.call = AsyncMock(side_effect=RuntimeError("Network error: node unreachable"))
-    monkeypatch.setattr(tools, "_near", mock_near)
+    (dummy_env, mock_near) = mock_setup
     
-    dummy_env = MagicMock()
-    monkeypatch.setattr(tools, "_env", dummy_env)
+    mock_near.call = AsyncMock(side_effect=RuntimeError("Network error: node unreachable"))
+    
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    tools.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]

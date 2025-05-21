@@ -1,5 +1,5 @@
 from nearai.agents.environment import Environment
-from helpers import ensure_loop, init_near, signing_mode
+from helpers import ensure_loop, init_near
 from tools import register_tools
 
 

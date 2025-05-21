@@ -15,7 +15,7 @@ _DEFAULT_RPC = {
 # Factory contract addresses per network
 FACTORY_CONTRACTS = {
     "mainnet": "sudostake.near",
-    "testnet": "vaultmint.testnet",
+    "testnet": "nzaza.testnet",
 }
 
 # Define current vault_minting_fee
