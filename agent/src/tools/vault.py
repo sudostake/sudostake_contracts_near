@@ -43,8 +43,7 @@ def vault_state(vault_id: str) -> None:
             return
         
         # Get the result state from the response
-        state = response.result
-        print(json.dumps(state, indent=2))
+        state = response.result        
         
         env.add_reply(
             f"✅ **Vault State: `{vault_id}`**\n\n"
