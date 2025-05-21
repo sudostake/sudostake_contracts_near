@@ -630,3 +630,186 @@ def test_claim_unstaked_balance_runtime_exception(monkeypatch, mock_setup):
     assert "Network error" in msg
     assert "vault-1.vaultmint.testnet" in msg
     assert "aurora.pool.f863973.m0" in msg
+
+
+def test_vault_delegation_summary_success(mock_setup):
+    """
+    ✅ Basic Success Case:
+    - Vault has one active validator: `validator1.near`
+    - Validator reports 10 NEAR staked, 0 NEAR unstaked
+    - `can_withdraw` is True (so no `unstaked_at` or `current_epoch` should show)
+    - Should render a clean summary with balances and ✅ Yes
+    """
+    
+    (dummy_env, mock_near) = mock_setup
+    
+    mock_near.view = AsyncMock(side_effect=[
+        # get_vault_state call
+        MagicMock(result={
+            "current_epoch": 100,
+            "unstake_entries": {},
+            "active_validators": ["validator1.near"]
+        }),
+        # validator.get_account call
+        MagicMock(result={
+            "staked_balance": str(int(Decimal("10.0") * Decimal("1e24"))),
+            "unstaked_balance": "0",
+            "can_withdraw": True
+        })
+    ])
+    
+    summary.vault_delegation_summary("vault-0.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    
+    assert "vault-0.testnet" in msg
+    assert "validator1.near" in msg
+    assert "10.00000 NEAR" in msg
+    assert "0.00000 NEAR" in msg
+    assert "✅ Yes" in msg
+
+
+def test_vault_delegation_summary_with_locked_unstake(mock_setup):
+    """
+    🔒 Locked Unstake Case:
+    - Vault has one validator (`validator2.near`) with 3.5 NEAR unstaked.
+    - `can_withdraw` is False → should show locked status.
+    - Should include: ❌ No, Unlocks at: `epoch_height`, Current Epoch.
+    """
+    
+    (dummy_env, mock_near) = mock_setup
+    
+    mock_near.view = AsyncMock(side_effect=[
+        # get_vault_state call
+        MagicMock(result={
+            "current_epoch": 108,
+            "unstake_entries": [
+                ["validator2.near", {"epoch_height": 105}]
+            ],
+            "active_validators": []
+        }),
+        # validator.get_account call
+        MagicMock(result={
+            "staked_balance": "0",
+            "unstaked_balance": str(int(Decimal("3.5") * Decimal("1e24"))),
+            "can_withdraw": False
+        })
+    ])
+    
+    summary.vault_delegation_summary("vault-locked.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    
+    assert "vault-locked.testnet" in msg
+    assert "validator2.near" in msg
+    assert "3.50000 NEAR" in msg
+    assert "❌ No" in msg
+    assert "Unlocks at:     `105`" in msg
+    assert "Current Epoch:  `108`" in msg
+
+
+def test_vault_delegation_summary_active_and_unstaked(mock_setup):
+    """
+    🧪 Validator in both active_validators and unstake_entries.
+    - Validator has 4 NEAR staked and 2 NEAR unstaked (not withdrawable).
+    - Should show:
+      • Both balances
+      • ❌ No
+      • Unlocks at + current_epoch
+    """
+    
+    (dummy_env, mock_near) = mock_setup
+    
+    mock_near.view = AsyncMock(side_effect=[
+        # get_vault_state call
+        MagicMock(result={
+            "current_epoch": 50,
+            "active_validators": ["validator3.near"],
+            "unstake_entries": [
+                [
+                    "validator3.near",
+                    {
+                        "amount": str(int(Decimal("2") * Decimal("1e24"))),
+                        "epoch_height": 47
+                    }
+                ]
+            ]
+        }),
+        # get_account call for validator
+        MagicMock(result={
+            "staked_balance": str(int(Decimal("4") * Decimal("1e24"))),
+            "unstaked_balance": str(int(Decimal("2") * Decimal("1e24"))),
+            "can_withdraw": False
+        })
+    ])
+    
+    summary.vault_delegation_summary("vault-mixed.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    
+    assert "validator3.near" in msg
+    assert "4.00000 NEAR" in msg
+    assert "2.00000 NEAR" in msg
+    assert "❌ No" in msg
+    assert "Unlocks at:     `47`" in msg
+    assert "Current Epoch:  `50`" in msg
+    
+
+def test_vault_delegation_summary_with_rpc_error(mock_setup):
+    """
+    ❌ Validator RPC error case.
+    - get_vault_state succeeds.
+    - get_account for validator4.near fails with an exception.
+    - Should include:
+      • Validator listed
+      • ⛔ Error: <message>
+    """
+    
+    (dummy_env, mock_near) = mock_setup
+    
+    mock_near.view = AsyncMock(side_effect=[
+        # get_vault_state call
+        MagicMock(result={
+            "current_epoch": 200,
+            "active_validators": ["validator4.near"],
+            "unstake_entries": []
+        }),
+        # get_account fails
+        RuntimeError("Contract not deployed")
+    ])
+    
+    summary.vault_delegation_summary("vault-error.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    
+    assert "validator4.near" in msg
+    assert "⛔ Error" in msg
+    assert "Contract not deployed" in msg
+    
+
+def test_vault_delegation_summary_empty(mock_setup):
+    """
+    ⚠️ No Validators Case:
+    - active_validators and unstake_entries are both empty.
+    - Should reply with a warning: "No delegation data found."
+    """
+    
+    (dummy_env, mock_near) = mock_setup
+    
+    mock_near.view = AsyncMock(return_value=MagicMock(result={
+        "current_epoch": 123,
+        "active_validators": [],
+        "unstake_entries": []
+    }))
+    
+    summary.vault_delegation_summary("vault-empty.testnet")
+    
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+
+    assert "No delegation data found" in msg
+    assert "vault-empty.testnet" not in msg  # No need for vault header
