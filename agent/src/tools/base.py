@@ -35,7 +35,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         withdrawal.withdraw_balance,
         withdrawal.claim_unstaked_balance,
         summary.view_vault_status_with_validator,
-        # TODO summary.vault_delegation_summary,
+        summary.vault_delegation_summary,
     ):
         registry.register_tool(tool)
         registered_tools.append(tool.__name__)
