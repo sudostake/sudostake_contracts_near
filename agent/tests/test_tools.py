@@ -2,6 +2,8 @@
 import sys
 import os
 import pytest
+import requests
+
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -19,6 +21,16 @@ from tools import ( # type: ignore[import]
     withdrawal,
     summary,
 )
+
+# ───────────────────────────  helpers  ───────────────────────────
+def _make_dummy_resp(json_body):
+    """Minimal stub mimicking requests.Response for our needs."""
+    class DummyResp:
+        def raise_for_status(self):          # no-op ⇢ 200 OK
+            pass
+        def json(self):
+            return json_body
+    return DummyResp()
 
 
 # ─────────────────────────── fixtures ───────────────────────────
@@ -156,7 +168,7 @@ def test_mint_vault_headless(monkeypatch, mock_setup):
             transaction_outcome=MagicMock(gas_burnt=1),
             logs=[
                 'EVENT_JSON:{"event":"vault_minted",'
-                '"data":{"vault":"vault-0.vaultmint.testnet"}}'
+                '"data":{"vault":"vault-0.factory.testnet"}}'
             ],
             status={}
         )
@@ -175,7 +187,7 @@ def test_mint_vault_headless(monkeypatch, mock_setup):
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
     assert "Vault Minted" in msg
-    assert "vault-0.vaultmint.testnet" in msg
+    assert "vault-0.factory.testnet" in msg
     
     # Verify the expected tx_hash link
     expected_url = f"{helpers.get_explorer_url()}/transactions/tx123"
@@ -458,7 +470,7 @@ def test_view_vault_status_with_validator_success(monkeypatch, mock_setup):
     
     # Simulated return from staking pool
     mock_near.view = AsyncMock(return_value=MagicMock(result={
-        "account_id": "vault-1.vaultmint.testnet",
+        "account_id": "vault-1.factory.testnet",
         "staked_balance": str(int(Decimal("3") * Decimal("1e24"))),
         "unstaked_balance": str(int(Decimal("1.5") * Decimal("1e24"))),
         "can_withdraw": True
@@ -467,7 +479,7 @@ def test_view_vault_status_with_validator_success(monkeypatch, mock_setup):
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    summary.view_vault_status_with_validator("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    summary.view_vault_status_with_validator("vault-1.factory.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -483,7 +495,7 @@ def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_set
     (dummy_env, mock_near) = mock_setup
     
     mock_near.view = AsyncMock(return_value=MagicMock(result={
-        "account_id": "vault-2.vaultmint.testnet",
+        "account_id": "vault-2.factory.testnet",
         "staked_balance": str(int(Decimal("5") * Decimal("1e24"))),
         "unstaked_balance": str(int(Decimal("0.25") * Decimal("1e24"))),
         "can_withdraw": False
@@ -492,7 +504,7 @@ def test_view_vault_status_with_validator_not_withdrawable(monkeypatch, mock_set
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    summary.view_vault_status_with_validator("vault-2.vaultmint.testnet", "meta.pool.testnet")
+    summary.view_vault_status_with_validator("vault-2.factory.testnet", "meta.pool.testnet")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -553,12 +565,12 @@ def test_claim_unstaked_balance_success(monkeypatch, mock_setup):
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.factory.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
     assert "Claim Initiated" in msg
-    assert "vault-1.vaultmint.testnet" in msg
+    assert "vault-1.factory.testnet" in msg
     assert "aurora.pool.f863973.m0" in msg
     assert "claimtx123" in msg
     
@@ -588,7 +600,7 @@ def test_claim_unstaked_balance_contract_panic(monkeypatch, mock_setup):
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.factory.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
@@ -604,7 +616,7 @@ def test_claim_unstaked_balance_no_credentials(monkeypatch, mock_setup):
     monkeypatch.setattr(helpers, "_SIGNING_MODE", None)  # Simulate missing creds
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.factory.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0].lower()
@@ -622,13 +634,13 @@ def test_claim_unstaked_balance_runtime_exception(monkeypatch, mock_setup):
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    withdrawal.claim_unstaked_balance("vault-1.vaultmint.testnet", "aurora.pool.f863973.m0")
+    withdrawal.claim_unstaked_balance("vault-1.factory.testnet", "aurora.pool.f863973.m0")
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
     assert "Failed to claim unstaked NEAR" in msg
     assert "Network error" in msg
-    assert "vault-1.vaultmint.testnet" in msg
+    assert "vault-1.factory.testnet" in msg
     assert "aurora.pool.f863973.m0" in msg
 
 
@@ -813,3 +825,123 @@ def test_vault_delegation_summary_empty(mock_setup):
 
     assert "No delegation data found" in msg
     assert "vault-empty.testnet" not in msg  # No need for vault header
+    
+
+# ───────────────── view_user_vaults tests ─────────────────
+def test_view_user_vaults_success(monkeypatch, mock_setup):
+    """
+    Success:
+      • head-less signer 'alice.testnet'
+      • Cloud Function returns 2 vaults
+      • Tool should emit a list with both IDs
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Head-less mode + signer + network
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID",  "alice.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get inside vault module to return fake JSON list
+    monkeypatch.setattr(
+        vault.requests, "get",
+        lambda url, timeout: _make_dummy_resp(
+            ["vault-0.factory.testnet", "vault-1.factory.testnet"]
+        ),
+    )
+    
+    # Run the tool
+    vault.view_user_vaults()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "You have 2 vaults"  in msg
+    assert "- vault-0.factory.testnet" in msg
+    assert "- vault-1.factory.testnet" in msg
+    
+
+def test_view_user_vaults_empty(monkeypatch, mock_setup):
+    """
+    Cloud Function returns an empty list → tool should reply
+    “No vaults found …” (and *not* list anything).
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Head-less signer + network
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID",  "bob.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get to return an empty JSON array
+    monkeypatch.setattr(
+        vault.requests, "get",
+        lambda url, timeout: _make_dummy_resp([]),
+    )
+    
+    # Invoke the tool
+    vault.view_user_vaults()
+    
+    # Verify exactly one “no vaults” reply
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "No vaults found" in msg
+    assert "bob.testnet"      in msg
+    
+
+def test_view_user_vaults_no_creds(monkeypatch, mock_setup):
+    """
+    When signing_mode ≠ 'headless' the tool should:
+       • emit the 'no signing keys' warning
+       • never call requests.get()
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Simulate missing keys
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
+    
+    # Stub requests.get so we can assert it was not used
+    dummy_get = MagicMock()
+    monkeypatch.setattr(vault.requests, "get", dummy_get)
+    
+    # Run the tool
+    vault.view_user_vaults()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    warn = dummy_env.add_reply.call_args[0][0].lower()
+    assert "no signing keys" in warn
+    dummy_get.assert_not_called()
+    
+
+def test_view_user_vaults_http_error(monkeypatch, mock_setup):
+    """
+    Network failure:
+       • requests.get raises ConnectionError
+       • Tool should catch it and emit the generic failure reply
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Head-less signer & network
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID",  "carol.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get inside vault to raise an error
+    def boom(url, timeout):
+        raise requests.exceptions.ConnectionError("node unreachable")
+    
+    monkeypatch.setattr(vault.requests, "get", boom)
+    
+    # Run the tool
+    vault.view_user_vaults()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Failed to fetch vault list" in msg
+    assert "node unreachable"           in msg
