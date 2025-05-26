@@ -18,6 +18,9 @@ FACTORY_CONTRACTS = {
     "testnet": "nzaza.testnet",
 }
 
+# Firebase functions vaults API
+FIREBASE_VAULTS_API = "https://us-central1-sudostake.cloudfunctions.net" 
+
 # Define current vault_minting_fee
 # TODO Later we can dynamically get this from the factory contract itself
 VAULT_MINT_FEE_NEAR: Decimal = Decimal("10")

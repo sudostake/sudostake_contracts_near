@@ -25,11 +25,12 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
     
     for tool in (
         vault.show_help_menu,
+        vault.vault_state,
+        vault.view_user_vaults,
         balance.view_main_balance,
         balance.view_available_balance,
         minting.mint_vault,
         transfer.transfer_near_to_vault,
-        vault.vault_state,
         delegation.delegate,
         delegation.undelegate,
         withdrawal.withdraw_balance,
