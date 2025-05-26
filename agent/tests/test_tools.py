@@ -149,7 +149,8 @@ def test_delegate_no_credentials(monkeypatch, mock_setup):
     warning = dummy_env.add_reply.call_args[0][0]
     assert "can't sign" in warning.lower()
     
-    
+
+# ───────────────── mint_vault tests ─────────────────
 def test_mint_vault_headless(monkeypatch, mock_setup):
     """
     mint_vault() should succeed when head-less credentials exist.
@@ -174,6 +175,18 @@ def test_mint_vault_headless(monkeypatch, mock_setup):
         )
     )
     
+    # Patch requests.post inside minting to capture indexing call
+    called = {}
+    def fake_post(url, json, timeout, headers):
+        called["url"]  = url
+        called["json"] = json
+        class Resp:
+            def raise_for_status(self): pass  # simulate 200 OK
+        return Resp()
+
+    monkeypatch.setattr(minting, "requests", MagicMock(post=fake_post))
+    
+    
     # Force head-less signing mode
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
     
@@ -192,6 +205,10 @@ def test_mint_vault_headless(monkeypatch, mock_setup):
     # Verify the expected tx_hash link
     expected_url = f"{helpers.get_explorer_url()}/transactions/tx123"
     assert expected_url in msg
+    
+    # Verify Firebase indexing call
+    assert called["url"].endswith("/index_vault")
+    assert called["json"] == {"vault": "vault-0.factory.testnet"}
 
 
 def test_mint_vault_no_credentials(monkeypatch, mock_setup):

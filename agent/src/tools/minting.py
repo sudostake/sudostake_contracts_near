@@ -1,5 +1,6 @@
 import json
 import os
+import requests
 
 from decimal import Decimal
 from logging import Logger
@@ -8,6 +9,7 @@ from helpers import (
     YOCTO_FACTOR,
     VAULT_MINT_FEE_NEAR,
     FACTORY_CONTRACTS,
+    FIREBASE_VAULTS_API,
     signing_mode,
     run_coroutine,
     get_failure_message_from_tx_status,
@@ -77,6 +79,20 @@ def mint_vault() -> None:
             
         if vault_acct is None:
             raise RuntimeError("vault_minted log not found in transaction logs")
+        
+        # Index the new vault to Firebase
+        try:
+            idx_url = f"{FIREBASE_VAULTS_API}/index_vault"
+            resp    = requests.post(
+                idx_url,
+                json={"vault": vault_acct},
+                timeout=10,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            # Warn in logs only; minting still succeeded
+            logger.warning("index_vault error: %s", e, exc_info=True)
         
         env.add_reply(
             "🏗️ **Vault Minted**\n"
