@@ -63,6 +63,16 @@ def _openai_client_mock(monkeypatch):
     monkeypatch.setattr(helpers.openai, "OpenAI", MagicMock(return_value=client))
     return client
 
+
+@pytest.fixture(autouse=True)
+def _fake_nearai_config(monkeypatch):
+    monkeypatch.setattr(
+        helpers.nearai.config,
+        "load_config_file",
+        lambda: {"api_url": "https://api.near.ai/", "auth": {"token": "dummy"}},
+        raising=False,
+    )
+
 @pytest.fixture(autouse=True)
 def fast_clock(monkeypatch):
     """Skip real sleeping to keep tests quick."""
