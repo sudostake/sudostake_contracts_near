@@ -1,7 +1,10 @@
 import sys
 import os
 import pytest
+import time
 import asyncio
+from pathlib import Path
+from typing import List
 from unittest.mock import MagicMock
 
 # Make src/ importable
@@ -14,6 +17,56 @@ import helpers  # type: ignore
 async def async_add(a, b):
     await asyncio.sleep(0.01)  # simulate awaitable work
     return a + b
+
+# ─────────────────────────── fixtures ─────────────────────────────
+@pytest.fixture(autouse=True)
+def reset_globals(monkeypatch):
+    """Ensure module-level globals are clean between tests."""
+    
+    helpers._VECTOR_STORE_ID = None
+    helpers._SIGNING_MODE = None
+    helpers._ACCOUNT_ID = None
+    yield
+    
+    
+@pytest.fixture
+def openai_mock(monkeypatch):
+    """
+    Patch helpers.openai.OpenAI with a MagicMock exposing just the bits
+    init_vector_store() touches.  Tests can tweak attributes as needed.
+    """
+    
+    client = MagicMock(name="OpenAIClient")
+    
+    # • files.create → returns objs that each carry a unique .id
+    client.files.create.side_effect = [
+        MagicMock(id=f"file_{i}") for i in range(1, 10)
+    ]
+    
+    # • vector_stores.create → returns a VS obj with .id
+    vs_obj = MagicMock(id="vs_1")
+    client.vector_stores.create.return_value = vs_obj
+    
+    # • vector_stores.retrieve → default happy-path: first in_progress, then completed
+    in_progress = MagicMock(
+        file_counts=MagicMock(completed=0),
+        status="in_progress",
+        last_error=None,
+    )
+    completed = MagicMock(
+        file_counts=MagicMock(completed=1),
+        status="completed",
+        last_error=None,
+    )
+    client.vector_stores.retrieve.side_effect = [in_progress, completed]
+    
+    monkeypatch.setattr(helpers.openai, "OpenAI", MagicMock(return_value=client))
+    return client
+
+@pytest.fixture(autouse=True)
+def fast_clock(monkeypatch):
+    """Skip real sleeping to keep tests quick."""
+    monkeypatch.setattr(time, "sleep", lambda *_: None)
 
 
 # ─────────────────────────── get_explorer_url ─────────────────────
@@ -114,3 +167,58 @@ def test_init_near_invalid_network(monkeypatch):
     
     with pytest.raises(RuntimeError, match="NEAR_NETWORK must be set"):
         helpers.init_near(MagicMock())
+
+
+# ───────────────────────── init_vector_store ────────────────
+def test_init_vector_store_success(tmp_path, monkeypatch, openai_mock):
+    # create a markdown file so the helper finds something
+    (tmp_path / "README.md").write_text("# Demo docs")
+    monkeypatch.chdir(tmp_path)
+    
+    helpers.init_vector_store()
+    
+    # upload & create calls happen
+    openai_mock.files.create.assert_called()
+    openai_mock.vector_stores.create.assert_called_once()
+    assert helpers.vector_store_id() == "vs_1"
+
+
+def test_init_vector_store_no_md_files(tmp_path, monkeypatch, openai_mock):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        helpers.init_vector_store()
+
+
+def test_init_vector_store_timeout(tmp_path, monkeypatch, openai_mock):
+    (tmp_path / "doc.md").write_text("stub")
+    monkeypatch.chdir(tmp_path)
+    
+    # force retrieve to always return in_progress
+    in_progress = MagicMock(
+        file_counts=MagicMock(completed=0),
+        status="in_progress",
+        last_error=None,
+    )
+    openai_mock.vector_stores.retrieve.side_effect = [in_progress] * 5
+    
+    # make timeout immediate
+    monkeypatch.setattr(helpers, "MAX_BUILD_MINUTES", 0)
+    
+    with pytest.raises(TimeoutError):
+        helpers.init_vector_store()
+
+
+def test_init_vector_store_expired(tmp_path, monkeypatch, openai_mock):
+    (tmp_path / "doc.md").write_text("stub")
+    monkeypatch.chdir(tmp_path)
+    
+    expired = MagicMock(
+        file_counts=MagicMock(completed=0),
+        status="expired",
+        last_error="boom!",
+    )
+    
+    openai_mock.vector_stores.retrieve.side_effect = [expired]
+    
+    with pytest.raises(RuntimeError, match="failed to build"):
+        helpers.init_vector_store()
