@@ -1,3 +1,4 @@
 pytest
 py_near
 nearai
+openai

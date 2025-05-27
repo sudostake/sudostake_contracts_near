@@ -9,7 +9,8 @@ from . import (
     delegation,
     vault,
     withdrawal,
-    summary
+    summary,
+    store
 )
 
 # Register all tools here
@@ -37,6 +38,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         withdrawal.claim_unstaked_balance,
         summary.view_vault_status_with_validator,
         summary.vault_delegation_summary,
+        store.query_sudostake_docs
     ):
         registry.register_tool(tool)
         registered_tools.append(tool.__name__)
