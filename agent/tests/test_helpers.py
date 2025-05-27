@@ -30,7 +30,7 @@ def reset_globals(monkeypatch):
     
     
 @pytest.fixture
-def openai_mock(monkeypatch):
+def _openai_client_mock(monkeypatch):
     """
     Patch helpers.openai.OpenAI with a MagicMock exposing just the bits
     init_vector_store() touches.  Tests can tweak attributes as needed.
@@ -170,7 +170,7 @@ def test_init_near_invalid_network(monkeypatch):
 
 
 # ───────────────────────── init_vector_store ────────────────
-def test_init_vector_store_success(tmp_path, monkeypatch, openai_mock):
+def test_init_vector_store_success(tmp_path, monkeypatch, _openai_client_mock):
     # create a markdown file so the helper finds something
     (tmp_path / "README.md").write_text("# Demo docs")
     monkeypatch.chdir(tmp_path)
@@ -178,18 +178,18 @@ def test_init_vector_store_success(tmp_path, monkeypatch, openai_mock):
     helpers.init_vector_store()
     
     # upload & create calls happen
-    openai_mock.files.create.assert_called()
-    openai_mock.vector_stores.create.assert_called_once()
+    _openai_client_mock.files.create.assert_called()
+    _openai_client_mock.vector_stores.create.assert_called_once()
     assert helpers.vector_store_id() == "vs_1"
 
 
-def test_init_vector_store_no_md_files(tmp_path, monkeypatch, openai_mock):
+def test_init_vector_store_no_md_files(tmp_path, monkeypatch, _openai_client_mock):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(FileNotFoundError):
         helpers.init_vector_store()
 
 
-def test_init_vector_store_timeout(tmp_path, monkeypatch, openai_mock):
+def test_init_vector_store_timeout(tmp_path, monkeypatch, _openai_client_mock):
     (tmp_path / "doc.md").write_text("stub")
     monkeypatch.chdir(tmp_path)
     
@@ -199,7 +199,7 @@ def test_init_vector_store_timeout(tmp_path, monkeypatch, openai_mock):
         status="in_progress",
         last_error=None,
     )
-    openai_mock.vector_stores.retrieve.side_effect = [in_progress] * 5
+    _openai_client_mock.vector_stores.retrieve.side_effect = [in_progress] * 5
     
     # make timeout immediate
     monkeypatch.setattr(helpers, "MAX_BUILD_MINUTES", 0)
@@ -208,7 +208,7 @@ def test_init_vector_store_timeout(tmp_path, monkeypatch, openai_mock):
         helpers.init_vector_store()
 
 
-def test_init_vector_store_expired(tmp_path, monkeypatch, openai_mock):
+def test_init_vector_store_expired(tmp_path, monkeypatch, _openai_client_mock):
     (tmp_path / "doc.md").write_text("stub")
     monkeypatch.chdir(tmp_path)
     
@@ -218,7 +218,7 @@ def test_init_vector_store_expired(tmp_path, monkeypatch, openai_mock):
         last_error="boom!",
     )
     
-    openai_mock.vector_stores.retrieve.side_effect = [expired]
+    _openai_client_mock.vector_stores.retrieve.side_effect = [expired]
     
     with pytest.raises(RuntimeError, match="failed to build"):
         helpers.init_vector_store()
