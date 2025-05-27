@@ -9,8 +9,6 @@ from typing import  Awaitable, TypeVar, Optional
 from nearai.agents.environment import Environment
 from py_near.account import Account
 from decimal import Decimal
-from glob import glob
-from openai.types.vector_store import VectorStore
 from typing import Final, List
 
 
@@ -45,7 +43,7 @@ YOCTO_FACTOR: Decimal = Decimal("1e24")
 _loop: Optional[asyncio.AbstractEventLoop] = None
 _SIGNING_MODE: Optional[str] = None       # "headless", "wallet", or None
 _ACCOUNT_ID: Optional[str] = None         # the user’s account when known
-_VECTOR_STORE_ID: Optional[VectorStore] = None  # The global vector store for SudoStake
+_VECTOR_STORE_ID: Optional[str] = None    # The global vector store for SudoStake
 
 # Tweak these knobs if you want different behaviour
 POLL_INTERVAL_S:    Final[int] = 2          # seconds between status checks
