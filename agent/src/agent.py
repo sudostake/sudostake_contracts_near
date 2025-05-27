@@ -1,7 +1,7 @@
 import json
 
 from nearai.agents.environment import Environment
-from helpers import ensure_loop, init_near, init_vector_store, vector_store_id
+from helpers import ensure_loop, init_near, init_vector_store, vector_store_id, top_doc_chunks
 from tools import register_tools
 
 
@@ -33,8 +33,7 @@ def run(env: Environment):
     # Query the Vector Store
     messages = env.list_messages()
     user_query = messages[-1]["content"]
-    vector_results = env.query_vector_store(vector_store_id(), user_query)
-    docs = [{"file": res["chunk_text"]} for res in vector_results[:6]]
+    docs = top_doc_chunks(env, vector_store_id(), user_query)
 
     # Init prompt list with system message
     prompt_list = [

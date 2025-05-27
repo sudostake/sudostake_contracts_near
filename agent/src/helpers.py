@@ -214,3 +214,12 @@ def get_failure_message_from_tx_status(status: dict) -> str:
         func_err   = kind.get("FunctionCallError", {})
         
         return func_err.get("ExecutionError")
+
+
+def top_doc_chunks(env, vs_id: str, user_query: str, k: int = 6):
+    """
+    Return the top-k vector-store chunks for *user_query*.
+    Does not touch env.add_reply(); safe for reuse.
+    """
+    results = env.query_vector_store(vs_id, user_query)
+    return results[:k]                      # trim noise

@@ -1,7 +1,7 @@
 import json
 from .context import get_env
 from helpers import (
-    vector_store_id
+    vector_store_id, top_doc_chunks
 )
 
 def query_sudostake_docs() -> None:
@@ -19,11 +19,7 @@ def query_sudostake_docs() -> None:
         env.add_reply("No query provided.")
         return
     
-    user_query = msgs[-1]["content"]
-    
-    # Query the Vector Store
-    vector_results = env.query_vector_store(vs_id, user_query)
-    top_hits       = vector_results[:6]     # keep prompt tidy
+    chunks = top_doc_chunks(env, vs_id, msgs[-1]["content"])
     
     # Output the result
-    env.add_reply(json.dumps(top_hits, indent=2))
+    env.add_reply(json.dumps(chunks, indent=2))
