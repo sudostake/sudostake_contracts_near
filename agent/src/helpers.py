@@ -138,7 +138,7 @@ def init_near(env: Environment) -> Account:
 def init_vector_store() -> None:
     """
     Create a NEAR-AI vector-store containing **every** Markdown file
-    under *root*.  Returns the completed VectorStore object.
+    under *root*.
 
     Raises
     ------
@@ -160,7 +160,7 @@ def init_vector_store() -> None:
     md_paths: List[Path] = list(Path(root).rglob("*.md"))
     
     if not md_paths:
-        raise FileNotFoundError("No Markdown files found under", Path(root).resolve())
+        raise FileNotFoundError(f"No Markdown files found under {Path(root).resolve()}")
     
     # Upload each file (binary mode)
     file_ids: List[str] = []
