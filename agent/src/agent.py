@@ -1,5 +1,7 @@
+import json
+
 from nearai.agents.environment import Environment
-from helpers import ensure_loop, init_near
+from helpers import ensure_loop, init_near, init_vector_store, vector_store_id
 from tools import register_tools
 
 
@@ -22,20 +24,33 @@ def run(env: Environment):
     # Configure NEAR (returns py-near Account + headless flag)
     near = init_near(env)
     
+    # Configure the vector store
+    init_vector_store()
+    
     # Register tools and get their definitions
     tool_defs = register_tools(env, near)
     
+    # Query the Vector Store
+    messages = env.list_messages()
+    user_query = messages[-1]["content"]
+    vector_results = env.query_vector_store(vector_store_id(), user_query)
+    docs = [{"file": res["chunk_text"]} for res in vector_results[:6]]
+
     # Init prompt list with system message
     prompt_list = [
         {
             "role": "system",
             "content": "You are SudoStake's AI Agent. "
                     "Help users inspect or manage their vaults on NEAR."
-        }
+        },
+        {
+            "role": "documentation",
+            "content": json.dumps(docs),
+        },
     ]
     
     # Append any prior conversation history supplied by the Hub
-    prompt_list.extend(env.list_messages())
+    prompt_list.extend(messages)
 
     # Begin tool-driven interaction
     env.completions_and_run_tools(

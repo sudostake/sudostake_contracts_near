@@ -24,6 +24,7 @@ DATA_ROOT="${NEARAI_DATA_FOLDER:-$HOME/.nearai/registry}"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 SRC_DIR="$REPO_ROOT/agent/src"           # editable source
 META_SRC="$REPO_ROOT/agent/metadata.json"
+README_SRC="$REPO_ROOT/agent/README.md"
 # -----------------------------------------------------------------------------
 
 # ---------- 2. DISCOVER LATEST VERSION IN REGISTRY ---------------------------
@@ -64,6 +65,12 @@ DEST="$REGISTRY_DIR/$new_version"
 rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -R "$SRC_DIR/"* "$DEST"
+# -----------------------------------------------------------------------------
+
+# Include the agent-level README.md so the agent can ingest it.
+if [[ -f "$README_SRC" ]]; then
+  cp "$README_SRC" "$DEST/README.md"
+fi
 # -----------------------------------------------------------------------------
 
 # ---------- 5. STAMP metadata.json WITH NEW VERSION --------------------------
