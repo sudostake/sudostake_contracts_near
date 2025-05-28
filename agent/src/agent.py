@@ -35,7 +35,7 @@ def run(env: Environment):
     # Init prompt list with system message
     prompt_list = [
         {
-            "role": "user query",
+            "role": "user",
             "content": user_query,
         },
         {
