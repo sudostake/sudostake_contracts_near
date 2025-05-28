@@ -39,14 +39,14 @@ def run(env: Environment):
             "content": user_query,
         },
         {
-            "role": "system",
-            "content": "You are SudoStake's AI Agent. "
-                    "Help users inspect or manage their vaults on NEAR."
-        },
-        {
             "role": "documentation",
             "content": json.dumps(docs),
         },
+        {
+            "role": "system",
+            "content": "You are SudoStake's AI Agent. "
+                    "Help users inspect or manage their vaults on NEAR."
+        }
     ]
     
     # Append any prior conversation history supplied by the Hub
