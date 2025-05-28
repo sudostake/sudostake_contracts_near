@@ -4,13 +4,13 @@ from nearai.agents.models.tool_definition import MCPTool
 from .context import set_context
 from . import (
     balance,
+    docs,
     minting,
     transfer,
     delegation,
     vault,
     withdrawal,
-    summary,
-    store
+    summary
 )
 
 # Register all tools here
@@ -38,7 +38,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         withdrawal.claim_unstaked_balance,
         summary.view_vault_status_with_validator,
         summary.vault_delegation_summary,
-        store.query_sudostake_docs
+        docs.query_sudostake_docs
     ):
         registry.register_tool(tool)
         registered_tools.append(tool.__name__)

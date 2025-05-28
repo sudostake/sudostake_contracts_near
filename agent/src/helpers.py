@@ -43,7 +43,7 @@ YOCTO_FACTOR: Decimal = Decimal("1e24")
 _loop: Optional[asyncio.AbstractEventLoop] = None
 _SIGNING_MODE: Optional[str] = None       # "headless", "wallet", or None
 _ACCOUNT_ID: Optional[str] = None         # the user’s account when known
-_VECTOR_STORE_ID: Optional[str] = None    # The global vector store for SudoStake
+_VECTOR_STORE_ID: Optional[str] = "vs_ecd9ba192396493984d66feb" # default vector store ID
 
 # Tweak these knobs if you want different behaviour
 POLL_INTERVAL_S:    Final[int] = 2          # seconds between status checks
@@ -135,6 +135,7 @@ def init_near(env: Environment) -> Account:
     return near
 
 
+# TODO make this a cron job or similar
 def init_vector_store() -> None:
     """
     Create a NEAR-AI vector-store containing **every** Markdown file
@@ -221,5 +222,6 @@ def top_doc_chunks(env, vs_id: str, user_query: str, k: int = 6):
     Return the top-k vector-store chunks for *user_query*.
     Does not touch env.add_reply(); safe for reuse.
     """
+
     results = env.query_vector_store(vs_id, user_query)
     return results[:k]                      # trim noise

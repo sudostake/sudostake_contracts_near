@@ -21,7 +21,7 @@ from tools import ( # type: ignore[import]
     vault,
     withdrawal,
     summary,
-    store
+    docs
 )
 
 # ───────────────────────────  helpers  ───────────────────────────
@@ -983,7 +983,7 @@ def test_query_docs_success(mock_setup):
     env.list_messages.return_value = [{"content": "What is SudoStake?"}]
     env.query_vector_store.return_value = [{"chunk_text": "SudoStake is …"}]
     
-    store.query_sudostake_docs()
+    docs.query_sudostake_docs()
     
     env.query_vector_store.assert_called_once_with("vs_abc", "What is SudoStake?")
     expected = json.dumps([{"chunk_text": "SudoStake is …"}], indent=2)
@@ -996,7 +996,7 @@ def test_query_docs_no_vs_id(mock_setup):
     env, _ = mock_setup
     env.list_messages.return_value = [{"content": "hello"}]
     
-    store.query_sudostake_docs()
+    docs.query_sudostake_docs()
     
     env.query_vector_store.assert_not_called()
     env.add_reply.assert_called_once()
@@ -1010,7 +1010,7 @@ def test_query_docs_no_user_message(mock_setup):
     helpers._VECTOR_STORE_ID = "vs_any"
     env.list_messages.return_value = []          # empty
     
-    store.query_sudostake_docs()
+    docs.query_sudostake_docs()
     
     env.query_vector_store.assert_not_called()
     env.add_reply.assert_called_once()

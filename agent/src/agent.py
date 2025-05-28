@@ -24,9 +24,6 @@ def run(env: Environment):
     # Configure NEAR (returns py-near Account + headless flag)
     near = init_near(env)
     
-    # Configure the vector store
-    init_vector_store()
-    
     # Register tools and get their definitions
     tool_defs = register_tools(env, near)
     
