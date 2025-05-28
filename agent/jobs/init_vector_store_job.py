@@ -28,7 +28,7 @@ def init_vector_store() -> None:
     # Bootstrap the client
     config = nearai.config.load_config_file()
     auth = config["auth"]
-    hub_url = "https://api.near.ai/v1"
+    hub_url = config.get("api_url", "https://api.near.ai/v1")
     signature = json.dumps(auth)
     
     client = openai.OpenAI(base_url=hub_url, api_key=signature)
