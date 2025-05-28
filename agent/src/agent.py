@@ -1,7 +1,7 @@
 import json
 
 from nearai.agents.environment import Environment
-from helpers import ensure_loop, init_near, init_vector_store, vector_store_id, top_doc_chunks
+from helpers import ensure_loop, init_near, vector_store_id, top_doc_chunks
 from tools import register_tools
 
 
@@ -34,6 +34,10 @@ def run(env: Environment):
 
     # Init prompt list with system message
     prompt_list = [
+        {
+            "role": "user",
+            "content": user_query,
+        },
         {
             "role": "system",
             "content": "You are SudoStake's AI Agent. "
