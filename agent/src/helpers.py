@@ -14,10 +14,10 @@ T = TypeVar("T")
 # ──────────────────────────────────────────────────────────────
 # GLOBAL STATE
 # ──────────────────────────────────────────────────────────────
-# maybe switch to rpc.fastnear.com
+# fastnear.com
 _DEFAULT_RPC = {
-    "mainnet": "https://rpc.mainnet.near.org",
-    "testnet": "https://rpc.testnet.near.org",
+    "mainnet": "https://rpc.mainnet.fastnear.com",
+    "testnet": "https://rpc.testnet.fastnear.com",
 }
 
 # Factory contract addresses per network
