@@ -26,6 +26,12 @@ FACTORY_CONTRACTS = {
     "testnet": "nzaza.testnet",
 }
 
+# USDC contract addresses per network
+USDC_CONTRACTS = {
+    "mainnet": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+    "testnet": "usdc.tkn.primitives.testnet",
+}
+
 # Firebase functions vaults API
 FIREBASE_VAULTS_API = "https://us-central1-sudostake.cloudfunctions.net" 
 
@@ -35,6 +41,9 @@ VAULT_MINT_FEE_NEAR: Decimal = Decimal("10")
 
 # NEAR uses 10^24 yoctoNEAR per 1 NEAR
 YOCTO_FACTOR: Decimal = Decimal("1e24")
+
+# USDC uses 10^6 for 1 USDC
+USDC_FACTOR: Decimal = Decimal("1e6")
 
 _loop: Optional[asyncio.AbstractEventLoop] = None
 _SIGNING_MODE: Optional[str] = None       # "headless", "wallet", or None
@@ -47,6 +56,37 @@ def signing_mode()    -> Optional[str]: return _SIGNING_MODE
 def account_id()      -> Optional[str]: return _ACCOUNT_ID
 def vector_store_id() -> Optional[str]: return _VECTOR_STORE_ID
 # ──────────────────────────────────────────────────────────────
+
+def usdc_contract()   -> str:
+    """
+    Return the USDC contract address for the current NEAR_NETWORK.
+    
+    We don't have to check for the environment variable here,
+    as this function is only called after the NEAR_NETWORK is set
+    in the environment.
+    """
+    network = os.getenv("NEAR_NETWORK")
+    return USDC_CONTRACTS[network]
+
+
+def fetch_usdc_balance(near: Account, account_id: str) -> Decimal:
+    """
+    Retrieve and return the USDC balance (as a Decimal) for the given account ID.
+    
+    Raises:
+        ValueError: if the view call fails or no result is returned.
+    """
+    
+    resp = run_coroutine(
+        near.view(usdc_contract(), "ft_balance_of", {"account_id": account_id})
+    )
+    
+    if not resp or not hasattr(resp, "result") or resp.result is None:
+        raise ValueError(f"❌ No USDC balance returned for `{account_id}`.")
+    
+    usdc_raw = int(resp.result)
+    return Decimal(usdc_raw) / USDC_FACTOR
+    
 
 def get_explorer_url() -> str:
     """

@@ -50,13 +50,17 @@ pip install semver
 brew install jq  # macOS  (or: sudo apt install jq on Debian/Ubuntu)
 
 chmod +x ./agent/build.sh
-source ~/.zshrc && ./agent/build.sh patch && sudo -E nearai agent interactive --local
+
+./agent/build.sh patch
 ```
 
 &nbsp;
 
-## Run the agent locally in interractive mode
+## Run the agent locally in interactive mode
 ```
-nearai login
-nearai agent interactive --local
+# Interact as a vault owner
+source ~/.near_vault_owner_profile && sudo -E nearai agent interactive --local
+
+# Interact as a usdc lender
+source ~/.near_vault_lender_profile && sudo -E nearai agent interactive --local
 ```

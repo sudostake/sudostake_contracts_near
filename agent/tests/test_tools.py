@@ -80,17 +80,43 @@ def test_vault_state(mock_setup):
     assert "`alice.near`" in msg
     
 
-def test_view_available_balance(mock_setup):
+def test_view_available_balance(monkeypatch, mock_setup):
+    """
+    Should display both NEAR and USDC balances when available:
+      • Vault NEAR balance is returned via `view_available_balance`
+      • Vault USDC balance is returned via `ft_balance_of`
+      • Tool formats both in markdown and replies once
+    """
+    
     (dummy_env, mock_near) = mock_setup
     
-    yocto_balance = int(Decimal("1.25") * Decimal("1e24"))
-    mock_near.view = AsyncMock(return_value=MagicMock(result=str(yocto_balance)))
+    # Set the default network
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    balance.view_available_balance("vault-0.testnet")
-
+    # Simulated vault NEAR balance: 1.25 NEAR
+    near_yocto = int(Decimal("1.25") * Decimal("1e24"))
+    
+    # Simulated vault USDC balance: 45.67 USDC
+    usdc_raw = int(Decimal("45.67") * Decimal("1e6"))
+    
+    # First near.view call → NEAR balance
+    # Second near.view call → USDC balance
+    mock_near.view = AsyncMock(side_effect=[
+        MagicMock(result=str(near_yocto)),  # response from view_available_balance
+        MagicMock(result=str(usdc_raw))     # response from ft_balance_of
+    ])
+    
+    # Execute the tool
+    balance.view_available_balance("vault-0.factory.testnet")
+    
+    # Should emit one markdown reply
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
-    assert "**1.25000 NEAR**" in msg
+    
+    # Validate content of response
+    assert "vault-0.factory.testnet" in msg
+    assert "**NEAR:** `1.25000`" in msg
+    assert "**USDC:** `45.67`" in msg
     
 
 def test_delegate_headless(monkeypatch, mock_setup):
@@ -276,21 +302,34 @@ def test_mint_vault_missing_event(monkeypatch, mock_setup):
 
 
 def test_view_main_balance_headless(monkeypatch, mock_setup):
-    """Head-less mode: tool should return the correct NEAR balance."""
+    """Head-less mode: tool should return the correct NEAR and USDC balances."""
     (dummy_env, mock_near) = mock_setup
     
+    # Mock NEAR balance (5 NEAR)
     yocto_five = int(5 * 1e24)
     mock_near.get_balance = AsyncMock(return_value=yocto_five)
+    
+    # Mock USDC balance (123.45 USDC)
+    usdc_amount = int(Decimal("123.45") * Decimal("1e6"))
+    mock_near.view = AsyncMock(return_value=MagicMock(result=str(usdc_amount)))
 
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
     monkeypatch.setattr(helpers, "_ACCOUNT_ID", "alice.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
     balance.view_main_balance()
     
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
-    assert "**5.00000 NEAR**" in msg
+    
+    assert "**Account:** `alice.testnet`" in msg
+    assert "**NEAR:** `5.00000`" in msg
+    assert "**USDC:** `123.45`" in msg
+    
     mock_near.get_balance.assert_awaited_once()
+    mock_near.view.assert_awaited_once_with(
+        helpers.usdc_contract(), "ft_balance_of", {"account_id": "alice.testnet"}
+    )
     
 
 def test_view_main_balance_no_credentials(monkeypatch, mock_setup):
