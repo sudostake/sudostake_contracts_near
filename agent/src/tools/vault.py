@@ -141,7 +141,7 @@ def vault_state(vault_id: str) -> None:
             )
         
         # Add liquidation summary if present
-        if state.get("liquidation"):
+        if state.get("liquidation") and state.get("liquidity_request"):
             req = state["liquidity_request"]
             total_debt = Decimal(req["collateral"]) / YOCTO_FACTOR
             liquidated = Decimal(state["liquidation"]["liquidated"]) / YOCTO_FACTOR
