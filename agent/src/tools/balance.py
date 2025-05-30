@@ -58,7 +58,7 @@ def view_main_balance() -> None:
 
 def view_available_balance(vault_id: str) -> None:
     """
-    Return the available NEAR and USDC balance in a readable sentence.
+    Return the available NEAR and USDC balances in a readable sentence.
 
     Args:
       vault_id: NEAR account ID of the vault.

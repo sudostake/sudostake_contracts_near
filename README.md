@@ -56,7 +56,7 @@ chmod +x ./agent/build.sh
 
 &nbsp;
 
-## Run the agent locally in interractive mode
+## Run the agent locally in interactive mode
 ```
 # Interact as a vault owner
 source ~/.near_vault_owner_profile && sudo -E nearai agent interactive --local
