@@ -2,16 +2,40 @@ import os
 import requests
 import textwrap
 
+from decimal import Decimal
 from typing import List, cast
+from datetime import datetime, timezone, timedelta
 from logging import Logger
 from .context import get_env, get_near, get_logger
 from helpers import (
     FIREBASE_VAULTS_API,
     FACTORY_CONTRACTS,
+    USDC_FACTOR,
+    YOCTO_FACTOR,
     signing_mode,
     account_id,
     run_coroutine
 )
+
+def format_near_timestamp(ns: int) -> str:
+    """Convert NEAR block timestamp (ns since epoch) to a readable UTC datetime."""
+    ts = ns / 1_000_000_000  # Convert nanoseconds to seconds
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def format_duration(seconds: int) -> str:
+    """Convert a duration in seconds to a human-readable string."""
+    delta = timedelta(seconds=seconds)
+    days = delta.days
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    
+    parts = []
+    if days: parts.append(f"{days}d")
+    if hours: parts.append(f"{hours}h")
+    if minutes: parts.append(f"{minutes}m")
+    return " ".join(parts) or "0m"
+
 
 def show_help_menu() -> None:
     """
@@ -66,8 +90,9 @@ def vault_state(vault_id: str) -> None:
             return
         
         # Get the result state from the response
-        state = response.result        
+        state = response.result
         
+        # Add vault state summary
         env.add_reply(
             f"✅ **Vault State: `{vault_id}`**\n\n"
             f"| Field                  | Value                       |\n"
@@ -76,9 +101,61 @@ def vault_state(vault_id: str) -> None:
             f"| Index                  | `{state['index']}`          |\n"
             f"| Version                | `{state['version']}`        |\n"
             f"| Listed for Takeover    | `{state['is_listed_for_takeover']}` |\n"
-            f"| Active Request         | `{state['liquidity_request']}` |\n"
-            f"| Accepted Offer         | `{state['accepted_offer']}` |\n"
+            f"| Active Request         | `{state['liquidity_request'] is not None}` |\n"
+            f"| Accepted Offer         | `{state['accepted_offer'] is not None}` |\n"
         )
+        
+        # Add liquidity request summary if present
+        if state.get("liquidity_request"):
+            req = state["liquidity_request"]
+            usdc_amount = Decimal(req["amount"]) / USDC_FACTOR
+            usdc_interest = Decimal(req["interest"]) / USDC_FACTOR
+            near_collateral = Decimal(req["collateral"]) / YOCTO_FACTOR
+            duration = format_duration(req["duration"])
+            created_at = format_near_timestamp(int(req["created_at"]))
+            
+            env.add_reply(
+                "**📦 Liquidity Request Summary**\n\n"
+                "| Field        | Value                   |\n"
+                "|--------------|-------------------------|\n"
+                f"| Token       | `{req['token']}`        |\n"
+                f"| Amount      | **{usdc_amount:.2f} USDC** |\n"
+                f"| Interest    | **{usdc_interest:.2f} USDC** |\n"
+                f"| Collateral  | **{near_collateral:.5f} NEAR** |\n"
+                f"| Duration    | `{duration}`            |\n"
+                f"| Created At  | `{created_at}`          |"
+            )
+        
+        # Add accepted offer summary if present
+        accepted = state.get("accepted_offer")
+        if accepted:
+            lender = accepted["lender"]
+            accepted_at = format_near_timestamp(int(accepted["accepted_at"]))
+            
+            env.add_reply(
+                "**🤝 Accepted Offer Summary**\n\n"
+                "| Field        | Value              |\n"
+                "|--------------|--------------------|\n"
+                f"| Lender      | `{lender}`         |\n"
+                f"| Accepted At | `{accepted_at}`    |"
+            )
+        
+        # Add liquidation summary if present
+        if state.get("liquidation"):
+            req = state["liquidity_request"]
+            total_debt = Decimal(req["collateral"]) / YOCTO_FACTOR
+            liquidated = Decimal(state["liquidation"]["liquidated"]) / YOCTO_FACTOR
+            remaining = total_debt - liquidated
+            
+            env.add_reply(
+                "**⚠️ Liquidation Summary**\n\n"
+                "| Field             | Amount                    |\n"
+                "|-------------------|---------------------------|\n"
+                f"| Total Debt       | **{total_debt:.5f} NEAR** |\n"
+                f"| Liquidated       | **{liquidated:.5f} NEAR** |\n"
+                f"| Outstanding Debt | **{remaining:.5f} NEAR**  |"
+            )
+            
     except Exception as e:
         logger.error("vault_state RPC error for %s: %s", vault_id, e, exc_info=True)
         env.add_reply(f"❌ Failed to fetch vault state for `{vault_id}`\n\n**Error:** {e}")
