@@ -58,9 +58,9 @@ chmod +x ./agent/build.sh
 
 ## Run the agent locally in interractive mode
 ```
-# Interract as a vault owner
+# Interact as a vault owner
 source ~/.near_vault_owner_profile && sudo -E nearai agent interactive --local
 
-# Interract as a usdc lender
+# Interact as a usdc lender
 source ~/.near_vault_lender_profile && sudo -E nearai agent interactive --local
 ```
