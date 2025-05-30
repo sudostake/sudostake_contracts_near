@@ -80,17 +80,43 @@ def test_vault_state(mock_setup):
     assert "`alice.near`" in msg
     
 
-def test_view_available_balance(mock_setup):
+def test_view_available_balance(monkeypatch, mock_setup):
+    """
+    Should display both NEAR and USDC balances when available:
+      • Vault NEAR balance is returned via `view_available_balance`
+      • Vault USDC balance is returned via `ft_balance_of`
+      • Tool formats both in markdown and replies once
+    """
+    
     (dummy_env, mock_near) = mock_setup
     
-    yocto_balance = int(Decimal("1.25") * Decimal("1e24"))
-    mock_near.view = AsyncMock(return_value=MagicMock(result=str(yocto_balance)))
+    # Set the default network
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
     
-    balance.view_available_balance("vault-0.testnet")
-
+    # Simulated vault NEAR balance: 1.25 NEAR
+    near_yocto = int(Decimal("1.25") * Decimal("1e24"))
+    
+    # Simulated vault USDC balance: 45.67 USDC
+    usdc_raw = int(Decimal("45.67") * Decimal("1e6"))
+    
+    # First near.view call → NEAR balance
+    # Second near.view call → USDC balance
+    mock_near.view = AsyncMock(side_effect=[
+        MagicMock(result=str(near_yocto)),  # response from view_available_balance
+        MagicMock(result=str(usdc_raw))     # response from ft_balance_of
+    ])
+    
+    # Execute the tool
+    balance.view_available_balance("vault-0.factory.testnet")
+    
+    # Should emit one markdown reply
     dummy_env.add_reply.assert_called_once()
     msg = dummy_env.add_reply.call_args[0][0]
-    assert "**1.25000 NEAR**" in msg
+    
+    # Validate content of response
+    assert "vault-0.factory.testnet" in msg
+    assert "**NEAR:** `1.25000`" in msg
+    assert "**USDC:** `45.67`" in msg
     
 
 def test_delegate_headless(monkeypatch, mock_setup):
