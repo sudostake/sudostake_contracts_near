@@ -4,8 +4,8 @@ from logging import Logger
 from .context import get_env, get_near, get_logger
 from helpers import (
     YOCTO_FACTOR,
-    USDC_FACTOR,
-    signing_mode, account_id, run_coroutine, usdc_contract
+    fetch_usdc_balance,
+    signing_mode, account_id, run_coroutine
 )
 
 def view_main_balance() -> None:
@@ -38,17 +38,11 @@ def view_main_balance() -> None:
         near_bal = Decimal(yocto) / YOCTO_FACTOR
         
         # Fetch USDC balance
-        usdc_contract_address = usdc_contract()
-        resp = run_coroutine(
-            near.view(usdc_contract_address, "ft_balance_of", {"account_id": acct_id})
-        )
-        
-        if not resp or not hasattr(resp, "result") or resp.result is None:
-            env.add_reply(f"❌ No USDC balance returned for `{acct_id}`.")
+        try:
+            usdc_amount = fetch_usdc_balance(near, acct_id)
+        except ValueError as e:
+            env.add_reply(str(e))
             return
-        
-        usdc_raw = int(resp.result)
-        usdc_amount = Decimal(usdc_raw) / USDC_FACTOR
         
         env.add_reply(
             f"💼 **Main Account Balance**\n"
@@ -86,17 +80,11 @@ def view_available_balance(vault_id: str) -> None:
         near_amount = Decimal(yocto) / YOCTO_FACTOR
         
         # Fetch USDC balance
-        usdc_contract_address = usdc_contract()
-        usdc_resp = run_coroutine(
-            near.view(usdc_contract_address, "ft_balance_of", {"account_id": vault_id})
-        )
-        
-        if not usdc_resp or not hasattr(usdc_resp, "result") or usdc_resp.result is None:
-            env.add_reply(f"❌ No USDC balance returned for `{vault_id}`.")
+        try:
+            usdc_amount = fetch_usdc_balance(near, vault_id)
+        except ValueError as e:
+            env.add_reply(str(e))
             return
-        
-        usdc_raw = int(usdc_resp.result)
-        usdc_amount = Decimal(usdc_raw) / USDC_FACTOR
         
         env.add_reply(
             f"💰 Vault `{vault_id}` balances:\n"

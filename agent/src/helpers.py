@@ -69,6 +69,25 @@ def usdc_contract()   -> str:
     return USDC_CONTRACTS[network]
 
 
+def fetch_usdc_balance(near: Account, account_id: str) -> Decimal:
+    """
+    Retrieve and return the USDC balance (as a Decimal) for the given account ID.
+    
+    Raises:
+        ValueError: if the view call fails or no result is returned.
+    """
+    
+    resp = run_coroutine(
+        near.view(usdc_contract(), "ft_balance_of", {"account_id": account_id})
+    )
+    
+    if not resp or not hasattr(resp, "result") or resp.result is None:
+        raise ValueError(f"❌ No USDC balance returned for `{account_id}`.")
+    
+    usdc_raw = int(resp.result)
+    return Decimal(usdc_raw) / USDC_FACTOR
+    
+
 def get_explorer_url() -> str:
     """
     Return the correct NEAR Explorer URL based on NEAR_NETWORK.
