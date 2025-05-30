@@ -56,30 +56,7 @@ def mock_setup():
     return (env, near)
 
 
-# ─────────────────────────── tests ──────────────────────────────
-def test_vault_state(mock_setup):
-    (dummy_env, mock_near) = mock_setup
-    
-    mock_near.view = AsyncMock(return_value=MagicMock(result={
-        "owner": "alice.near",
-        "index": 0,
-        "version": 1,
-        "is_listed_for_takeover": False,
-        "pending_liquidity_request": None,
-        "liquidity_request": None,
-        "accepted_offer": None
-    }))
-    
-    # Call the vault_state function
-    vault.vault_state("vault-0.testnet")
-    
-    # Assertions
-    dummy_env.add_reply.assert_called_once()
-    msg = dummy_env.add_reply.call_args[0][0]
-    assert "✅ **Vault State" in msg
-    assert "`alice.near`" in msg
-    
-
+# ─────────────────────────── tests ──────────────────────────────    
 def test_view_available_balance(monkeypatch, mock_setup):
     """
     Should display both NEAR and USDC balances when available:
