@@ -64,7 +64,7 @@ def view_main_balance() -> None:
 
 def view_available_balance(vault_id: str) -> None:
     """
-    Return the available NEAR balance in a readable sentence.
+    Return the available NEAR and USDC balance in a readable sentence.
 
     Args:
       vault_id: NEAR account ID of the vault.
@@ -85,7 +85,24 @@ def view_available_balance(vault_id: str) -> None:
         yocto = int(resp.result)
         near_amount = Decimal(yocto) / YOCTO_FACTOR
         
-        env.add_reply(f"💰 Vault `{vault_id}` has **{near_amount:.5f} NEAR** available for withdrawal.")
+        # Fetch USDC balance
+        usdc_contract_address = usdc_contract()
+        usdc_resp = run_coroutine(
+            near.view(usdc_contract_address, "ft_balance_of", {"account_id": vault_id})
+        )
+        
+        if not usdc_resp or not hasattr(usdc_resp, "result") or usdc_resp.result is None:
+            env.add_reply(f"❌ No USDC balance returned for `{vault_id}`.")
+            return
+        
+        usdc_raw = int(usdc_resp.result)
+        usdc_amount = Decimal(usdc_raw) / USDC_FACTOR
+        
+        env.add_reply(
+            f"💰 Vault `{vault_id}` balances:\n"
+            f"- **NEAR:** `{near_amount:.5f}` available\n"
+            f"- **USDC:** `{usdc_amount:.2f}`"
+        )
     except Exception as e:
         logger.error("view_available_balance RPC error for %s: %s", vault_id, e, exc_info=True)
         env.add_reply(f"❌ Failed to fetch balance for `{vault_id}`\n\n**Error:** {e}")
