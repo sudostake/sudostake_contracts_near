@@ -5,6 +5,8 @@ import time
 import asyncio
 
 from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
+from decimal import Decimal
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
@@ -133,4 +135,37 @@ def test_init_near_invalid_network(monkeypatch):
     with pytest.raises(RuntimeError, match="NEAR_NETWORK must be set"):
         helpers.init_near(MagicMock())
 
+
+# ─────────────────────────── fetch_usdc_balance tests ─────────────────────
+def test_fetch_usdc_balance_success(monkeypatch):
+    """Should correctly return a Decimal USDC balance when view result is valid."""
+    
+    mock_near = MagicMock()
+    raw_usdc = int(Decimal("123.45") * Decimal("1e6"))
+    
+    # Mock the view response
+    mock_near.view = AsyncMock(return_value=MagicMock(result=str(raw_usdc)))
+    
+    # Patch usdc_contract() to return a fake contract address
+    monkeypatch.setattr(helpers, "usdc_contract", lambda: "usdc.token.testnet")
+    
+    result = helpers.fetch_usdc_balance(mock_near, "vault-1.factory.testnet")
+    
+    assert isinstance(result, Decimal)
+    assert result == Decimal("123.45")
+    mock_near.view.assert_called_once_with(
+        "usdc.token.testnet", "ft_balance_of", {"account_id": "vault-1.factory.testnet"}
+    )
+    
+
+def test_fetch_usdc_balance_no_result(monkeypatch):
+    """Should raise ValueError when the USDC view call returns no result."""
+    
+    mock_near = MagicMock()
+    mock_near.view = AsyncMock(return_value=MagicMock(result=None))
+    
+    monkeypatch.setattr(helpers, "usdc_contract", lambda: "usdc.token.testnet")
+    
+    with pytest.raises(ValueError, match="No USDC balance returned for `vault-1.factory.testnet`"):
+        helpers.fetch_usdc_balance(mock_near, "vault-1.factory.testnet")
 
