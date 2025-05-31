@@ -2,6 +2,7 @@ import sys
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from test_utils import make_dummy_resp
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -23,16 +24,6 @@ def mock_setup():
     context.set_context(env=env, near=near)
 
     return (env, near)
-
-
-def _make_dummy_resp(json_body):
-    """Minimal stub mimicking requests.Response for our needs."""
-    class DummyResp:
-        def raise_for_status(self):          # no-op ⇢ 200 OK
-            pass
-        def json(self):
-            return json_body
-    return DummyResp()
 
 
 def test_request_liquidity_success(monkeypatch, mock_setup):
@@ -209,7 +200,7 @@ def test_view_pending_requests_success(monkeypatch, mock_setup):
     # Patch requests.get inside liquidity_request module to return fake JSON list
     monkeypatch.setattr(
         liquidity_request.requests, "get",
-        lambda url, params, timeout, headers: _make_dummy_resp(
+        lambda url, params, timeout, headers: make_dummy_resp(
             [
                 {
                     "id": "vault-0.factory.testnet",
@@ -252,7 +243,7 @@ def test_view_pending_requests_empty(monkeypatch, mock_setup):
     monkeypatch.setattr(
         liquidity_request.requests,
         "get",
-        lambda url, params, timeout, headers: _make_dummy_resp([]),
+        lambda url, params, timeout, headers: make_dummy_resp([]),
     )
     
     # Run the tool

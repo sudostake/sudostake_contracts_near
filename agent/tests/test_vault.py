@@ -6,6 +6,7 @@ import requests
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
+from test_utils import make_dummy_resp
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -47,16 +48,6 @@ def minimal_vault_state():
         "unstake_entries": [],
         "current_epoch": 1000,
     }
-    
-
-def _make_dummy_resp(json_body):
-    """Minimal stub mimicking requests.Response for our needs."""
-    class DummyResp:
-        def raise_for_status(self):          # no-op ⇢ 200 OK
-            pass
-        def json(self):
-            return json_body
-    return DummyResp()
 
     
 def with_liquidity(state):
@@ -225,7 +216,7 @@ def test_view_user_vaults_success(monkeypatch, mock_setup):
     # Patch requests.get inside vault module to return fake JSON list
     monkeypatch.setattr(
         vault.requests, "get",
-        lambda url, timeout: _make_dummy_resp(
+        lambda url, timeout: make_dummy_resp(
             ["vault-0.factory.testnet", "vault-1.factory.testnet"]
         ),
     )
@@ -257,7 +248,7 @@ def test_view_user_vaults_empty(monkeypatch, mock_setup):
     # Patch requests.get to return an empty JSON array
     monkeypatch.setattr(
         vault.requests, "get",
-        lambda url, timeout: _make_dummy_resp([]),
+        lambda url, timeout: make_dummy_resp([]),
     )
     
     # Invoke the tool
