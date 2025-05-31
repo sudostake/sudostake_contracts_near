@@ -8,10 +8,10 @@ from datetime import datetime, timezone, timedelta
 from logging import Logger
 from .context import get_env, get_near, get_logger
 from helpers import (
-    FIREBASE_VAULTS_API,
     FACTORY_CONTRACTS,
     USDC_FACTOR,
     YOCTO_FACTOR,
+    firebase_vaults_api,
     signing_mode,
     account_id,
     run_coroutine
@@ -190,7 +190,7 @@ def view_user_vaults() -> None:
     
     # Call the Firebase Cloud Function to get vaults
     url = (
-        f"{FIREBASE_VAULTS_API}/get_user_vaults"
+        f"{firebase_vaults_api()}/get_user_vaults"
         f"?owner={acct_id}&factory_id={factory_id}"
     )
     
