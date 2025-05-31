@@ -40,6 +40,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         summary.view_vault_status_with_validator,
         summary.vault_delegation_summary,
         liquidity_request.request_liquidity,
+        liquidity_request.view_pending_liquidity_requests,
         docs.query_sudostake_docs
     ):
         registry.register_tool(tool)

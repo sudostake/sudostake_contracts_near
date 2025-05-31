@@ -1,18 +1,38 @@
 import json
+import os
+import requests
 
 from decimal import Decimal
 from logging import Logger
+from typing import List, TypedDict
 from .context import get_env, get_near, get_logger
-from token_registry import get_token_metadata
+from token_registry import get_token_metadata, get_token_metadata_by_contract
 from py_near.models import TransactionResult
 from helpers import (
     YOCTO_FACTOR,
+    FACTORY_CONTRACTS,
     index_vault_to_firebase,
     run_coroutine, 
     get_explorer_url, 
     log_contains_event,
-    get_failure_message_from_tx_status
+    get_failure_message_from_tx_status,
+    firebase_vaults_api
 )
+
+# Define the structure of the liquidity request
+class LiquidityRequest(TypedDict):
+    token: str
+    amount: str
+    interest: str
+    collateral: str
+    duration: int
+
+# Define the structure of a pending liquidity request
+class PendingRequest(TypedDict):
+    id: str
+    owner: str
+    state: str
+    liquidity_request: LiquidityRequest
 
 
 def request_liquidity(
@@ -111,3 +131,61 @@ def request_liquidity(
         
     except Exception as e:
         env.add_reply(f"❌ Liquidity request failed\n\n**Error:** {e}")
+
+
+def view_pending_liquidity_requests() -> None:
+    """
+    Display all pending liquidity requests from the Firebase index
+    for vaults minted under the current network's factory contract.
+    """
+    
+    env = get_env()
+    logger = get_logger()
+    
+    try:
+        # Resolve factory for the active network
+        network = os.getenv("NEAR_NETWORK")
+        factory_id = FACTORY_CONTRACTS.get(network)
+        
+        url = f"{firebase_vaults_api()}/view_pending_liquidity_requests"
+        response = requests.get(
+            url,
+            params={"factory_id": factory_id},
+            timeout=10,
+            headers={"Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+        
+        pending: List[PendingRequest] = response.json()
+        
+        if not pending:
+            env.add_reply("✅ No pending liquidity requests found.")
+            return
+
+        message = "**📋 Pending Liquidity Requests**\n\n"
+        for item in pending:
+            lr = item["liquidity_request"]
+            token_meta = get_token_metadata_by_contract(lr["token"])
+            decimals = token_meta["decimals"]
+            symbol = token_meta["symbol"]
+            
+            amount = (Decimal(lr["amount"]) / Decimal(10 ** decimals)).quantize(Decimal(1))
+            interest = (Decimal(lr["interest"]) / Decimal(10 ** decimals)).quantize(Decimal(1))
+            collateral = Decimal(lr["collateral"]) / YOCTO_FACTOR
+            duration_days = lr["duration"] // 86400
+            
+            message += (
+                f"- 🏦 `{item['id']}`\n"
+                f"  • Token: `{lr['token']}`\n"
+                f"  • Amount: `{amount}` {symbol}\n"
+                f"  • Interest: `{interest}` {symbol}\n"
+                f"  • Duration: `{duration_days} days`\n"
+                f"  • Collateral: `{collateral.normalize()}` NEAR\n\n"
+            )
+        
+        env.add_reply(message)
+            
+        
+    except Exception as e:
+        logger.warning("view_pending_liquidity_requests failed: %s", e, exc_info=True)
+        env.add_reply(f"❌ Failed to fetch pending liquidity requests\n\n**Error:** {e}")

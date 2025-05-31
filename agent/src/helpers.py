@@ -21,6 +21,11 @@ _DEFAULT_RPC = {
     "testnet": "https://rpc.testnet.fastnear.com",
 }
 
+_EXPLORER_URL = {
+    "mainnet": "https://explorer.near.org",
+    "testnet": "https://explorer.testnet.near.org",
+}
+
 # Factory contract addresses per network
 FACTORY_CONTRACTS = {
     "mainnet": "sudostake.near",
@@ -93,21 +98,9 @@ def fetch_usdc_balance(near: Account, account_id: str) -> Decimal:
 def get_explorer_url() -> str:
     """
     Return the correct NEAR Explorer URL based on NEAR_NETWORK.
-
-    Raises:
-        RuntimeError if NEAR_NETWORK is missing or invalid.
     """
     network = os.getenv("NEAR_NETWORK")
-    if not network:
-        raise RuntimeError("Missing required environment variable: NEAR_NETWORK")
-
-    if network not in ("mainnet", "testnet"):
-        raise RuntimeError(f"Unsupported NEAR_NETWORK: {network}")
-
-    return {
-        "mainnet": "https://explorer.near.org",
-        "testnet": "https://explorer.testnet.near.org",
-    }[network]
+    return _EXPLORER_URL.get(network)
 
 
 def ensure_loop() -> asyncio.AbstractEventLoop:

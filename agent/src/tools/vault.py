@@ -44,7 +44,10 @@ def show_help_menu() -> None:
     """
     
     help_text = textwrap.dedent("""
-        🛠 **SudoStake Agent Commands**
+        **SudoStake Agent Commands**
+        
+        __Main Account__
+        • what's my main account balance?
 
         __Vaults__
         • mint vault  
@@ -61,9 +64,13 @@ def show_help_menu() -> None:
         • claim unstaked balance from <validator> for <vault>  
         • show delegation summary for <vault>  
         • show <vault> delegation status with <validator>  
-
-        __Main Account__
-        • what's my main account balance?
+        
+        __Liquidity Request__
+        • Open a liquidity request on <vault> for <amount> USDC, <amount> USDC interest, <n>-day term, <amount> NEAR collateral  
+        • how me all pending liquidity requests  
+        
+        __SudoStake Docs__
+        • Query SudoStake Docs
 
         _You can type any of these in plain English to get started._
     """)

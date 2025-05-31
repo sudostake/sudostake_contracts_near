@@ -45,3 +45,25 @@ def test_get_token_metadata_invalid_network(monkeypatch):
     with pytest.raises(ValueError) as excinfo:
         token_registry.get_token_metadata("usdc")
     assert "Unsupported network" in str(excinfo.value)
+
+
+# ───────────────── get_token_metadata_by_contract tests ─────────────────
+def test_get_token_metadata_by_contract_valid():
+    meta = token_registry.get_token_metadata_by_contract("usdc.tkn.primitives.testnet")
+    assert meta["symbol"] == "USDC"
+    assert meta["decimals"] == 6
+
+
+def test_get_token_metadata_by_contract_invalid():
+    with pytest.raises(ValueError) as excinfo:
+        token_registry.get_token_metadata_by_contract("invalid.contract.testnet")
+    assert "No token metadata found for contract" in str(excinfo.value)
+
+
+def test_get_token_metadata_by_contract_invalid_network(monkeypatch):
+    monkeypatch.setenv("NEAR_NETWORK", "invalidnet")
+    
+    with pytest.raises(ValueError) as excinfo:
+        token_registry.get_token_metadata_by_contract("usdc.tkn.primitives.testnet")
+    
+    assert "Unsupported network" in str(excinfo.value)

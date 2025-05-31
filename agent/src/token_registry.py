@@ -39,3 +39,21 @@ def get_token_metadata(token_key: str) -> dict:
             return metadata
     
     raise ValueError(f"Unsupported token '{token_key}' on network '{network}'")
+
+
+def get_token_metadata_by_contract(contract_id: str) -> dict:
+    """
+    Resolve token metadata by contract ID.
+    """
+    
+    network = os.getenv("NEAR_NETWORK", "testnet").lower()
+    registry = TOKEN_REGISTRY.get(network)
+    
+    if registry is None:
+        raise ValueError(f"Unsupported network: {network}")
+    
+    for meta in registry.values():
+        if meta["contract"] == contract_id:
+            return meta
+    
+    raise ValueError(f"No token metadata found for contract '{contract_id}' on network '{network}'")

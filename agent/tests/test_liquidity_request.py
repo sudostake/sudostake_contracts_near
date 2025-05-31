@@ -2,6 +2,7 @@ import sys
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from test_utils import make_dummy_resp
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -9,7 +10,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../s
 import helpers # type: ignore
 from tools import ( # type: ignore[import]
     context,
-    vault,
     liquidity_request,
 )
 
@@ -184,3 +184,99 @@ def test_request_liquidity_indexing_failure(monkeypatch, mock_setup):
     assert "vault-9.factory.testnet" in msg
     assert "tx999" in msg
 
+
+# ───────────────── view_pending_liquidity_requests tests ─────────────────
+
+def test_view_pending_requests_success(monkeypatch, mock_setup):
+    """
+    Should format and display a list of pending liquidity requests
+    when the Firebase API returns valid data.
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get inside liquidity_request module to return fake JSON list
+    monkeypatch.setattr(
+        liquidity_request.requests, "get",
+        lambda url, params, timeout, headers: make_dummy_resp(
+            [
+                {
+                    "id": "vault-0.factory.testnet",
+                    "owner": "owner.testnet",
+                    "state": "pending",
+                    "liquidity_request": {
+                        "token": "usdc.tkn.primitives.testnet",
+                        "amount": "300000000",
+                        "interest": "30000000",
+                        "collateral": "10000000000000000000000000",
+                        "duration": 2592000
+                    },
+                }
+            ]
+        ),
+    )
+    
+    # run the tool
+    liquidity_request.view_pending_liquidity_requests()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "📋 Pending Liquidity Requests" in msg
+    assert "vault-0.factory.testnet" in msg
+    assert "300" in msg
+    assert "30 days" in msg
+
+
+def test_view_pending_requests_empty(monkeypatch, mock_setup):
+    """
+    Should display a confirmation message when no pending liquidity requests exist.
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get to return an empty list
+    monkeypatch.setattr(
+        liquidity_request.requests,
+        "get",
+        lambda url, params, timeout, headers: make_dummy_resp([]),
+    )
+    
+    # Run the tool
+    liquidity_request.view_pending_liquidity_requests()
+    
+    # Assert success message for no requests
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "No pending liquidity requests found" in msg
+
+
+def test_view_pending_requests_error(monkeypatch, mock_setup):
+    """
+    Should log a warning and send an error message when the Firebase API request fails.
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get to raise an exception
+    def raise_error(*args, **kwargs):
+        raise RuntimeError("firebase api unreachable")
+    
+    monkeypatch.setattr(
+        liquidity_request.requests, "get", raise_error
+    )
+    
+    # Run the tool
+    liquidity_request.view_pending_liquidity_requests()
+    
+    # Assert that an error reply was sent
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Failed to fetch pending liquidity requests" in msg
+    assert "firebase api unreachable" in msg
