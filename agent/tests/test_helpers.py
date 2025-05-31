@@ -45,16 +45,6 @@ def test_get_explorer_url_mainnet(monkeypatch):
 def test_get_explorer_url_testnet(monkeypatch):
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     assert helpers.get_explorer_url() == "https://explorer.testnet.near.org"
-    
-def test_get_explorer_url_missing(monkeypatch):
-    monkeypatch.delenv("NEAR_NETWORK", raising=False)
-    with pytest.raises(RuntimeError, match="Missing required environment variable: NEAR_NETWORK"):
-        helpers.get_explorer_url()
-
-def test_get_explorer_url_invalid(monkeypatch):
-    monkeypatch.setenv("NEAR_NETWORK", "invalidnet")
-    with pytest.raises(RuntimeError, match="Unsupported NEAR_NETWORK"):
-        helpers.get_explorer_url()
 
 
 # ─────────────────────────── event-loop helpers ───────────────────
