@@ -41,6 +41,7 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         summary.vault_delegation_summary,
         liquidity_request.request_liquidity,
         liquidity_request.view_pending_liquidity_requests,
+        liquidity_request.accept_liquidity_request,
         docs.query_sudostake_docs
     ):
         registry.register_tool(tool)
