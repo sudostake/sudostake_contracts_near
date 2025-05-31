@@ -189,3 +189,94 @@ def view_pending_liquidity_requests() -> None:
     except Exception as e:
         logger.warning("view_pending_liquidity_requests failed: %s", e, exc_info=True)
         env.add_reply(f"❌ Failed to fetch pending liquidity requests\n\n**Error:** {e}")
+
+
+def accept_liquidity_request(vault_id: str) -> None:
+    """
+    Accept a pending liquidity request on the given vault by sending the
+    required amount of tokens via `ft_transfer_call`.
+
+    Args:
+        vault_id (str): NEAR account ID of the vault (e.g., vault-0.factory.testnet)
+    """
+    
+    env = get_env()
+    near = get_near()
+    logger: Logger = get_logger()
+    
+    try:
+        response = run_coroutine(near.view(vault_id, "get_vault_state", {}))
+        if not response or not hasattr(response, "result") or response.result is None:
+            env.add_reply(f"❌ No data returned for `{vault_id}`. Is the contract deployed?")
+            return
+        
+        # Get the result state from the response
+        state = response.result
+        
+        req = state.get("liquidity_request")
+        offer = state.get("accepted_offer")
+        
+        if offer or not req:
+            env.add_reply(
+                f"❌ `{vault_id}` has no active liquidity request or it has already been accepted."
+            )
+            return
+        
+        msg_payload = {
+            "action": "AcceptLiquidityRequest",
+            "token": req["token"],
+            "amount": req["amount"],
+            "interest": req["interest"],
+            "collateral": req["collateral"],
+            "duration": req["duration"],
+        }
+        
+        token_contract = req["token"]
+        token_amount = req["amount"]
+        
+        # Send ft_transfer_call
+        tx: TransactionResult = run_coroutine(
+            near.call(
+                contract_id=token_contract,
+                method_name="ft_transfer_call",
+                args={
+                    "receiver_id": vault_id,
+                    "amount": token_amount,
+                    "msg": json.dumps(msg_payload),
+                },
+                gas=300_000_000_000_000,  # 300 TGas
+                amount=1,                 # 1 yoctoNEAR deposit
+            )
+        )
+        
+        failure = get_failure_message_from_tx_status(tx.status)
+        if failure:
+            env.add_reply(
+                f"❌ Failed to accept liquidity request\n\n> {json.dumps(failure, indent=2)}"
+            )
+            return
+        
+        # Index the vault to Firebase
+        try:
+            index_vault_to_firebase(vault_id)
+        except Exception as e:
+            logger.warning("index_vault_to_firebase failed: %s", e, exc_info=True)
+        
+        # Get the token metadata
+        token_meta = get_token_metadata_by_contract(token_contract)
+        decimals = token_meta["decimals"]
+        symbol = token_meta["symbol"]
+        token_amount = (Decimal(token_amount) / Decimal(10 ** decimals)).quantize(Decimal(1))
+
+        explorer = get_explorer_url()
+        env.add_reply(
+            f"✅ **Accepted Liquidity Request**\n"
+            f"- 🏦 Vault: [`{vault_id}`]({explorer}/accounts/{vault_id})\n"
+            f"- 🪙 Token: `{token_contract}`\n"
+            f"- 💵 Amount: `{token_amount}` {symbol}\n"
+            f"- 🔗 Tx: [{tx.transaction.hash}]({explorer}/transactions/{tx.transaction.hash})"
+        )
+    
+    except Exception as e:
+        logger.error("accept_liquidity_request failed: %s", e, exc_info=True)
+        env.add_reply(f"❌ Error while accepting liquidity request:\n\n**{e}**")
