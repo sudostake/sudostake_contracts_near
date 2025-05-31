@@ -1,6 +1,7 @@
 import sys
 import os
 import pytest
+import requests
 
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -47,6 +48,16 @@ def minimal_vault_state():
         "current_epoch": 1000,
     }
     
+
+def _make_dummy_resp(json_body):
+    """Minimal stub mimicking requests.Response for our needs."""
+    class DummyResp:
+        def raise_for_status(self):          # no-op ⇢ 200 OK
+            pass
+        def json(self):
+            return json_body
+    return DummyResp()
+
     
 def with_liquidity(state):
     """Inject a liquidity request into vault state."""
@@ -193,3 +204,123 @@ def test_vault_state_with_liquidation(mock_setup, minimal_vault_state):
     assert "**⚠️ Liquidation Summary**" in liquidation
     assert "Liquidated" in liquidation
     assert "Outstanding Debt" in liquidation
+
+
+# ───────────────── view_user_vaults tests ─────────────────
+def test_view_user_vaults_success(monkeypatch, mock_setup):
+    """
+    Success:
+      • head-less signer 'alice.testnet'
+      • Cloud Function returns 2 vaults
+      • Tool should emit a list with both IDs
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Head-less mode + signer + network
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID",  "alice.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get inside vault module to return fake JSON list
+    monkeypatch.setattr(
+        vault.requests, "get",
+        lambda url, timeout: _make_dummy_resp(
+            ["vault-0.factory.testnet", "vault-1.factory.testnet"]
+        ),
+    )
+    
+    # Run the tool
+    vault.view_user_vaults()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "You have 2 vaults"  in msg
+    assert "- vault-0.factory.testnet" in msg
+    assert "- vault-1.factory.testnet" in msg
+    
+
+def test_view_user_vaults_empty(monkeypatch, mock_setup):
+    """
+    Cloud Function returns an empty list → tool should reply
+    “No vaults found …” (and *not* list anything).
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Head-less signer + network
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID",  "bob.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get to return an empty JSON array
+    monkeypatch.setattr(
+        vault.requests, "get",
+        lambda url, timeout: _make_dummy_resp([]),
+    )
+    
+    # Invoke the tool
+    vault.view_user_vaults()
+    
+    # Verify exactly one “no vaults” reply
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "No vaults found" in msg
+    assert "bob.testnet"      in msg
+    
+
+def test_view_user_vaults_no_creds(monkeypatch, mock_setup):
+    """
+    When signing_mode ≠ 'headless' the tool should:
+       • emit the 'no signing keys' warning
+       • never call requests.get()
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Simulate missing keys
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", None, raising=False)
+    
+    # Stub requests.get so we can assert it was not used
+    dummy_get = MagicMock()
+    monkeypatch.setattr(vault.requests, "get", dummy_get)
+    
+    # Run the tool
+    vault.view_user_vaults()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    warn = dummy_env.add_reply.call_args[0][0].lower()
+    assert "no signing keys" in warn
+    dummy_get.assert_not_called()
+    
+
+def test_view_user_vaults_http_error(monkeypatch, mock_setup):
+    """
+    Network failure:
+       • requests.get raises ConnectionError
+       • Tool should catch it and emit the generic failure reply
+    """
+    
+    (dummy_env, _) = mock_setup
+    
+    # Head-less signer & network
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)
+    monkeypatch.setattr(helpers, "_ACCOUNT_ID",  "carol.testnet", raising=False)
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    # Patch requests.get inside vault to raise an error
+    def boom(url, timeout):
+        raise requests.exceptions.ConnectionError("node unreachable")
+    
+    monkeypatch.setattr(vault.requests, "get", boom)
+    
+    # Run the tool
+    vault.view_user_vaults()
+    
+    # Assertions
+    dummy_env.add_reply.assert_called_once()
+    msg = dummy_env.add_reply.call_args[0][0]
+    assert "Failed to fetch vault list" in msg
+    assert "node unreachable"           in msg
