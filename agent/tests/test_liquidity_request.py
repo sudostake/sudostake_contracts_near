@@ -280,3 +280,197 @@ def test_view_pending_requests_error(monkeypatch, mock_setup):
     msg = dummy_env.add_reply.call_args[0][0]
     assert "Failed to fetch pending liquidity requests" in msg
     assert "firebase api unreachable" in msg
+
+
+# ───────────────── accept_liquidity_request tests ─────────────────
+
+def test_accept_liquidity_request_success(monkeypatch, mock_setup):
+    """Should accept the liquidity request and show confirmation message."""
+    
+    env, mock_near = mock_setup
+    
+    # Mock vault state with valid liquidity request and no accepted offer
+    vault_state = {
+        "owner": "alice.testnet",
+        "index": 1,
+        "version": 3,
+        "is_listed_for_takeover": False,
+        "liquidity_request": {
+            "token": "usdc.testnet",
+            "amount": "500000000",
+            "interest": "50000000",
+            "collateral": "10000000000000000000000000",
+            "duration": 2592000,
+            "created_at": "1710000000000000000"
+        },
+        "accepted_offer": None,
+    }
+    
+    # Patch near.view to return mocked vault state
+    mock_near.view = AsyncMock(return_value=MagicMock(result=vault_state))
+    
+    # Patch near.call to simulate successful ft_transfer_call
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="tx123"),
+        status={"SuccessValue": ""},
+    ))
+    
+    # Patch token metadata lookup
+    monkeypatch.setattr(
+        liquidity_request, "get_token_metadata_by_contract",
+        lambda contract_id: {
+            "decimals": 6,
+            "symbol": "USDC",
+        }
+    )
+    
+    # Patch Firebase indexer
+    monkeypatch.setattr(
+        liquidity_request, "index_vault_to_firebase",
+        lambda vault_id: None
+    )
+    
+    # Call the tool
+    liquidity_request.accept_liquidity_request(
+        vault_id="vault-0.factory.testnet"
+    )
+    
+    # Assert final message includes success content
+    env.add_reply.assert_called()
+    msg = env.add_reply.call_args[0][0]
+    assert "Accepted Liquidity Request" in msg
+    assert "vault-0.factory.testnet" in msg
+    assert "500" in msg  # formatted USDC amount
+    assert "USDC" in msg
+    assert "tx123" in msg
+
+
+def test_accept_liquidity_request_no_request(monkeypatch, mock_setup):
+    """Should show error if no liquidity request exists."""
+    
+    env, mock_near = mock_setup
+    
+    # Mock vault state with no liquidity request
+    mock_near.view = AsyncMock(return_value=MagicMock(result={
+        "owner": "alice.testnet",
+        "index": 0,
+        "version": 1,
+        "is_listed_for_takeover": False,
+        "liquidity_request": None,
+        "accepted_offer": None,
+    }))
+    
+    liquidity_request.accept_liquidity_request("vault-1.factory.testnet")
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "vault-1.factory.testnet" in msg
+    assert "has no active liquidity request" in msg
+
+
+def test_accept_liquidity_request_already_accepted(monkeypatch, mock_setup):
+    """Should show error if a request has already been accepted."""
+    
+    env, mock_near = mock_setup
+    
+    # Mock vault state with accepted offer present
+    mock_near.view = AsyncMock(return_value=MagicMock(result={
+        "owner": "alice.testnet",
+        "index": 0,
+        "version": 1,
+        "is_listed_for_takeover": False,
+        "liquidity_request": {
+            "token": "usdc.testnet",
+            "amount": "100000000",
+            "interest": "10000000",
+            "collateral": "5000000000000000000000000",
+            "duration": 2592000,
+            "created_at": "1710000000000000000"
+        },
+        "accepted_offer": {
+            "lender": "bob.testnet",
+            "accepted_at": "1710001000000000000"
+        }
+    }))
+    
+    liquidity_request.accept_liquidity_request("vault-2.factory.testnet")
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "has no active liquidity request" in msg
+    assert "already been accepted" in msg
+    assert "vault-2.factory.testnet" in msg
+
+
+def test_accept_liquidity_request_transfer_failure(monkeypatch, mock_setup):
+    """Should show error if the ft_transfer_call fails with contract panic."""
+    
+    env, mock_near = mock_setup
+    
+    # Mock vault state with valid liquidity request
+    mock_near.view = AsyncMock(return_value=MagicMock(result={
+        "owner": "alice.testnet",
+        "index": 0,
+        "version": 1,
+        "is_listed_for_takeover": False,
+        "liquidity_request": {
+            "token": "usdc.testnet",
+            "amount": "250000000",
+            "interest": "25000000",
+            "collateral": "10000000000000000000000000",
+            "duration": 2592000,
+            "created_at": "1710000000000000000"
+        },
+        "accepted_offer": None
+    }))
+    
+    # Mock ft_transfer_call failure (simulate contract panic)
+    mock_near.call = AsyncMock(return_value=MagicMock(
+        transaction=MagicMock(hash="tx_fail"),
+        status={
+            "Failure": {
+                "ActionError": {
+                    "kind": {
+                        "FunctionCallError": {
+                            "ExecutionError": "Smart contract panicked: Invalid offer"
+                        }
+                    }
+                }
+            }
+        }
+    ))
+    
+    # Patch token metadata to avoid lookup failure
+    monkeypatch.setattr(
+        liquidity_request, "get_token_metadata_by_contract",
+        lambda contract_id: {
+            "decimals": 6,
+            "symbol": "USDC",
+        }
+    )
+    
+    liquidity_request.accept_liquidity_request("vault-3.factory.testnet")
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "Failed to accept liquidity request" in msg
+    assert "Invalid offer" in msg
+    assert "tx_fail" not in msg # failure path skips success tx formatting
+
+
+def test_accept_liquidity_request_contract_not_deployed(monkeypatch, mock_setup):
+    """Should show error if the vault contract is not deployed or returns no state."""
+    
+    env, mock_near = mock_setup
+    
+    # Simulate view call returning nothing
+    mock_near.view = AsyncMock(return_value=MagicMock(result=None))
+    
+    liquidity_request.accept_liquidity_request("vault-4.factory.testnet")
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "No data returned for" in msg
+    assert "vault-4.factory.testnet" in msg
+    assert "Is the contract deployed?" in msg
+    
