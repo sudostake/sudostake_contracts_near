@@ -1,3 +1,5 @@
+import json
+
 from decimal import Decimal
 from logging import Logger
 from .context import get_env, get_near, get_logger
@@ -57,7 +59,7 @@ def withdraw_balance(vault_id: str, amount: str, to_address: str) -> None:
         if failure:
             env.add_reply(
                 "❌ Withdraw failed with **contract panic**:\n\n"
-                f"> {failure}"
+                f"> {json.dumps(failure, indent=2)}"
             )
             return
         
@@ -117,7 +119,8 @@ def claim_unstaked_balance(vault_id: str, validator: str) -> None:
         failure = get_failure_message_from_tx_status(response.status)
         if failure:
             env.add_reply(
-                f"❌ Claim failed with **contract panic**:\n\n> {failure}"
+                f"❌ Claim failed with **contract panic**:\n\n>"
+                f"> {json.dumps(failure, indent=2)}"
             )
             return
         

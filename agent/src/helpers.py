@@ -170,14 +170,11 @@ def init_near(env: Environment) -> Account:
     return near
 
 
-def get_failure_message_from_tx_status(status: dict) -> str:
+def get_failure_message_from_tx_status(status: dict) -> dict:
     failure = status.get("Failure")
     if failure:
         action_err = failure.get("ActionError", {})
-        kind       = action_err.get("kind", {})
-        func_err   = kind.get("FunctionCallError", {})
-        
-        return func_err.get("ExecutionError")
+        return action_err.get("kind", {})
 
 
 def log_contains_event(logs: list[str], event_name: str) -> bool:

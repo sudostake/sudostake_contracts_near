@@ -1,3 +1,5 @@
+import json
+
 from decimal import Decimal
 from logging import Logger
 from .context import get_env, get_near, get_logger
@@ -50,7 +52,7 @@ def delegate(vault_id: str, validator: str, amount: str) -> None:
         if failure:
             env.add_reply(
                 "❌ Delegate failed with **contract panic**:\n\n"
-                f"> {failure}"
+               f"> {json.dumps(failure, indent=2)}"
             )
             return
 
@@ -126,7 +128,7 @@ def undelegate(vault_id: str, validator: str, amount: str) -> None:
         if failure:
             env.add_reply(
                 "❌ Undelegate failed with **contract panic**:\n\n"
-                f"> {failure}"
+               f"> {json.dumps(failure, indent=2)}"
             )
             return
         

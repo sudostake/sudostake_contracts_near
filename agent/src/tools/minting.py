@@ -59,7 +59,7 @@ def mint_vault() -> None:
         if failure:
             env.add_reply(
                 "❌ Mint vault failed with **contract panic**:\n\n"
-                f"> {failure}"
+               f"> {json.dumps(failure, indent=2)}"
             )
             return
         
