@@ -189,8 +189,7 @@ def test_mint_vault_headless(monkeypatch, mock_setup):
             def raise_for_status(self): pass  # simulate 200 OK
         return Resp()
 
-    monkeypatch.setattr(minting, "requests", MagicMock(post=fake_post))
-    
+    monkeypatch.setattr(helpers, "requests", MagicMock(post=fake_post))
     
     # Force head-less signing mode
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless", raising=False)

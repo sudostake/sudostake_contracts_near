@@ -1,5 +1,6 @@
 import os
 import asyncio
+import requests
 
 from nearai.agents.environment import Environment
 from typing import  Awaitable, TypeVar, Optional
@@ -33,7 +34,7 @@ USDC_CONTRACTS = {
 }
 
 # Firebase functions vaults API
-FIREBASE_VAULTS_API = "https://us-central1-sudostake.cloudfunctions.net" 
+_FIREBASE_VAULTS_API = "https://us-central1-sudostake.cloudfunctions.net" 
 
 # Define current vault_minting_fee
 # TODO Later we can dynamically get this from the factory contract itself
@@ -55,6 +56,7 @@ _VECTOR_STORE_ID: str = "vs_ecd9ba192396493984d66feb" # default vector store ID
 def signing_mode()    -> Optional[str]: return _SIGNING_MODE
 def account_id()      -> Optional[str]: return _ACCOUNT_ID
 def vector_store_id() -> Optional[str]: return _VECTOR_STORE_ID
+def firebase_vaults_api() -> str:       return _FIREBASE_VAULTS_API
 # ──────────────────────────────────────────────────────────────
 
 def usdc_contract()   -> str:
@@ -168,14 +170,23 @@ def init_near(env: Environment) -> Account:
     return near
 
 
-def get_failure_message_from_tx_status(status: dict) -> str:
+def get_failure_message_from_tx_status(status: dict) -> dict:
     failure = status.get("Failure")
     if failure:
         action_err = failure.get("ActionError", {})
-        kind       = action_err.get("kind", {})
-        func_err   = kind.get("FunctionCallError", {})
-        
-        return func_err.get("ExecutionError")
+        return action_err.get("kind", {})
+
+
+def log_contains_event(logs: list[str], event_name: str) -> bool:
+    """
+    Returns True if any log contains the given event name.
+    Supports plain or EVENT_JSON logs.
+    """
+    
+    for log in logs:
+        if event_name in log:
+            return True
+    return False
 
 
 def top_doc_chunks(env: Environment, vs_id: str, user_query: str, k: int = 6):
@@ -186,3 +197,22 @@ def top_doc_chunks(env: Environment, vs_id: str, user_query: str, k: int = 6):
 
     results = env.query_vector_store(vs_id, user_query)
     return results[:k]                      # trim noise
+
+
+def index_vault_to_firebase(vault_id: str) -> None:
+    """
+    Index the given vault to Firebase.
+
+    Raises:
+        Exception: If the request fails or Firebase responds with an error.
+    """
+    
+    idx_url = f"{_FIREBASE_VAULTS_API}/index_vault"
+    
+    response = requests.post(
+        idx_url,
+        json={"vault": vault_id},
+        timeout=10,
+        headers={"Content-Type": "application/json"},
+    )
+    response.raise_for_status()

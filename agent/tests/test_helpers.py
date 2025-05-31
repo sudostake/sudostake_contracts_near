@@ -3,6 +3,7 @@ import os
 import pytest
 import time
 import asyncio
+import requests
 
 from unittest.mock import MagicMock
 from unittest.mock import AsyncMock
@@ -168,4 +169,46 @@ def test_fetch_usdc_balance_no_result(monkeypatch):
     
     with pytest.raises(ValueError, match="No USDC balance returned for `vault-1.factory.testnet`"):
         helpers.fetch_usdc_balance(mock_near, "vault-1.factory.testnet")
+
+
+
+# ─────────────────────────── index_vault_to_firebase tests ─────────────────────
+
+def test_index_vault_to_firebase_success(monkeypatch):
+    """Should call requests.post and succeed without raising."""
+    
+    captured = {}
+    
+    def fake_post(url, json, timeout, headers):
+        captured["url"] = url
+        captured["json"] = json
+        captured["headers"] = headers
+        class FakeResp:
+            def raise_for_status(self): pass
+        return FakeResp()
+    
+    monkeypatch.setattr(helpers.requests, "post", fake_post)
+    
+    helpers.index_vault_to_firebase("vault-123.factory.testnet")
+    
+    assert captured["url"].endswith("/index_vault")
+    assert captured["json"] == {"vault": "vault-123.factory.testnet"}
+    assert captured["headers"]["Content-Type"] == "application/json"
+
+
+def test_index_vault_to_firebase_failure(monkeypatch):
+    """Should raise HTTPError if indexing fails."""
+    
+    class FakeResp:
+        def raise_for_status(self):
+            raise requests.HTTPError("Mocked 500 error")
+        
+    def fake_post(*args, **kwargs):
+        return FakeResp()
+    
+    monkeypatch.setattr(helpers.requests, "post", fake_post)
+    
+    with pytest.raises(requests.HTTPError, match="Mocked 500 error"):
+        helpers.index_vault_to_firebase("vault-999.factory.testnet")
+
 
