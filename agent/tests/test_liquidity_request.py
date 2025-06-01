@@ -56,6 +56,28 @@ def test_request_liquidity_success(monkeypatch, mock_setup):
     assert "tx123" in msg
 
 
+def test_request_liquidity_fails_if_not_headless(monkeypatch, mock_setup):
+    """Should reject request if not in headless signing mode."""
+    
+    env, _ = mock_setup
+    
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "interactive")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    liquidity_request.request_liquidity(
+        vault_id="vault-0.factory.testnet",
+        amount=100,
+        denom="usdc",
+        interest=10,
+        duration=7,
+        collateral=20,
+    )
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "No signing keys available" in msg
+
+
 def test_request_liquidity_contract_panic(monkeypatch, mock_setup):
     """Should detect contract panic and return a failure message."""
     

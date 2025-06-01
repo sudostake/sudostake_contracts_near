@@ -59,6 +59,14 @@ def request_liquidity(
     near = get_near()
     logger: Logger = get_logger()
     
+    # 'headless' or None
+    if signing_mode() != "headless":
+        env.add_reply(
+            "⚠️ No signing keys available. Add `NEAR_ACCOUNT_ID` and "
+            "`NEAR_PRIVATE_KEY` to secrets, then try again."
+        )
+        return
+    
     try:
         # Parse amount and resolve token
         token_meta = get_token_metadata(denom.strip().lower())
