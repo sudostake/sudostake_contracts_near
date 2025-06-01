@@ -69,6 +69,7 @@ def show_help_menu() -> None:
         • Open a liquidity request on <vault> for <amount> USDC, <amount> USDC interest, <n>-day term, <amount> NEAR collateral  
         • Show me all pending liquidity requests  
         • Accept liquidity request opened by <vault>  
+        • Show me all my active lending positions    
         
         __SudoStake Docs__
         • Query SudoStake Docs  
