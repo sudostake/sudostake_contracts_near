@@ -541,7 +541,7 @@ def test_view_lender_positions_success(monkeypatch, mock_setup):
     
     monkeypatch.setenv("NEAR_NETWORK", "testnet")
     monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
-    monkeypatch.setattr(helpers, "account_id", lambda: "bob.testnet")
+    monkeypatch.setattr(liquidity_request, "account_id", lambda: "bob.testnet")
     monkeypatch.setattr(helpers, "get_factory_contract", lambda: "factory.testnet")
     
     monkeypatch.setattr(
@@ -585,7 +585,7 @@ def test_view_lender_positions_success(monkeypatch, mock_setup):
     assert "50" in msg
     assert "10" in msg
     assert "30 days" in msg
-    assert "bob.testnet" not in msg
+    assert "bob.testnet" in msg
     
 
 def test_view_lender_positions_invalid_json(monkeypatch, mock_setup):
