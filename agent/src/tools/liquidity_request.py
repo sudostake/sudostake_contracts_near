@@ -10,7 +10,7 @@ from token_registry import get_token_metadata, get_token_metadata_by_contract
 from py_near.models import TransactionResult
 from helpers import (
     YOCTO_FACTOR,
-    FACTORY_CONTRACTS,
+    get_factory_contract,
     index_vault_to_firebase,
     run_coroutine, 
     get_explorer_url, 
@@ -144,8 +144,7 @@ def view_pending_liquidity_requests() -> None:
     
     try:
         # Resolve factory for the active network
-        network = os.getenv("NEAR_NETWORK")
-        factory_id = FACTORY_CONTRACTS.get(network)
+        factory_id = get_factory_contract()
         
         url = f"{firebase_vaults_api()}/view_pending_liquidity_requests"
         response = requests.get(

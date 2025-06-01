@@ -7,7 +7,7 @@ from .context import get_env, get_near, get_logger
 from helpers import (
     YOCTO_FACTOR,
     VAULT_MINT_FEE_NEAR,
-    FACTORY_CONTRACTS,
+    get_factory_contract,
     index_vault_to_firebase,
     signing_mode,
     run_coroutine,
@@ -39,7 +39,7 @@ def mint_vault() -> None:
         return
     
     # Prepare call params
-    factory_id = FACTORY_CONTRACTS[os.getenv("NEAR_NETWORK")]
+    factory_id = get_factory_contract()
     yocto_fee  = int((VAULT_MINT_FEE_NEAR * YOCTO_FACTOR).quantize(Decimal('1')))
     
     try:

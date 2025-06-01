@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from logging import Logger
 from .context import get_env, get_near, get_logger
 from helpers import (
-    FACTORY_CONTRACTS,
+    get_factory_contract,
     USDC_FACTOR,
     YOCTO_FACTOR,
     firebase_vaults_api,
@@ -67,10 +67,11 @@ def show_help_menu() -> None:
         
         __Liquidity Request__
         • Open a liquidity request on <vault> for <amount> USDC, <amount> USDC interest, <n>-day term, <amount> NEAR collateral  
-        • how me all pending liquidity requests  
+        • Show me all pending liquidity requests  
+        • Accept liquidity request opened by <vault>  
         
         __SudoStake Docs__
-        • Query SudoStake Docs
+        • Query SudoStake Docs  
 
         _You can type any of these in plain English to get started._
     """)
@@ -192,8 +193,7 @@ def view_user_vaults() -> None:
     acct_id = account_id()
     
     # Resolve factory for the active network
-    network    = os.getenv("NEAR_NETWORK")
-    factory_id = FACTORY_CONTRACTS.get(network)
+    factory_id = get_factory_contract()
     
     # Call the Firebase Cloud Function to get vaults
     url = (
@@ -207,7 +207,7 @@ def view_user_vaults() -> None:
         vaults: List[str] = cast(List[str], resp.json())
         
         if not vaults:
-            env.add_reply(f"🔍 No vaults found for `{acct_id}` on **{network}**.")
+            env.add_reply(f"🔍 No vaults found for `{acct_id}`")
             return
         
         count  = len(vaults)
