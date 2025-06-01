@@ -16,7 +16,9 @@ from helpers import (
     get_explorer_url, 
     log_contains_event,
     get_failure_message_from_tx_status,
-    firebase_vaults_api
+    firebase_vaults_api,
+    account_id,
+    signing_mode
 )
 
 # Define the structure of the liquidity request
@@ -27,6 +29,11 @@ class LiquidityRequest(TypedDict):
     collateral: str
     duration: int
 
+# Define the structure of an accepted offer
+class AcceptedOffer(TypedDict):
+    lender: str
+    accepted_at: str
+
 # Define the structure of a pending liquidity request
 class PendingRequest(TypedDict):
     id: str
@@ -34,6 +41,14 @@ class PendingRequest(TypedDict):
     state: str
     liquidity_request: LiquidityRequest
 
+# Define the structure of an active lending request
+class ActiveRequest(TypedDict):
+    id: str
+    owner: str
+    state: str
+    liquidity_request: LiquidityRequest
+    accepted_offer: AcceptedOffer
+    
 
 def request_liquidity(
     vault_id: str,
@@ -287,3 +302,68 @@ def accept_liquidity_request(vault_id: str) -> None:
     except Exception as e:
         logger.error("accept_liquidity_request failed: %s", e, exc_info=True)
         env.add_reply(f"❌ Error while accepting liquidity request:\n\n**{e}**")
+
+
+def view_lender_positions() -> None:
+    """
+    Display all vaults where the current user is the lender (i.e., has an active accepted_offer).
+    """
+    
+    env = get_env()
+    logger = get_logger()
+    
+    # 'headless' or None
+    if signing_mode() != "headless":
+        env.add_reply(
+            "⚠️ No signing keys available. Add `NEAR_ACCOUNT_ID` and "
+            "`NEAR_PRIVATE_KEY` to secrets, then try again."
+        )
+        return
+    
+    try:
+        lender_id = account_id()
+        factory_id = get_factory_contract()
+        
+        # Construct the query to Firebase API
+        url = f"{firebase_vaults_api()}/view_lender_positions"
+        response = requests.get(
+            url,
+            params={"factory_id": factory_id, "lender_id": lender_id},
+            timeout=10,
+            headers={"Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+        
+        vaults: List[ActiveRequest] = response.json()
+        if not vaults:
+            env.add_reply("✅ You have no active lending positions.")
+            return
+        
+        message = f"**📄 Active Lending Positions for `{lender_id}`**\n\n"
+        for v in vaults:
+            state = v.get("accepted_offer")
+            req = v.get("liquidity_request")
+            token_meta = get_token_metadata_by_contract(req["token"])
+            decimals = token_meta["decimals"]
+            symbol = token_meta["symbol"]
+            
+            amount = (Decimal(req["amount"]) / Decimal(10 ** decimals)).quantize(Decimal(1))
+            interest = (Decimal(req["interest"]) / Decimal(10 ** decimals)).quantize(Decimal(1))
+            collateral = (Decimal(req["collateral"]) / YOCTO_FACTOR).quantize(Decimal(1))
+            duration_days = req["duration"] // 86400
+            
+            message += (
+                f"- 🏦 `{v['id']}`\n"
+                f"  • Token: `{req['token']}`\n"
+                f"  • Amount: `{amount}` {symbol}\n"
+                f"  • Interest: `{interest}` {symbol}\n"
+                f"  • Duration: `{duration_days} days`\n"
+                f"  • Collateral: `{collateral}` NEAR\n"
+                f"  • Accepted At: `{state['accepted_at']}`\n\n"
+            )
+            
+        env.add_reply(message)
+        
+    except Exception as e:
+        logger.warning("view_lender_positions failed: %s", e, exc_info=True)
+        env.add_reply(f"❌ Failed to fetch lending positions\n\n**Error:** {e}")
