@@ -11,7 +11,8 @@ from . import (
     vault,
     withdrawal,
     summary,
-    liquidity_request
+    liquidity_request,
+    active_loan
 )
 
 # Register all tools here
@@ -42,7 +43,8 @@ def register_tools(env: Environment, near: Account) -> list[MCPTool]:
         liquidity_request.request_liquidity,
         liquidity_request.view_pending_liquidity_requests,
         liquidity_request.accept_liquidity_request,
-         liquidity_request.view_lender_positions,
+        liquidity_request.view_lender_positions,
+        active_loan.repay_loan,
         docs.query_sudostake_docs
     ):
         registry.register_tool(tool)

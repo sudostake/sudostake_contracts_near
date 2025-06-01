@@ -2,28 +2,15 @@ import sys
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from test_utils import make_dummy_resp
+from test_utils import make_dummy_resp, mock_setup
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 import helpers # type: ignore
 from tools import ( # type: ignore[import]
-    context,
     liquidity_request,
 )
-
-@pytest.fixture
-def mock_setup():
-    """Initialize mock environment, logger, and near — then set context."""
-    
-    env = MagicMock()
-    near = MagicMock()
-
-    # Set the context globally for tools
-    context.set_context(env=env, near=near)
-
-    return (env, near)
 
 
 def test_request_liquidity_success(monkeypatch, mock_setup):
@@ -616,6 +603,3 @@ def test_view_lender_positions_invalid_json(monkeypatch, mock_setup):
     msg = env.add_reply.call_args[0][0]
     assert "❌ Failed to fetch lending positions" in msg
     assert "not a JSON response" in msg
-
-
-# TODO
