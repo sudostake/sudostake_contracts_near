@@ -27,7 +27,7 @@ _EXPLORER_URL = {
 }
 
 # Factory contract addresses per network
-FACTORY_CONTRACTS = {
+_FACTORY_CONTRACTS = {
     "mainnet": "sudostake.near",
     "testnet": "nzaza.testnet",
 }
@@ -101,6 +101,18 @@ def get_explorer_url() -> str:
     """
     network = os.getenv("NEAR_NETWORK")
     return _EXPLORER_URL.get(network)
+
+
+def get_factory_contract() -> str:
+    """
+    Return the factory contract address for the current NEAR_NETWORK.
+    
+    We don't have to check for the environment variable here,
+    as this function is only called after the NEAR_NETWORK is set
+    in the environment.
+    """
+    network = os.getenv("NEAR_NETWORK")
+    return _FACTORY_CONTRACTS[network]
 
 
 def ensure_loop() -> asyncio.AbstractEventLoop:

@@ -56,6 +56,28 @@ def test_request_liquidity_success(monkeypatch, mock_setup):
     assert "tx123" in msg
 
 
+def test_request_liquidity_fails_if_not_headless(monkeypatch, mock_setup):
+    """Should reject request if not in headless signing mode."""
+    
+    env, _ = mock_setup
+    
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "interactive")
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    
+    liquidity_request.request_liquidity(
+        vault_id="vault-0.factory.testnet",
+        amount=100,
+        denom="usdc",
+        interest=10,
+        duration=7,
+        collateral=20,
+    )
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "No signing keys available" in msg
+
+
 def test_request_liquidity_contract_panic(monkeypatch, mock_setup):
     """Should detect contract panic and return a failure message."""
     
@@ -474,3 +496,126 @@ def test_accept_liquidity_request_contract_not_deployed(monkeypatch, mock_setup)
     assert "vault-4.factory.testnet" in msg
     assert "Is the contract deployed?" in msg
     
+    
+# ───────────────── view_lender_positions tests ─────────────────
+
+def test_view_lender_positions_not_headless(monkeypatch, mock_setup):
+    """Should show warning if not using headless signing mode."""
+    
+    env, _ = mock_setup
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "interactive")
+    
+    liquidity_request.view_lender_positions()
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "No signing keys available" in msg
+    
+
+def test_view_lender_positions_empty(monkeypatch, mock_setup):
+    """Should return message when no active lender positions exist."""
+    
+    env, _ = mock_setup
+    
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setattr(helpers, "account_id", lambda: "bob.testnet")
+    monkeypatch.setattr(helpers, "get_factory_contract", lambda: "factory.testnet")
+    
+    monkeypatch.setattr(
+        liquidity_request.requests, "get",
+        lambda url, params, timeout, headers: make_dummy_resp([])
+    )
+    
+    liquidity_request.view_lender_positions()
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "no active lending positions" in msg.lower()
+    
+
+def test_view_lender_positions_success(monkeypatch, mock_setup):
+    """Should display formatted active lending position for lender."""
+    
+    env, _ = mock_setup
+    
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setattr(liquidity_request, "account_id", lambda: "bob.testnet")
+    monkeypatch.setattr(helpers, "get_factory_contract", lambda: "factory.testnet")
+    
+    monkeypatch.setattr(
+        liquidity_request.requests, "get",
+        lambda url, params, timeout, headers: make_dummy_resp([
+            {
+                "id": "vault-0.factory.testnet",
+                "owner": "owner.testnet",
+                "state": "pending",
+                "liquidity_request": {
+                    "token": "usdc.fakes.testnet",
+                    "amount": "500000000",      # 500 USDC (6 decimals)
+                    "interest": "50000000",     # 50 USDC
+                    "collateral": "10000000000000000000000000",  # 10 NEAR
+                    "duration": 2592000         # 30 days
+                },
+                "accepted_offer": {
+                    "lender": "bob.testnet",
+                    "accepted_at": "2025-05-30T12:00:00Z"
+                }
+            }
+        ])
+    )
+    
+    # Patch token metadata to avoid lookup failure
+    monkeypatch.setattr(
+        liquidity_request, "get_token_metadata_by_contract",
+        lambda contract_id: {
+            "decimals": 6,
+            "symbol": "USDC",
+        }
+    )
+    
+    liquidity_request.view_lender_positions()
+    
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "Active Lending Positions" in msg
+    assert "vault-0.factory.testnet" in msg
+    assert "500" in msg
+    assert "50" in msg
+    assert "10" in msg
+    assert "30 days" in msg
+    assert "bob.testnet" in msg
+    
+
+def test_view_lender_positions_invalid_json(monkeypatch, mock_setup):
+    """Should handle non-JSON response gracefully from Firebase API."""
+    
+    env, _ = mock_setup
+
+    monkeypatch.setenv("NEAR_NETWORK", "testnet")
+    monkeypatch.setattr(helpers, "_SIGNING_MODE", "headless")
+    monkeypatch.setattr(helpers, "account_id", lambda: "bob.testnet")
+    monkeypatch.setattr(helpers, "get_factory_contract", lambda: "factory.testnet")
+    
+    # Patch the Firebase response to simulate invalid JSON parsing
+    class DummyInvalidResp:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            raise ValueError("not a JSON response")
+
+    monkeypatch.setattr(
+        liquidity_request.requests, "get",
+        lambda url, params, timeout, headers: DummyInvalidResp()
+    )
+    
+    liquidity_request.view_lender_positions()
+
+    env.add_reply.assert_called_once()
+    msg = env.add_reply.call_args[0][0]
+    assert "❌ Failed to fetch lending positions" in msg
+    assert "not a JSON response" in msg
+
+
+# TODO
