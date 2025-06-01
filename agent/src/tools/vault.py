@@ -71,6 +71,9 @@ def show_help_menu() -> None:
         • Accept liquidity request opened by <vault>  
         • Show me all my active lending positions    
         
+        __Active Loan__
+        • Repay loan on <vault>  
+        
         __SudoStake Docs__
         • Query SudoStake Docs  
 
