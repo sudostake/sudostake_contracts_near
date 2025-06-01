@@ -6,32 +6,19 @@ import requests
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
-from test_utils import make_dummy_resp
+from test_utils import make_dummy_resp, mock_setup
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 import helpers # type: ignore
 from tools import ( # type: ignore[import]
-    context,
     vault,
 )
 from helpers import ( # type: ignore[import]
     USDC_FACTOR,
     YOCTO_FACTOR
 )
-
-
-@pytest.fixture
-def mock_setup():
-    """Initialize mock environment, logger, and near — then set context."""
-    env = MagicMock()
-    near = MagicMock()
-
-    # Set the context globally for tools
-    context.set_context(env=env, near=near)
-
-    return (env, near)
 
 
 @pytest.fixture

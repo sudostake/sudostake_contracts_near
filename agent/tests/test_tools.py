@@ -2,11 +2,11 @@
 import sys
 import os
 import pytest
-import requests
 import json
 
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
+from test_utils import mock_setup
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
@@ -32,17 +32,6 @@ def headless_mode(monkeypatch):
     
     yield
     # cleanup (pytest will restore monkeypatch state automatically)
-    
-@pytest.fixture
-def mock_setup():
-    """Initialize mock environment, logger, and near — then set context."""
-    env = MagicMock()
-    near = MagicMock()
-
-    # Set the context globally for tools
-    context.set_context(env=env, near=near)
-
-    return (env, near)
 
 
 # ─────────────────────────── tests ──────────────────────────────    
