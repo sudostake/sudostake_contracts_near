@@ -15,10 +15,10 @@ T = TypeVar("T")
 # ──────────────────────────────────────────────────────────────
 # GLOBAL STATE
 # ──────────────────────────────────────────────────────────────
-# fastnear.com
+# TODO move to fastnear.com
 _DEFAULT_RPC = {
-    "mainnet": "https://rpc.mainnet.fastnear.com",
-    "testnet": "https://rpc.testnet.fastnear.com",
+    "mainnet": "https://rpc.mainnet.near.org",
+    "testnet": "https://rpc.testnet.near.org",
 }
 
 _EXPLORER_URL = {
