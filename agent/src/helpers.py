@@ -7,7 +7,7 @@ from typing import  Awaitable, TypeVar, Optional
 from nearai.agents.environment import Environment
 from py_near.account import Account
 from decimal import Decimal
-
+from datetime import datetime, timezone
 
 # Type‐var for our coroutine runner
 T = TypeVar("T")
@@ -221,3 +221,15 @@ def index_vault_to_firebase(vault_id: str) -> None:
         headers={"Content-Type": "application/json"},
     )
     response.raise_for_status()
+
+
+def format_near_timestamp(ns: int) -> str:
+    """Convert NEAR block timestamp (ns since epoch) to a readable UTC datetime."""
+    ts = ns / 1_000_000_000  # Convert nanoseconds to seconds
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def format_firestore_timestamp(ts: dict) -> str:
+    """Convert Firestore timestamp dict to 'YYYY-MM-DD HH:MM UTC'."""
+    dt = datetime.fromtimestamp(ts["_seconds"], tz=timezone.utc)
+    return dt.strftime("%Y-%m-%d %H:%M UTC")

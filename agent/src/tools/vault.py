@@ -4,7 +4,7 @@ import textwrap
 
 from decimal import Decimal
 from typing import List, cast
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from logging import Logger
 from .context import get_env, get_near, get_logger
 from helpers import (
@@ -14,14 +14,9 @@ from helpers import (
     firebase_vaults_api,
     signing_mode,
     account_id,
-    run_coroutine
+    run_coroutine,
+    format_near_timestamp
 )
-
-def format_near_timestamp(ns: int) -> str:
-    """Convert NEAR block timestamp (ns since epoch) to a readable UTC datetime."""
-    ts = ns / 1_000_000_000  # Convert nanoseconds to seconds
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
 
 def format_duration(seconds: int) -> str:
     """Convert a duration in seconds to a human-readable string."""

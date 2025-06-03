@@ -547,7 +547,7 @@ def test_view_lender_positions_success(monkeypatch, mock_setup):
                 },
                 "accepted_offer": {
                     "lender": "bob.testnet",
-                    "accepted_at": "2025-05-30T12:00:00Z"
+                    "accepted_at": {"_seconds": 1748953779, "_nanoseconds": 634000000}
                 }
             }
         ])

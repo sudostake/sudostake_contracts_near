@@ -17,7 +17,8 @@ from helpers import (
     get_failure_message_from_tx_status,
     firebase_vaults_api,
     account_id,
-    signing_mode
+    signing_mode,
+    format_firestore_timestamp
 )
 
 # Define the structure of the liquidity request
@@ -358,7 +359,7 @@ def view_lender_positions() -> None:
                 f"  • Interest: `{interest}` {symbol}\n"
                 f"  • Duration: `{duration_days} days`\n"
                 f"  • Collateral: `{collateral}` NEAR\n"
-                f"  • Accepted At: `{state['accepted_at']}`\n\n"
+                f"  • Accepted At: `{format_firestore_timestamp(state['accepted_at'])}`\n\n"
             )
             
         env.add_reply(message)

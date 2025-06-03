@@ -78,7 +78,7 @@ def test_init_near_headless(monkeypatch):
     fake_env.set_near.assert_called_once_with(
         account_id="alice.testnet",
         private_key="ed25519:fake",
-        rpc_addr="https://rpc.testnet.fastnear.com",
+        rpc_addr="https://rpc.testnet.near.org",
     )
     assert account is fake_account
     assert helpers.signing_mode() == "headless"
@@ -100,7 +100,7 @@ def test_init_near_view_only(monkeypatch):
     account = helpers.init_near(fake_env)
     
     fake_env.set_near.assert_called_once_with(
-        rpc_addr="https://rpc.testnet.fastnear.com",
+        rpc_addr="https://rpc.testnet.near.org",
     )
     assert account is fake_account
     assert helpers.signing_mode() is None
