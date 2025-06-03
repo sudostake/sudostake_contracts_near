@@ -1,6 +1,5 @@
 import sys
 import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 from test_utils import make_dummy_resp, mock_setup
 

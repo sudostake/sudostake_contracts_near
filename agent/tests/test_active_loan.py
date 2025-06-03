@@ -2,7 +2,7 @@
 import sys
 import os
 from unittest.mock import AsyncMock, MagicMock
-from test_utils import make_dummy_resp, mock_setup
+from test_utils import mock_setup
 
 # Make src/ importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
