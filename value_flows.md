@@ -47,52 +47,53 @@ flowchart LR
 
 3) Staking lifecycle
 
-- Up to `MAX_ACTIVE_VALIDATORS` active validators (currently 2).
-- Long operations run under a processing lock to avoid overlaps.
+- Overview
+  - Up to `MAX_ACTIVE_VALIDATORS` active validators (currently 2).
+  - Long operations run under a processing lock to avoid overlaps.
 
-Delegate (stake)
-- Call: `delegate(validator, amount)`, attach 1 yoctoNEAR.
-- Preconditions:
-  - Owner only; `amount > 0`; `amount <= available` (respects storage buffer).
-  - No pending refunds; no liquidation in progress.
-  - New validator does not exceed `MAX_ACTIVE_VALIDATORS`.
-- Action: `deposit_and_stake(amount)` on the validator pool.
-- Emits: `delegate_completed` on success; `delegate_failed` on failure.
-- State: Validator added to `active_validators` on success.
+- Delegate (stake)
+  - Call: `delegate(validator, amount)`, attach 1 yoctoNEAR.
+  - Preconditions:
+    - Owner only; `amount > 0`; `amount <= available` (respects storage buffer).
+    - No pending refunds; no liquidation in progress.
+    - New validator does not exceed `MAX_ACTIVE_VALIDATORS`.
+  - Action: `deposit_and_stake(amount)` on the validator pool.
+  - Emits: `delegate_completed` on success; `delegate_failed` on failure.
+  - State: Validator added to `active_validators` on success.
 
-Undelegate (start unlock)
-- Call: `undelegate(validator, amount)`, attach 1 yoctoNEAR.
-- Preconditions:
-  - Owner only; `amount > 0`.
-  - `validator` is in `active_validators`.
-  - No open liquidity request.
-- Action: `unstake(amount)`, then view remaining staked balance.
-- Emits: `undelegate_completed` on success; `undelegate_failed` on failure; `validator_removed` if balance becomes zero.
-- State: Records `UnstakeEntry { amount, epoch_height }` for the validator.
+- Undelegate (start unlock)
+  - Call: `undelegate(validator, amount)`, attach 1 yoctoNEAR.
+  - Preconditions:
+    - Owner only; `amount > 0`.
+    - `validator` is in `active_validators`.
+    - No open liquidity request.
+  - Action: `unstake(amount)`, then view remaining staked balance.
+  - Emits: `undelegate_completed` on success; `undelegate_failed` on failure; `validator_removed` if balance becomes zero.
+  - State: Records `UnstakeEntry { amount, epoch_height }` for the validator.
 
-Claim (withdraw unlocked)
-- Call: `claim_unstaked(validator)`, attach 1 yoctoNEAR.
-- Preconditions:
-  - `UnstakeEntry` exists and `epoch >= entry.epoch_height + NUM_EPOCHS_TO_UNLOCK` (4).
-  - No liquidation in progress.
-- Action: `withdraw_all()` on the validator pool.
-- Emits: `claim_unstaked_completed` on success; `claim_unstake_failed` on failure.
-- State: Clears `UnstakeEntry`; liquid NEAR returns to the Vault balance.
+- Claim (withdraw unlocked)
+  - Call: `claim_unstaked(validator)`, attach 1 yoctoNEAR.
+  - Preconditions:
+    - `UnstakeEntry` exists and `epoch >= entry.epoch_height + NUM_EPOCHS_TO_UNLOCK` (4).
+    - No liquidation in progress.
+  - Action: `withdraw_all()` on the validator pool.
+  - Emits: `claim_unstaked_completed` on success; `claim_unstake_failed` on failure.
+  - State: Clears `UnstakeEntry`; liquid NEAR returns to the Vault balance.
 
-Notes
-- Rewards accrue while staked and become withdrawable after unlock + withdraw.
-- Delegation is blocked when refunds are pending or liquidation is active.
+- Notes
+  - Rewards accrue while staked and become withdrawable after unlock + withdraw.
+  - Delegation is blocked when refunds are pending or liquidation is active.
 
-Example timeline (epochs)
-- E100: Owner calls `delegate(pool.stakehouse.near, 50 NEAR)` — funds become staked.
-- E102: Owner calls `undelegate(pool.stakehouse.near, 10 NEAR)` — records `UnstakeEntry { amount: 10 NEAR, epoch_height: 102 }`.
-- E106: Earliest epoch when `claim_unstaked` is allowed (102 + NUM_EPOCHS_TO_UNLOCK = 4).
-- E106+: Owner calls `claim_unstaked(pool.stakehouse.near)` — Vault executes `withdraw_all()`, liquid NEAR returns to the Vault’s balance.
+- Example timeline (epochs)
+  - E100: Owner calls `delegate(pool.stakehouse.near, 50 NEAR)` — funds become staked.
+  - E102: Owner calls `undelegate(pool.stakehouse.near, 10 NEAR)` — records `UnstakeEntry { amount: 10 NEAR, epoch_height: 102 }`.
+  - E106: Earliest epoch when `claim_unstaked` is allowed (102 + NUM_EPOCHS_TO_UNLOCK = 4).
+  - E106+: Owner calls `claim_unstaked(pool.stakehouse.near)` — Vault executes `withdraw_all()`, liquid NEAR returns to the Vault’s balance.
 
-Event JSON examples
-- Events are emitted as log lines prefixed with `EVENT_JSON:`.
+- Event JSON examples
+  - Events are emitted as log lines prefixed with `EVENT_JSON:`.
 
-Example — delegate (success)
+  - Example — delegate (success)
 ```
 EVENT_JSON:{
   "event": "delegate_completed",
@@ -104,7 +105,7 @@ EVENT_JSON:{
 }
 ```
 
-Example — delegate (failure)
+  - Example — delegate (failure)
 ```
 EVENT_JSON:{
   "event": "delegate_failed",
@@ -117,7 +118,7 @@ EVENT_JSON:{
 }
 ```
 
-Example — undelegate (success)
+  - Example — undelegate (success)
 ```
 EVENT_JSON:{
   "event": "undelegate_completed",
@@ -129,7 +130,7 @@ EVENT_JSON:{
 }
 ```
 
-Example — undelegate (failure)
+  - Example — undelegate (failure)
 ```
 EVENT_JSON:{
   "event": "undelegate_failed",
@@ -142,7 +143,7 @@ EVENT_JSON:{
 }
 ```
 
-Example — validator removed from active set (after balance check)
+  - Example — validator removed from active set (after balance check)
 ```
 EVENT_JSON:{
   "event": "validator_removed",
@@ -153,7 +154,7 @@ EVENT_JSON:{
 }
 ```
 
-Example — claim unstaked (success)
+  - Example — claim unstaked (success)
 ```
 EVENT_JSON:{
   "event": "claim_unstaked_completed",
@@ -164,7 +165,7 @@ EVENT_JSON:{
 }
 ```
 
-Example — claim unstaked (failure)
+  - Example — claim unstaked (failure)
 ```
 EVENT_JSON:{
   "event": "claim_unstake_failed",
