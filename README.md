@@ -8,6 +8,9 @@ Repository layout
 - res/ — compiled .wasm artifacts
 - build.sh, factory_test.sh, vault_test.sh — build and test helpers
 
+Further reading
+- TECHNICAL_ARCHITECTURE_AND_STACK.md — deep-dive into architecture, stack, and integration
+
 
 ## Prerequisites
 
