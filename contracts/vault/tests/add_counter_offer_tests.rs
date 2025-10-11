@@ -2,11 +2,11 @@ use anyhow::Ok;
 use near_sdk::{json_types::U128, AccountId, NearToken};
 use serde_json::json;
 use std::sync::OnceLock;
-use tokio::sync::Mutex;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
     register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
 };
+use tokio::sync::Mutex;
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -380,7 +380,10 @@ async fn test_counter_offer_fails_when_no_request_exists() -> anyhow::Result<()>
     assert!(outcome.is_success());
 
     let offers: serde_json::Value = vault.view("get_counter_offers").await?.json()?;
-    assert!(offers.is_null(), "Counter offers should remain empty when no request exists");
+    assert!(
+        offers.is_null(),
+        "Counter offers should remain empty when no request exists"
+    );
 
     let balance_after = get_usdc_balance(&token, lender.id()).await?;
     assert_eq!(

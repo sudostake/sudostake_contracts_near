@@ -44,6 +44,8 @@ pub trait VaultExt {
 
     fn on_repay_loan(&mut self, #[callback_result] result: Result<(), near_sdk::PromiseError>);
 
+    fn on_accept_counter_offer_mismatch_fail(&mut self);
+
     fn on_batch_claim_unstaked(
         &mut self,
         validators: Vec<AccountId>,

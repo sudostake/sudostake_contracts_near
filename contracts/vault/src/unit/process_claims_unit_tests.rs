@@ -532,8 +532,7 @@ fn test_process_claims_triggers_unstake_if_maturing_insufficient() {
 #[test]
 fn test_on_lender_payout_complete_clears_state() {
     let now = 1_000_000_500;
-    let context =
-        get_context_with_timestamp(owner(), NearToken::from_near(10), None, Some(now));
+    let context = get_context_with_timestamp(owner(), NearToken::from_near(10), None, Some(now));
     testing_env!(context);
 
     let lender = alice();
@@ -542,8 +541,9 @@ fn test_on_lender_payout_complete_clears_state() {
     vault.processing_state = ProcessingState::ProcessClaims;
     vault.processing_since = now;
 
-    vault.liquidity_request =
-        Some(create_valid_liquidity_request("usdc.test.near".parse().unwrap()));
+    vault.liquidity_request = Some(create_valid_liquidity_request(
+        "usdc.test.near".parse().unwrap(),
+    ));
     vault.accepted_offer = Some(AcceptedOffer {
         lender: lender.clone(),
         accepted_at: now - 1,
@@ -561,7 +561,10 @@ fn test_on_lender_payout_complete_clears_state() {
 
     vault.on_lender_payout_complete(lender.clone(), 100, true, Ok(()));
 
-    assert!(vault.liquidity_request.is_none(), "Request should be cleared");
+    assert!(
+        vault.liquidity_request.is_none(),
+        "Request should be cleared"
+    );
     assert!(vault.accepted_offer.is_none(), "Offer should be cleared");
     assert!(vault.liquidation.is_none(), "Liquidation should be cleared");
     assert!(
@@ -585,7 +588,9 @@ fn test_process_claims_duration_overflow_panics() {
     testing_env!(context);
 
     let mut vault = Vault::new(owner(), 0, 1);
-    vault.active_validators.insert(&"validator1.testnet".parse().unwrap());
+    vault
+        .active_validators
+        .insert(&"validator1.testnet".parse().unwrap());
 
     let mut request = create_valid_liquidity_request("usdc.test.near".parse().unwrap());
     request.duration = u64::MAX;

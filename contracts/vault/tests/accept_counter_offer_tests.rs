@@ -46,6 +46,7 @@ async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Resu
     // Deploy validator, token, and vault
     let validator = create_test_validator(&worker, &root).await?;
     let token = initialize_test_token(&root).await?;
+    println!("token id: {}", token.id());
     let vault = initialize_test_vault(&root).await?.contract;
 
     // Register vault and users with the token
@@ -462,9 +463,7 @@ async fn test_accept_counter_offer_rejects_missing_proposer() -> anyhow::Result<
 
     // Verify original offer still present
     let offers: serde_json::Value = vault.view("get_counter_offers").await?.json()?;
-    assert!(offers
-        .get(&lender.id().to_string())
-        .is_some());
+    assert!(offers.get(&lender.id().to_string()).is_some());
 
     Ok(())
 }
@@ -554,6 +553,15 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
         .transact()
         .await?;
 
+    println!(
+        "accept_counter_offer outcome: {:?}",
+        outcome.failures()
+    );
+    println!(
+        "receipt outcomes: {:#?}",
+        outcome.receipt_outcomes()
+    );
+
     let failure_text = format!("{:?}", outcome.failures());
     assert!(
         failure_text.contains("Provided amount does not match the counter offer"),
@@ -561,6 +569,11 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
     );
 
     let balance_after = get_usdc_balance(&token, proposer.id()).await?;
+    let vault_balance = get_usdc_balance(&token, vault.id()).await?;
+    println!(
+        "post-failure balances => proposer: {}, vault: {}",
+        balance_after.0, vault_balance.0
+    );
     assert_eq!(balance_after.0, 1_000_000u128);
 
     Ok(())

@@ -129,9 +129,7 @@ fn test_retry_refunds_skips_expired_entries() {
     );
 
     let logs = get_logs();
-    let found = logs
-        .iter()
-        .any(|log| log.contains("retry_refund_expired"));
+    let found = logs.iter().any(|log| log.contains("retry_refund_expired"));
     assert!(
         found,
         "Expected 'retry_refund_expired' log not found. Logs: {:?}",

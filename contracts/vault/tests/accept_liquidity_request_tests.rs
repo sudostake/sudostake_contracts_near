@@ -3,8 +3,8 @@ use near_workspaces::{network::Sandbox, Account, Worker};
 use serde_json::{json, Value};
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
-    make_accept_request_msg, make_counter_offer_msg, register_account_with_token,
-    VaultViewState, VAULT_CALL_GAS,
+    make_accept_request_msg, make_counter_offer_msg, register_account_with_token, VaultViewState,
+    VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -254,7 +254,10 @@ async fn test_accept_liquidity_request_refunds_on_token_mismatch() -> anyhow::Re
     );
 
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
-    assert!(state.accepted_offer.is_none(), "Offer should not be accepted");
+    assert!(
+        state.accepted_offer.is_none(),
+        "Offer should not be accepted"
+    );
     assert!(
         state.liquidity_request.is_some(),
         "Liquidity request should remain open"
@@ -364,7 +367,10 @@ async fn test_counter_offer_proposer_gets_refunded_on_accept() -> anyhow::Result
     // Counter offers should be fully cleared from state
     let offers: Option<serde_json::Map<String, Value>> =
         vault.view("get_counter_offers").await?.json()?;
-    assert!(offers.is_none(), "Counter offers map should be cleared after acceptance");
+    assert!(
+        offers.is_none(),
+        "Counter offers map should be cleared after acceptance"
+    );
 
     // The lender should retain only the request amount (their counter offer refunded)
     let balance = get_usdc_balance(&token, lender.id()).await?;

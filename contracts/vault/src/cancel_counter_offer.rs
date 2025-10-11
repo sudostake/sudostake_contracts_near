@@ -26,10 +26,7 @@ impl Vault {
         );
 
         // Counter offers must exist
-        let mut offers_map = self
-            .counter_offers
-            .take()
-            .expect("No counter offers found");
+        let mut offers_map = self.counter_offers.take().expect("No counter offers found");
 
         // Caller must have an active counter offer
         let caller = env::predecessor_account_id();
@@ -65,6 +62,6 @@ impl Vault {
         );
 
         // Attempt refund
-        self.refund_counter_offer(liquidity_request.token.clone(), offer);
+        let _ = self.refund_counter_offer(liquidity_request.token.clone(), offer);
     }
 }

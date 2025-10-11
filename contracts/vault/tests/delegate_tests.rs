@@ -7,7 +7,7 @@ use serde_json::json;
 use test_utils::{
     create_named_test_validator, create_test_validator, initialize_test_vault,
     request_and_accept_liquidity, setup_contracts, setup_sandbox_and_accounts, VaultViewState,
-    VAULT_CALL_GAS, MAX_ACTIVE_VALIDATORS,
+    MAX_ACTIVE_VALIDATORS, VAULT_CALL_GAS,
 };
 
 #[tokio::test]

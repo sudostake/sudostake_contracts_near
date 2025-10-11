@@ -414,8 +414,7 @@ async fn test_get_contract_state_reflects_latest_values() -> anyhow::Result<()> 
         .await?
         .into_result()?;
 
-    user
-        .call(factory_contract.id(), "mint_vault")
+    user.call(factory_contract.id(), "mint_vault")
         .deposit(minting_fee.clone())
         .gas(FACTORY_CALL_GAS)
         .transact()

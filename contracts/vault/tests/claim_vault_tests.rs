@@ -87,7 +87,10 @@ async fn test_list_and_cancel_takeover_toggles_state() -> anyhow::Result<()> {
         .into_result()?;
 
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
-    assert!(state.is_listed_for_takeover, "Vault should be listed after call");
+    assert!(
+        state.is_listed_for_takeover,
+        "Vault should be listed after call"
+    );
 
     // Cancel the takeover and expect the listing flag to reset
     root.call(vault.id(), "cancel_takeover")
@@ -157,7 +160,10 @@ async fn test_claim_vault_rejects_wrong_deposit() -> anyhow::Result<()> {
         .transact()
         .await?;
 
-    assert!(outcome.is_failure(), "Claim should fail with mismatched deposit");
+    assert!(
+        outcome.is_failure(),
+        "Claim should fail with mismatched deposit"
+    );
     let err = outcome.into_result().unwrap_err().to_string();
     assert!(
         err.contains("Must attach exactly"),
@@ -189,7 +195,10 @@ async fn test_claim_vault_rejects_self_claim() -> anyhow::Result<()> {
         .transact()
         .await?;
 
-    assert!(outcome.is_failure(), "Owner should not be able to claim vault");
+    assert!(
+        outcome.is_failure(),
+        "Owner should not be able to claim vault"
+    );
     let err = outcome.into_result().unwrap_err().to_string();
     assert!(
         err.contains("Current vault owner cannot claim their own vault"),

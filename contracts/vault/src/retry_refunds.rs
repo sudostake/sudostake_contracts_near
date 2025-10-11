@@ -77,10 +77,7 @@ impl Vault {
             self.refund_list.remove(&id);
 
             // Skip expired entries instead of scheduling another transfer.
-            if current_epoch >= entry
-                .added_at_epoch
-                .saturating_add(REFUND_EXPIRY_EPOCHS)
-            {
+            if current_epoch >= entry.added_at_epoch.saturating_add(REFUND_EXPIRY_EPOCHS) {
                 log_event!(
                     "retry_refund_expired",
                     near_sdk::serde_json::json!({

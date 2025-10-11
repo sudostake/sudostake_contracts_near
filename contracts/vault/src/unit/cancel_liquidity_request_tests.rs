@@ -1,6 +1,4 @@
-use near_sdk::{
-    collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken,
-};
+use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{create_valid_liquidity_request, get_context, owner};
 
 use crate::{
@@ -175,7 +173,11 @@ fn test_cancel_liquidity_request_clears_underlying_storage() {
 
     let inspector: UnorderedMap<AccountId, CounterOffer> =
         UnorderedMap::new(StorageKey::CounterOffers);
-    assert_eq!(inspector.len(), 0, "Counter offer storage should be cleared");
+    assert_eq!(
+        inspector.len(),
+        0,
+        "Counter offer storage should be cleared"
+    );
 }
 
 #[test]
