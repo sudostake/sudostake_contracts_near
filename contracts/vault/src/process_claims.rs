@@ -432,10 +432,6 @@ impl Vault {
         self.liquidation = None;
         self.pending_liquidity_request = None;
 
-        if let Some(mut counter_offers) = self.counter_offers.take() {
-            counter_offers.clear();
-        }
-
         self.release_processing_lock();
     }
 

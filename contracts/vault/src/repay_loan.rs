@@ -86,10 +86,6 @@ impl Vault {
         self.liquidity_request = None;
         self.pending_liquidity_request = None;
 
-        if let Some(mut counter_offers) = self.counter_offers.take() {
-            counter_offers.clear();
-        }
-
         // Log repay_loan_successful event
         log_event!(
             "repay_loan_successful",

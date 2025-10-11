@@ -1,6 +1,4 @@
-use near_sdk::{
-    collections::UnorderedMap, env, json_types::U128, testing_env, AccountId, NearToken,
-};
+use near_sdk::{env, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{
     alice, create_valid_liquidity_request, get_context, get_context_with_timestamp, owner,
     YOCTO_NEAR,
@@ -9,8 +7,8 @@ use test_utils::{
 use crate::{
     contract::Vault,
     types::{
-        AcceptedOffer, CounterOffer, Liquidation, PendingLiquidityRequest, ProcessingState,
-        StorageKey, UnstakeEntry, LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK,
+        AcceptedOffer, Liquidation, PendingLiquidityRequest, ProcessingState, UnstakeEntry,
+        LOCK_TIMEOUT, NUM_EPOCHS_TO_UNLOCK,
     },
 };
 
@@ -561,17 +559,6 @@ fn test_on_lender_payout_complete_clears_state() {
         duration: 86400,
     });
 
-    let mut counter_offers = UnorderedMap::new(StorageKey::CounterOffers);
-    counter_offers.insert(
-        &owner(),
-        &CounterOffer {
-            proposer: owner(),
-            amount: U128(900_000),
-            timestamp: now,
-        },
-    );
-    vault.counter_offers = Some(counter_offers);
-
     vault.on_lender_payout_complete(lender.clone(), 100, true, Ok(()));
 
     assert!(vault.liquidity_request.is_none(), "Request should be cleared");
@@ -581,14 +568,6 @@ fn test_on_lender_payout_complete_clears_state() {
         vault.pending_liquidity_request.is_none(),
         "Pending request should be cleared"
     );
-    assert!(
-        vault.counter_offers.is_none(),
-        "Counter offers should be cleared"
-    );
     assert_eq!(vault.processing_state, ProcessingState::Idle);
     assert_eq!(vault.processing_since, 0);
-
-    let inspector: UnorderedMap<AccountId, CounterOffer> =
-        UnorderedMap::new(StorageKey::CounterOffers);
-    assert_eq!(inspector.len(), 0, "Counter-offer storage should be empty");
 }
