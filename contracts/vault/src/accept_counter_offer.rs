@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use crate::{
-    contract::{Vault, VaultExt},
-    log_event,
-};
+use crate::contract::{Vault, VaultExt};
+#[cfg(target_arch = "wasm32")]
+use crate::{ext::ext_self, types::GAS_FOR_CALLBACK};
+use crate::log_event;
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, PromiseOrValue,
 };
@@ -49,21 +49,37 @@ impl Vault {
 
         // Retrieve and remove the specific counter offer for the given proposer_id.
         let offer = offers_map
-            .get(&proposer_id)
+            .remove(&proposer_id)
             .expect("Counter offer from proposer not found");
 
         let token = liquidity_request.token.clone();
 
         // Ensure the given amount matches the stored counter offer amount.
-        require!(
-            offer.amount == amount,
-            "Provided amount does not match the counter offer"
-        );
+        if offer.amount != amount {
+            if offers_map.is_empty() {
+                offers_map.clear();
+                self.counter_offers = None;
+            } else {
+                self.counter_offers = Some(offers_map);
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            {
+                let refund_promise = self.refund_counter_offer(token.clone(), offer);
+                let panic_promise = ext_self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .on_accept_counter_offer_mismatch_fail();
+                return PromiseOrValue::Promise(refund_promise.then(panic_promise));
+            }
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                panic!("Provided amount does not match the counter offer");
+            }
+        }
 
         // Remove the accepted offer so we can refund the rest.
-        offers_map
-            .remove(&proposer_id)
-            .expect("Counter offer from proposer not found");
+        // `offer` already removed above when the amount matched.
 
         // Record acceptance
         self.accepted_offer = Some(crate::types::AcceptedOffer {
@@ -92,5 +108,10 @@ impl Vault {
         );
 
         PromiseOrValue::Value(())
+    }
+
+    #[private]
+    pub fn on_accept_counter_offer_mismatch_fail(&mut self) {
+        env::panic_str("Provided amount does not match the counter offer");
     }
 }
