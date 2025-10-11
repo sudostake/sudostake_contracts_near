@@ -95,6 +95,36 @@ fn test_disallow_withdrawal_if_refund_list_not_empty() {
 }
 
 #[test]
+#[should_panic(expected = "Cannot withdraw while there are pending refund entries")]
+fn test_disallow_nep_withdrawal_if_refund_list_not_empty() {
+    let context = get_context(
+        owner(),
+        NearToken::from_near(5),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    insert_refund_entry(
+        &mut vault,
+        0,
+        RefundEntry {
+            token: Some("usdc.near".parse().unwrap()),
+            proposer: alice(),
+            amount: U128(1_000_000),
+            added_at_epoch: 0,
+        },
+    );
+
+    vault.withdraw_balance(
+        Some("usdc.near".parse().unwrap()),
+        U128::from(1_000_000_u128),
+        None,
+    );
+}
+
+#[test]
 fn owner_can_withdraw_nep141_with_one_yocto() {
     // Set up context with vault owner and attach 1 yoctoNEAR
     let context = get_context(
