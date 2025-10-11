@@ -5,8 +5,9 @@ use near_sdk::{json_types::U128, Gas, NearToken};
 use near_workspaces::{network::Sandbox, Account, Worker};
 use serde_json::json;
 use test_utils::{
-    create_test_validator, initialize_test_vault, request_and_accept_liquidity, setup_contracts,
-    setup_sandbox_and_accounts, VaultViewState, VAULT_CALL_GAS,
+    create_named_test_validator, create_test_validator, initialize_test_vault,
+    request_and_accept_liquidity, setup_contracts, setup_sandbox_and_accounts, VaultViewState,
+    VAULT_CALL_GAS, MAX_ACTIVE_VALIDATORS,
 };
 
 #[tokio::test]
@@ -279,6 +280,56 @@ async fn test_delegate_fails_if_liquidation_active() -> anyhow::Result<()> {
     assert!(
         failure_text.contains("Cannot delegate while liquidation is in progress"),
         "Expected failure due to liquidation, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_delegate_fails_when_max_validators_reached() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+
+    // Create distinct validators to fill the active set
+    let mut validators = Vec::with_capacity(MAX_ACTIVE_VALIDATORS + 1);
+    for i in 0..=MAX_ACTIVE_VALIDATORS {
+        let name = format!("validator-limit-{}", i);
+        validators.push(create_named_test_validator(&worker, &root, &name).await?);
+    }
+
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Delegate to each validator up to the limit
+    for validator in validators.iter().take(MAX_ACTIVE_VALIDATORS) {
+        root.call(vault.id(), "delegate")
+            .args_json(json!({
+                "validator": validator.id(),
+                "amount": NearToken::from_near(1),
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+    }
+
+    // Next delegation to a new validator should fail due to cap
+    let overflow = validators.last().unwrap();
+    let result = root
+        .call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": overflow.id(),
+            "amount": NearToken::from_near(1),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("You can only stake with"),
+        "Expected validator cap failure, got: {failure_text}"
     );
 
     Ok(())
