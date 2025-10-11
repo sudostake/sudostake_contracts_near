@@ -1,9 +1,6 @@
 #![allow(dead_code)]
 
-use crate::contract::{Vault, VaultExt};
-#[cfg(target_arch = "wasm32")]
-use crate::{ext::ext_self, types::GAS_FOR_CALLBACK};
-use crate::log_event;
+use crate::{contract::Vault, log_event};
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, PromiseOrValue,
 };
@@ -20,82 +17,54 @@ impl Vault {
         proposer_id: AccountId,
         amount: U128,
     ) -> PromiseOrValue<()> {
-        // Require 1 yoctoNEAR for access control
         assert_one_yocto();
 
-        // Only the vault owner can perform this action
+        let caller = env::predecessor_account_id();
         require!(
-            env::predecessor_account_id() == self.owner,
+            caller == self.owner,
             "Only the vault owner can accept a counter offer"
         );
 
-        // Ensure there is an active liquidity request.
         let liquidity_request = self
             .liquidity_request
             .as_ref()
             .expect("No liquidity request available");
 
-        // Ensure the liquidity request has not yet been accepted.
         require!(
             self.accepted_offer.is_none(),
             "Liquidity request already accepted"
         );
 
-        // Ensure there are existing counter offers.
-        let mut offers_map = self
+        let mut offers = self
             .counter_offers
             .take()
             .expect("No counter offers available");
 
-        // Retrieve and remove the specific counter offer for the given proposer_id.
-        let offer = offers_map
-            .remove(&proposer_id)
+        let offer = offers
+            .get(&proposer_id)
+            .cloned()
             .expect("Counter offer from proposer not found");
 
-        let token = liquidity_request.token.clone();
+        require!(
+            offer.amount == amount,
+            "Provided amount does not match the counter offer"
+        );
 
-        // Ensure the given amount matches the stored counter offer amount.
-        if offer.amount != amount {
-            if offers_map.is_empty() {
-                offers_map.clear();
-                self.counter_offers = None;
-            } else {
-                self.counter_offers = Some(offers_map);
-            }
+        offers.remove(&proposer_id);
 
-            #[cfg(target_arch = "wasm32")]
-            {
-                let refund_promise = self.refund_counter_offer(token.clone(), offer);
-                let panic_promise = ext_self::ext(env::current_account_id())
-                    .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_accept_counter_offer_mismatch_fail();
-                return PromiseOrValue::Promise(refund_promise.then(panic_promise));
-            }
-
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                panic!("Provided amount does not match the counter offer");
-            }
-        }
-
-        // Remove the accepted offer so we can refund the rest.
-        // `offer` already removed above when the amount matched.
-
-        // Record acceptance
         self.accepted_offer = Some(crate::types::AcceptedOffer {
             lender: proposer_id.clone(),
             accepted_at: env::block_timestamp(),
         });
 
-        // Refund all other counter offers
-        for other_offer in offers_map.values() {
+        let token = liquidity_request.token.clone();
+
+        for other_offer in offers.values() {
             let _ = self.refund_counter_offer(token.clone(), other_offer);
         }
 
-        // Remove all counter offers from storage now that refunds are initiated.
-        offers_map.clear();
+        offers.clear();
 
-        // Log the counter offer acceptance event.
         log_event!(
             "counter_offer_accepted",
             near_sdk::serde_json::json!({
@@ -108,10 +77,5 @@ impl Vault {
         );
 
         PromiseOrValue::Value(())
-    }
-
-    #[private]
-    pub fn on_accept_counter_offer_mismatch_fail(&mut self) {
-        env::panic_str("Provided amount does not match the counter offer");
     }
 }
