@@ -1,9 +1,9 @@
-use near_sdk::{json_types::U128, testing_env, AccountId, NearToken};
-use test_utils::{alice, get_context, owner};
+use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
+use test_utils::{alice, bob, get_context, owner};
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest},
+    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, StorageKey},
 };
 
 #[path = "test_utils.rs"]
@@ -66,6 +66,60 @@ fn test_accept_counter_offer_succeeds() {
     assert!(
         vault.counter_offers.is_none(),
         "Counter offers should be cleared after acceptance"
+    );
+}
+
+#[test]
+fn test_accept_counter_offer_clears_underlying_storage() {
+    // Set context as vault owner
+    let ctx = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(ctx);
+
+    // Initialize vault and add liquidity request
+    let mut vault = Vault::new(owner(), 0, 1);
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    vault.liquidity_request = Some(LiquidityRequest {
+        token: token.clone(),
+        amount: U128(1_000_000),
+        interest: U128(100_000),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+        created_at: 0,
+    });
+
+    // Construct a valid counter offer message
+    let msg = CounterOfferMessage {
+        action: "NewCounterOffer".to_string(),
+        token: token.clone(),
+        amount: U128(1_000_000),
+        interest: U128(100_000),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+    };
+
+    // Add offers from bob and carol
+    vault
+        .try_add_counter_offer(bob(), U128(850_000), msg.clone(), token.clone())
+        .expect("bob's offer should succeed");
+    let carol: AccountId = "carol.near".parse().unwrap();
+    vault
+        .try_add_counter_offer(carol.clone(), U128(900_000), msg, token.clone())
+        .expect("carol's offer should succeed");
+
+    // Accept carol's offer
+    vault.accept_counter_offer(carol.clone(), U128(900_000));
+
+    // Recreate the map directly on the storage key to inspect underlying data.
+    let inspector: UnorderedMap<AccountId, crate::types::CounterOffer> =
+        UnorderedMap::new(StorageKey::CounterOffers);
+    assert_eq!(
+        inspector.len(),
+        0,
+        "Counter offers storage should be cleared after acceptance"
     );
 }
 

@@ -64,6 +64,9 @@ impl Vault {
             self.refund_counter_offer(token.clone(), other_offer);
         }
 
+        // Remove all counter offers from storage now that refunds are initiated.
+        offers_map.clear();
+
         // Log the counter offer acceptance event.
         log_event!(
             "counter_offer_accepted",
