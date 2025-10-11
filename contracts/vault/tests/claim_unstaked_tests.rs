@@ -8,6 +8,8 @@ use test_utils::{
     setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
 
+// TODO: Cover claim_unstaked lock contention once a delayed-withdraw staking pool mock exists.
+
 #[tokio::test]
 async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
     // Set up the sandbox environment and root account
@@ -236,6 +238,57 @@ async fn test_claim_unstaked_fails_if_no_entry() -> anyhow::Result<()> {
     assert!(
         failure_text.contains("No unstake entry found for validator"),
         "Expected panic due to missing unstake entry. Got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_claim_unstaked_fails_if_epoch_not_ready() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+    let validator = create_test_validator(&worker, &root).await?;
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    worker.fast_forward(1).await?;
+
+    root.call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Attempt to claim immediately without waiting the unlock epochs
+    let result = root
+        .call(vault.id(), "claim_unstaked")
+        .args_json(json!({
+            "validator": validator.id()
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("Unstaked funds not yet claimable"),
+        "Expected epoch guard failure, got: {failure_text}"
     );
 
     Ok(())
