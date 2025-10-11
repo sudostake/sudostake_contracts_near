@@ -259,7 +259,9 @@ async fn test_process_claims_waits_when_unstake_is_still_maturing() -> anyhow::R
         initial_available,
         initial_available as f64 / 1e24
     );
-    let to_delegate = available.0.saturating_sub(NearToken::from_near(2).as_yoctonear());
+    let to_delegate = available
+        .0
+        .saturating_sub(NearToken::from_near(2).as_yoctonear());
     root.call(vault.id(), "delegate")
         .args_json(json!({
             "validator": validator.id(),
@@ -353,7 +355,9 @@ async fn test_process_claims_triggers_fallback_unstake_when_maturing_insufficien
     let available: U128 = vault.view("view_available_balance").await?.json()?;
     let storage_cost: U128 = vault.view("view_storage_cost").await?.json()?;
 
-    let to_delegate = available.0.saturating_sub(NearToken::from_near(2).as_yoctonear());
+    let to_delegate = available
+        .0
+        .saturating_sub(NearToken::from_near(2).as_yoctonear());
     root.call(vault.id(), "delegate")
         .args_json(json!({
             "validator": validator.id(),

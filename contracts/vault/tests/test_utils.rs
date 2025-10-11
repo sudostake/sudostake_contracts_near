@@ -1,5 +1,4 @@
 #![cfg(feature = "integration-test")]
-
 #![allow(dead_code)]
 
 use anyhow::Ok;

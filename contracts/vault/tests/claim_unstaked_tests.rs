@@ -343,8 +343,7 @@ async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()>
     worker.fast_forward(1).await?;
 
     // Request and accept liquidity request with a very short duration so it expires quickly
-    root
-        .call(vault.id(), "request_liquidity")
+    root.call(vault.id(), "request_liquidity")
         .args_json(json!({
             "token": token.id(),
             "amount": U128(1_000_000),

@@ -4,8 +4,7 @@
 mod test_utils;
 
 use crate::test_utils::{
-    get_usdc_balance, initialize_test_token, register_account_with_token,
-    transfer_tokens_to_vault,
+    get_usdc_balance, initialize_test_token, register_account_with_token, transfer_tokens_to_vault,
 };
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
