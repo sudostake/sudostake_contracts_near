@@ -59,6 +59,6 @@ impl FungibleTokenReceiver for Vault {
         }
 
         // Invalid or unknown message — keep tokens but ignore
-        PromiseOrValue::Value(U128(0))
+        PromiseOrValue::Value(amount)
     }
 }

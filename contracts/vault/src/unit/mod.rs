@@ -5,6 +5,7 @@ mod cancel_takeover_unit_tests;
 mod claim_unstaked_unit_tests;
 mod claim_vault_unit_tests;
 mod delegate_unit_tests;
+mod ft_receiver_unit_tests;
 mod initialization;
 mod list_for_takeover_unit_tests;
 mod process_claims_unit_tests;
