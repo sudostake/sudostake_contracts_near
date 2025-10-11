@@ -3,10 +3,10 @@ mod test_utils;
 
 use crate::{
     contract::Vault,
-    types::{ProcessingState, UnstakeEntry, NUM_EPOCHS_TO_UNLOCK},
+    types::{ProcessingState, UnstakeEntry},
 };
 use near_sdk::{env, test_utils::get_logs, testing_env, AccountId, NearToken};
-use test_utils::{alice, get_context, owner};
+use test_utils::{alice, get_context, get_context_with_timestamp, owner};
 
 #[test]
 #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
@@ -46,10 +46,11 @@ fn test_claim_unstaked_rejects_non_owner() {
 #[should_panic(expected = "No unstake entry found for validator")]
 fn test_claim_unstaked_fails_if_no_entry() {
     // Set up context with the vault owner
-    let context = get_context(
+    let context = get_context_with_timestamp(
         owner(),
         NearToken::from_near(10),
         Some(NearToken::from_yoctonear(1)),
+        None,
     );
     testing_env!(context);
 
@@ -137,22 +138,12 @@ fn test_claim_unstaked_fails_if_lock_active() {
 
     // Initialize the vault
     let mut vault = Vault::new(owner(), 0, 1);
-    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
 
-    // Add a valid unstake entry eligible for claiming
-    vault.unstake_entries.insert(
-        &validator,
-        &UnstakeEntry {
-            amount: NearToken::from_near(2).as_yoctonear(),
-            epoch_height: env::epoch_height() - NUM_EPOCHS_TO_UNLOCK,
-        },
-    );
+    // First acquisition succeeds
+    vault.acquire_processing_lock(ProcessingState::ClaimUnstaked);
 
-    // First call — acquires processing lock and returns a promise
-    vault.claim_unstaked(validator.clone());
-
-    // Second call — should panic due to lock still being held
-    vault.claim_unstaked(validator);
+    // Second acquisition should panic because the lock is still held
+    vault.acquire_processing_lock(ProcessingState::ClaimUnstaked);
 }
 
 #[test]

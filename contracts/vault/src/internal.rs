@@ -47,11 +47,14 @@ impl Vault {
 
     /// Refunds all active counter offers by initiating `ft_transfer` calls
     /// for each proposer using the provided token contract.
-    pub(crate) fn refund_all_counter_offers(&self, token: AccountId) {
-        if let Some(counter_offers) = &self.counter_offers {
+    pub(crate) fn refund_all_counter_offers(&mut self, token: AccountId) {
+        if let Some(mut counter_offers) = self.counter_offers.take() {
             for (_, offer) in counter_offers.iter() {
                 self.refund_counter_offer(token.clone(), offer);
             }
+
+            // Explicitly clear storage so stale offers do not linger between requests.
+            counter_offers.clear();
         }
     }
 
@@ -200,10 +203,9 @@ impl Vault {
         assert!(kind != ProcessingState::Idle, "Cannot lock with Idle");
 
         let now = env::block_timestamp();
+        let elapsed = now.saturating_sub(self.processing_since);
 
-        if self.processing_state != ProcessingState::Idle
-            && now - self.processing_since >= LOCK_TIMEOUT
-        {
+        if self.processing_state != ProcessingState::Idle && elapsed >= LOCK_TIMEOUT {
             self.processing_state = ProcessingState::Idle;
             self.processing_since = 0;
         }

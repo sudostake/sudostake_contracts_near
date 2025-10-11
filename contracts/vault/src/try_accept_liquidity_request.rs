@@ -61,7 +61,7 @@ impl Vault {
         });
 
         // Refund all counter offers if any
-        self.refund_all_counter_offers(msg.token);
+        self.refund_all_counter_offers(msg.token.clone());
 
         // Log liquidity_request_accepted event
         log_event!(

@@ -1,13 +1,15 @@
-//! This module defines all staking-related constants and types
-//! used across the Vault contract logic, including lifecycle tracking,
-//! validator management, and refund handling.
+//! Shared types and constants used across the Vault contract.
+//! The module centralises staking constants, storage keys, business data
+//! structures, and their serde/ABI representations.
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
-use near_sdk::serde::Serialize;
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{AccountId, IntoStorageKey, NearToken};
 use near_sdk::{EpochHeight, Gas};
-use serde::Deserialize;
+
+#[cfg(not(target_arch = "wasm32"))]
+use schemars::JsonSchema;
 
 // === Gas Constants ===
 
@@ -43,6 +45,7 @@ pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000; // 30 minutes
 
 /// Indicates which long-running operation is currently locked in the vault.
 #[derive(BorshSerialize, BorshDeserialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[repr(u8)]
 #[borsh(use_discriminant = true)]
 pub enum ProcessingState {
@@ -61,14 +64,39 @@ pub enum ProcessingState {
     /// Vault is currently processing lender claims during liquidation.
     ProcessClaims = 6,
 }
+/// Public view state returned from the `get_vault_state` method.
+#[derive(Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
+#[serde(crate = "near_sdk::serde")]
+pub struct VaultViewState {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
+    pub owner: AccountId,
+    pub index: u64,
+    pub version: u64,
+    pub liquidity_request: Option<LiquidityRequest>,
+    pub accepted_offer: Option<AcceptedOffer>,
+    pub is_listed_for_takeover: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "Vec<String>"))]
+    pub active_validators: Vec<AccountId>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        schemars(with = "Vec<(String, UnstakeEntry)>")
+    )]
+    pub unstake_entries: Vec<(AccountId, UnstakeEntry)>,
+    pub liquidation: Option<Liquidation>,
+    pub current_epoch: EpochHeight,
+}
 
 /// Tracks how much NEAR is unstaked and the epoch when it will be available.
 #[derive(BorshDeserialize, BorshSerialize, Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct UnstakeEntry {
     pub amount: u128,
     pub epoch_height: EpochHeight,
 }
+
+// === Storage Keys ===
 
 /// Keys used to index stored collections in contract storage.
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -81,111 +109,120 @@ pub enum StorageKey {
 
 impl IntoStorageKey for StorageKey {
     fn into_storage_key(self) -> Vec<u8> {
-        near_sdk::borsh::to_vec(&self).expect("Failed to serialize storage key")
+        borsh::to_vec(&self).expect("Failed to serialize storage key")
     }
 }
 
-/// Public view state returned from the `get_vault_state` method.
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct VaultViewState {
-    pub owner: AccountId,
-    pub index: u64,
-    pub version: u64,
-    pub liquidity_request: Option<LiquidityRequest>,
-    pub accepted_offer: Option<AcceptedOffer>,
-    pub is_listed_for_takeover: bool,
-    pub active_validators: Vec<AccountId>,
-    pub unstake_entries: Vec<(AccountId, UnstakeEntry)>,
-    pub liquidation: Option<Liquidation>,
-    pub current_epoch: EpochHeight,
-}
+// === Liquidity Request Types ===
 
 /// Liquidity request under construction — not yet validated or accepted.
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct PendingLiquidityRequest {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub token: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub amount: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub interest: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub collateral: NearToken,
     pub duration: u64,
 }
 
 /// A finalized liquidity request created by the vault owner.
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct LiquidityRequest {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub token: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub amount: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub interest: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub collateral: NearToken,
     pub duration: u64,
     pub created_at: u64,
 }
 
 /// Message format used to accept a liquidity request.
-#[derive(serde::Deserialize)]
+#[derive(Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct AcceptRequestMessage {
     pub action: String,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub token: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub amount: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub interest: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub collateral: NearToken,
     pub duration: u64,
 }
 
 /// Message format used by lenders to propose a counter offer.
-#[derive(serde::Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct CounterOfferMessage {
     pub action: String,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub token: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub amount: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub interest: U128,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub collateral: NearToken,
     pub duration: u64,
 }
 
 /// Matched offer from a lender, recorded after acceptance.
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct AcceptedOffer {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub lender: AccountId,
     pub accepted_at: u64,
 }
 
-/// Tracks the cumulative amount liquidated in NEAR to fulfill a lender's claim.
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-#[serde(crate = "near_sdk::serde")]
-pub struct Liquidation {
-    pub liquidated: NearToken,
-}
-
-/// Logical vault status based on its lending lifecycle.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(crate = "near_sdk::serde")]
-pub enum VaultState {
-    Idle,
-    Pending,
-    Active,
-}
-
 /// A counter offer submitted by a lender with proposed terms.
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct CounterOffer {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub proposer: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub amount: U128,
     pub timestamp: u64,
 }
 
+/// Tracks the cumulative amount liquidated in NEAR to fulfill a lender's claim.
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
+#[serde(crate = "near_sdk::serde")]
+pub struct Liquidation {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
+    pub liquidated: NearToken,
+}
+
 /// Refund entry representing a failed `ft_transfer` refund.
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
+#[serde(crate = "near_sdk::serde")]
 pub struct RefundEntry {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "Option<String>"))]
     pub token: Option<AccountId>,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub proposer: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub amount: U128,
     pub added_at_epoch: EpochHeight,
 }

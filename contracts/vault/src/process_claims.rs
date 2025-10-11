@@ -59,8 +59,12 @@ impl Vault {
         assert_one_yocto();
         let lender = self.ensure_liquidation_ready();
         self.acquire_processing_lock(ProcessingState::ProcessClaims);
-        self.process_repayment(&lender);
-        self.next_liquidation_step()
+        let should_continue = self.process_repayment(&lender);
+        if should_continue {
+            self.next_liquidation_step()
+        } else {
+            Promise::new(env::current_account_id())
+        }
     }
 
     // ---------------------------------------------------------
@@ -275,6 +279,68 @@ impl Vault {
         // Unlock processing claims
         self.release_processing_lock();
     }
+
+    #[private]
+    pub fn on_lender_payout_complete(
+        &mut self,
+        lender: AccountId,
+        amount: u128,
+        finalize: bool,
+        #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    ) {
+        self.log_gas_checkpoint("on_lender_payout_complete");
+
+        if result.is_err() {
+            log_event!(
+                "lender_payout_failed",
+                near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
+                    "lender": lender,
+                    "amount": amount.to_string()
+                })
+            );
+
+            self.add_refund_entry(None, lender.clone(), U128(amount), None);
+
+            if finalize {
+                let total_debt = self.total_debt();
+                self.clear_liquidation_state();
+                log_event!(
+                    "liquidation_complete",
+                    near_sdk::serde_json::json!({
+                        "vault": env::current_account_id(),
+                        "lender": lender,
+                        "total_repaid": total_debt.to_string(),
+                        "payout_status": "refunded"
+                    })
+                );
+            }
+            return;
+        }
+
+        log_event!(
+            "lender_payout_succeeded",
+            near_sdk::serde_json::json!({
+                "vault": env::current_account_id(),
+                "lender": lender,
+                "amount": amount.to_string()
+            })
+        );
+
+        if finalize {
+            let total_debt = self.total_debt();
+            self.clear_liquidation_state();
+            log_event!(
+                "liquidation_complete",
+                near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
+                    "lender": lender,
+                    "total_repaid": total_debt.to_string(),
+                    "payout_status": "transferred"
+                })
+            );
+        }
+    }
 }
 
 impl Vault {
@@ -345,13 +411,19 @@ impl Vault {
         (matured, maturing_total)
     }
 
-    fn transfer_to_lender(&mut self, lender: &AccountId, amount: u128) -> Promise {
+    fn transfer_to_lender(&mut self, lender: AccountId, amount: u128, finalize: bool) -> Promise {
         let liquidation = self.liquidation.as_mut().unwrap();
         liquidation.liquidated = liquidation
             .liquidated
             .saturating_add(NearToken::from_yoctonear(amount));
 
-        Promise::new(lender.clone()).transfer(NearToken::from_yoctonear(amount))
+        Promise::new(lender.clone())
+            .transfer(NearToken::from_yoctonear(amount))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_CALLBACK)
+                    .on_lender_payout_complete(lender, amount, finalize),
+            )
     }
 
     fn clear_liquidation_state(&mut self) {
@@ -362,28 +434,27 @@ impl Vault {
     }
 
     fn finalize_liquidation(&mut self, lender: &AccountId, amount: u128) {
-        self.transfer_to_lender(lender, amount);
-
-        log_event!(
-            "liquidation_complete",
-            near_sdk::serde_json::json!({
-                "vault": env::current_account_id(),
-                "lender": lender,
-                "total_repaid": self.total_debt().to_string()
-            })
-        );
-
-        self.clear_liquidation_state();
+        self.transfer_to_lender(lender.clone(), amount, true);
     }
 
-    fn process_repayment(&mut self, lender: &AccountId) {
+    fn process_repayment(&mut self, lender: &AccountId) -> bool {
         let outstanding = self.remaining_debt();
-        let available = self.get_available_balance().as_yoctonear();
+        if outstanding == 0 {
+            return true;
+        }
 
-        if available >= outstanding {
-            self.finalize_liquidation(lender, outstanding);
-        } else if available > 0 {
-            self.transfer_to_lender(lender, available);
+        let available = self.get_available_balance().as_yoctonear();
+        if available == 0 {
+            return true;
+        }
+
+        let payout = outstanding.min(available);
+        if payout == outstanding {
+            self.finalize_liquidation(lender, payout);
+            false
+        } else {
+            self.transfer_to_lender(lender.clone(), payout, false);
+            true
         }
     }
 

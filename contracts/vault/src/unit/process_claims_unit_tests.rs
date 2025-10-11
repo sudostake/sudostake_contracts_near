@@ -263,8 +263,17 @@ fn test_process_claims_fulfills_full_repayment_if_balance_sufficient() {
     // Assert initial state before claim
     assert!(vault.liquidation.is_none());
 
-    // Call process_claims — should finalize immediately
+    // Call process_claims — should finalize via callback once transfer settles
     let _ = vault.process_claims();
+
+    // Simulate the successful transfer callback to finish liquidation
+    let payout = vault
+        .liquidity_request
+        .as_ref()
+        .unwrap()
+        .collateral
+        .as_yoctonear();
+    vault.on_lender_payout_complete(alice(), payout, true, Ok(()));
 
     // Assert liquidation state is cleared (repayment complete)
     assert!(vault.liquidation.is_none());

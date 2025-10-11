@@ -1,6 +1,9 @@
-use crate::{contract::Vault, types::AcceptRequestMessage};
-use near_sdk::{json_types::U128, testing_env, AccountId, NearToken};
-use test_utils::{alice, create_valid_liquidity_request, get_context, owner};
+use crate::{
+    contract::Vault,
+    types::{AcceptRequestMessage, CounterOffer, StorageKey},
+};
+use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
+use test_utils::{alice, bob, create_valid_liquidity_request, get_context, owner};
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -47,6 +50,47 @@ fn test_try_accept_liquidity_request_success() {
         .accepted_offer
         .expect("Expected accepted_offer to be set");
     assert_eq!(accepted.lender, lender);
+}
+
+#[test]
+fn test_try_accept_liquidity_request_clears_counter_offers() {
+    let ctx = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(ctx);
+
+    let token: AccountId = "usdc.token.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+
+    let mut contract = Vault::new(owner(), 0, 1);
+    contract.liquidity_request = Some(request.clone());
+
+    let mut map = UnorderedMap::new(StorageKey::CounterOffers);
+    map.insert(
+        &alice(),
+        &CounterOffer {
+            proposer: alice(),
+            amount: U128(900_000),
+            timestamp: 42,
+        },
+    );
+    contract.counter_offers = Some(map);
+
+    let msg = AcceptRequestMessage {
+        action: "AcceptLiquidityRequest".into(),
+        token: token.clone(),
+        amount: request.amount,
+        interest: request.interest,
+        collateral: request.collateral,
+        duration: request.duration,
+    };
+
+    let lender = bob();
+    let result = contract.try_accept_liquidity_request(lender, request.amount, msg, token);
+
+    assert!(result.is_ok(), "Expected success, got: {:?}", result);
+    assert!(
+        contract.counter_offers.is_none(),
+        "Counter offers were not cleared"
+    );
 }
 
 #[test]
