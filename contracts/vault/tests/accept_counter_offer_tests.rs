@@ -462,7 +462,9 @@ async fn test_accept_counter_offer_rejects_missing_proposer() -> anyhow::Result<
 
     // Verify original offer still present
     let offers: serde_json::Value = vault.view("get_counter_offers").await?.json()?;
-    assert!(offers.get(lender.id()).is_some());
+    assert!(offers
+        .get(&lender.id().to_string())
+        .is_some());
 
     Ok(())
 }
