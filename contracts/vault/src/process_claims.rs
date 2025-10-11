@@ -355,7 +355,15 @@ impl Vault {
         if self.liquidation.is_none() {
             let request = self.liquidity_request.as_ref().unwrap();
             let now = env::block_timestamp();
-            let expiration = offer.accepted_at + (request.duration * 1_000_000_000);
+
+            let duration_ns = request
+                .duration
+                .checked_mul(1_000_000_000)
+                .expect("Loan duration exceeds supported range");
+            let expiration = offer
+                .accepted_at
+                .checked_add(duration_ns)
+                .expect("Loan expiration exceeds timestamp range");
 
             // Ensure option has expired
             require!(

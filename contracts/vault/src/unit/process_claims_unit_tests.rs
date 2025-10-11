@@ -571,3 +571,30 @@ fn test_on_lender_payout_complete_clears_state() {
     assert_eq!(vault.processing_state, ProcessingState::Idle);
     assert_eq!(vault.processing_since, 0);
 }
+
+#[test]
+#[should_panic(expected = "Loan duration exceeds supported range")]
+fn test_process_claims_duration_overflow_panics() {
+    let now = 1_000_000_500;
+    let context = get_context_with_timestamp(
+        owner(),
+        NearToken::from_near(0),
+        Some(NearToken::from_yoctonear(1)),
+        Some(now),
+    );
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.active_validators.insert(&"validator1.testnet".parse().unwrap());
+
+    let mut request = create_valid_liquidity_request("usdc.test.near".parse().unwrap());
+    request.duration = u64::MAX;
+    vault.liquidity_request = Some(request);
+
+    vault.accepted_offer = Some(AcceptedOffer {
+        lender: alice(),
+        accepted_at: 0,
+    });
+
+    vault.process_claims();
+}
