@@ -1,9 +1,14 @@
-use near_sdk::{testing_env, NearToken, PromiseError};
+use near_sdk::{
+    collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken, PromiseError,
+};
 use test_utils::{alice, get_context, get_context_with_timestamp, owner};
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, Liquidation, LiquidityRequest, ProcessingState, LOCK_TIMEOUT},
+    types::{
+        AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
+        ProcessingState, StorageKey, LOCK_TIMEOUT,
+    },
 };
 
 #[path = "test_utils.rs"]
@@ -222,6 +227,66 @@ fn test_on_repay_loan_success_clears_state() {
     // Assert lock is released
     assert_eq!(vault.processing_state, ProcessingState::Idle);
     assert_eq!(vault.processing_since, 0);
+}
+
+#[test]
+fn test_on_repay_loan_success_clears_counter_offers_storage() {
+    let now = 1_000_000_000_000_000;
+    let context = get_context_with_timestamp(owner(), NearToken::from_near(10), None, Some(now));
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.processing_state = ProcessingState::RepayLoan;
+    vault.processing_since = now;
+
+    let token: AccountId = "usdc.testnet".parse().unwrap();
+    vault.liquidity_request = Some(LiquidityRequest {
+        token: token.clone(),
+        amount: 1_000_000.into(),
+        interest: 100_000.into(),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+        created_at: now,
+    });
+    vault.accepted_offer = Some(AcceptedOffer {
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: now,
+    });
+
+    vault.pending_liquidity_request = Some(PendingLiquidityRequest {
+        token: token.clone(),
+        amount: U128(1_000_000),
+        interest: U128(100_000),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+    });
+
+    let mut offers = UnorderedMap::new(StorageKey::CounterOffers);
+    offers.insert(
+        &alice(),
+        &CounterOffer {
+            proposer: alice(),
+            amount: U128(900_000),
+            timestamp: now,
+        },
+    );
+    vault.counter_offers = Some(offers);
+
+    vault.on_repay_loan(Ok(()));
+
+    assert!(vault.counter_offers.is_none(), "Counter offers should be None");
+    assert!(
+        vault.pending_liquidity_request.is_none(),
+        "Pending liquidity request should be cleared"
+    );
+
+    let inspector: UnorderedMap<AccountId, CounterOffer> =
+        UnorderedMap::new(StorageKey::CounterOffers);
+    assert_eq!(
+        inspector.len(),
+        0,
+        "Counter offer storage prefix should be empty after repayment"
+    );
 }
 
 #[test]

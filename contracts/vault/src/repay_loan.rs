@@ -84,6 +84,11 @@ impl Vault {
         // Loan was successfully repaid — clear loan state
         self.accepted_offer = None;
         self.liquidity_request = None;
+        self.pending_liquidity_request = None;
+
+        if let Some(mut counter_offers) = self.counter_offers.take() {
+            counter_offers.clear();
+        }
 
         // Log repay_loan_successful event
         log_event!(
