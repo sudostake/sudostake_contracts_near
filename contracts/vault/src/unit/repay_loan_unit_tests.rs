@@ -1,4 +1,4 @@
-use near_sdk::{testing_env, NearToken, PromiseError};
+use near_sdk::{json_types::U128, testing_env, NearToken, PromiseError};
 use test_utils::{alice, get_context, get_context_with_timestamp, owner};
 
 use crate::{
@@ -141,6 +141,33 @@ fn test_repay_loan_fails_if_liquidation_is_active() {
     });
 
     // Attempt repay_loan — should panic
+    vault.repay_loan();
+}
+
+#[test]
+#[should_panic(expected = "Total amount due exceeds supported range")]
+fn test_repay_loan_fails_when_total_due_overflows() {
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.liquidity_request = Some(LiquidityRequest {
+        token: "usdc.testnet".parse().unwrap(),
+        amount: u128::MAX.into(),
+        interest: U128(1),
+        collateral: NearToken::from_near(5),
+        duration: 1,
+        created_at: 1234567890,
+    });
+    vault.accepted_offer = Some(AcceptedOffer {
+        lender: "lender.testnet".parse().unwrap(),
+        accepted_at: 1234567890,
+    });
+
     vault.repay_loan();
 }
 

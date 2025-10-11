@@ -19,7 +19,7 @@
 use crate::{
     contract::{Vault, VaultExt},
     log_event,
-    types::{ProcessingState, GAS_FOR_CALLBACK, NUM_EPOCHS_TO_UNLOCK},
+    types::{ProcessingState, GAS_FOR_CALLBACK, MAX_LOAN_DURATION, NUM_EPOCHS_TO_UNLOCK},
 };
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, Gas, NearToken,
@@ -356,14 +356,19 @@ impl Vault {
             let request = self.liquidity_request.as_ref().unwrap();
             let now = env::block_timestamp();
 
+            require!(
+                request.duration <= MAX_LOAN_DURATION,
+                "Loan duration exceeds supported range"
+            );
+
             let duration_ns = request
                 .duration
                 .checked_mul(1_000_000_000)
-                .expect("Loan duration exceeds supported range");
+                .unwrap_or_else(|| env::panic_str("Loan duration conversion overflow"));
             let expiration = offer
                 .accepted_at
                 .checked_add(duration_ns)
-                .expect("Loan expiration exceeds timestamp range");
+                .unwrap_or_else(|| env::panic_str("Loan expiration exceeds timestamp range"));
 
             // Ensure option has expired
             require!(

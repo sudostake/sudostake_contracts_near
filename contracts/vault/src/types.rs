@@ -40,6 +40,9 @@ pub const MAX_COUNTER_OFFERS: u64 = 7;
 pub const MAX_ACTIVE_VALIDATORS: u64 = 2;
 /// Time in nanoseconds before a processing lock becomes stale.
 pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000; // 30 minutes
+/// Maximum supported loan duration in seconds (≈208 days).
+/// This keeps `duration * 1e9` within `u64::MAX` for timestamp math.
+pub const MAX_LOAN_DURATION: u64 = 18_000_000;
 
 // === Enums ===
 

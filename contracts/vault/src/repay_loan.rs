@@ -43,7 +43,12 @@ impl Vault {
         );
 
         // Calculate total amount due: principal + interest
-        let total_due = U128(request.amount.0 + request.interest.0);
+        let total_due = request
+            .amount
+            .0
+            .checked_add(request.interest.0)
+            .unwrap_or_else(|| env::panic_str("Total amount due exceeds supported range"));
+        let total_due = U128(total_due);
         let lender = offer.lender.clone();
         let token = request.token.clone();
 
