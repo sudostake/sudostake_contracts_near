@@ -2,13 +2,10 @@
 
 use crate::{
     contract::{Vault, VaultExt},
-    ext::ext_self,
     log_event,
-    types::{GAS_FOR_CALLBACK, GAS_FOR_FT_TRANSFER},
 };
 use near_sdk::{
-    assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, NearToken, Promise,
-    PromiseOrValue,
+    assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, PromiseOrValue,
 };
 
 #[near_bindgen]
@@ -52,48 +49,21 @@ impl Vault {
 
         // Retrieve and remove the specific counter offer for the given proposer_id.
         let offer = offers_map
-            .remove(&proposer_id)
+            .get(&proposer_id)
             .expect("Counter offer from proposer not found");
 
         let token = liquidity_request.token.clone();
 
         // Ensure the given amount matches the stored counter offer amount.
-        if offer.amount != amount {
-            if offers_map.is_empty() {
-                offers_map.clear();
-                self.counter_offers = None;
-            } else {
-                self.counter_offers = Some(offers_map);
-            }
+        require!(
+            offer.amount == amount,
+            "Provided amount does not match the counter offer"
+        );
 
-            let proposer = offer.proposer.clone();
-            let amount = offer.amount;
-            let transfer_args = near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({
-                "receiver_id": proposer.clone(),
-                "amount": amount,
-                "memo": Option::<String>::None
-            }))
-            .expect("Failed to serialize ft_transfer arguments");
-
-            let refund_promise = Promise::new(token.clone())
-                .function_call(
-                    "ft_transfer".to_string(),
-                    transfer_args,
-                    NearToken::from_yoctonear(1),
-                    GAS_FOR_FT_TRANSFER,
-                )
-                .then(ext_self::ext(env::current_account_id()).on_refund_complete(
-                    proposer.clone(),
-                    amount,
-                    token.clone(),
-                ));
-            let panic_promise = ext_self::ext(env::current_account_id())
-                .with_static_gas(GAS_FOR_CALLBACK)
-                .on_accept_counter_offer_mismatch_fail();
-
-            drop(refund_promise);
-            return PromiseOrValue::Promise(panic_promise.as_return());
-        }
+        // Remove the accepted offer so we can refund the rest.
+        offers_map
+            .remove(&proposer_id)
+            .expect("Counter offer from proposer not found");
 
         // Record acceptance
         self.accepted_offer = Some(crate::types::AcceptedOffer {
@@ -122,10 +92,5 @@ impl Vault {
         );
 
         PromiseOrValue::Value(())
-    }
-
-    #[private]
-    pub fn on_accept_counter_offer_mismatch_fail(&mut self) {
-        env::panic_str("Provided amount does not match the counter offer");
     }
 }
