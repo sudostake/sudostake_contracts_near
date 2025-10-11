@@ -1,9 +1,9 @@
-use near_sdk::{json_types::U128, testing_env, AccountId, NearToken};
+use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{get_context, owner};
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest},
+    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, StorageKey},
     unit::test_utils::alice,
 };
 
@@ -45,12 +45,14 @@ fn test_cancel_counter_offer_succeeds() {
 
     // Simulate a new offer from alice
     let proposer: AccountId = alice();
-    let _ = vault.try_add_counter_offer(
-        proposer.clone(),
-        U128(800_000),
-        msg,
-        "usdc.test.near".parse().unwrap(),
-    );
+    vault
+        .try_add_counter_offer(
+            proposer.clone(),
+            U128(800_000),
+            msg,
+            "usdc.test.near".parse().unwrap(),
+        )
+        .expect("counter offer should be recorded");
 
     // Call cancel_counter_offer as alice
     vault.cancel_counter_offer();
@@ -59,6 +61,52 @@ fn test_cancel_counter_offer_succeeds() {
     assert!(
         vault.counter_offers.is_none(),
         "Counter offers map should be cleared after cancellation"
+    );
+}
+
+#[test]
+fn test_cancel_counter_offer_clears_underlying_storage_when_last_offer() {
+    // Set up test context as alice
+    let ctx = get_context(
+        alice(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(ctx);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    vault.liquidity_request = Some(LiquidityRequest {
+        token: token.clone(),
+        amount: U128(1_000_000),
+        interest: U128(100_000),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+        created_at: 0,
+    });
+
+    let msg = CounterOfferMessage {
+        action: "NewCounterOffer".to_string(),
+        token: token.clone(),
+        amount: U128(1_000_000),
+        interest: U128(100_000),
+        collateral: NearToken::from_near(5),
+        duration: 86400,
+    };
+
+    vault
+        .try_add_counter_offer(alice(), U128(800_000), msg, token)
+        .expect("offer creation should succeed");
+
+    vault.cancel_counter_offer();
+
+    let inspector: UnorderedMap<AccountId, crate::types::CounterOffer> =
+        UnorderedMap::new(StorageKey::CounterOffers);
+    assert_eq!(
+        inspector.len(),
+        0,
+        "Counter offer storage prefix should be empty after final cancel"
     );
 }
 
