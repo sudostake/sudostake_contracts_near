@@ -94,6 +94,51 @@ fn test_try_accept_liquidity_request_clears_counter_offers() {
 }
 
 #[test]
+fn test_try_accept_liquidity_request_clears_underlying_storage() {
+    let ctx = get_context(owner(), NearToken::from_near(10), None);
+    testing_env!(ctx);
+
+    let token: AccountId = "usdc.token.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+
+    let mut contract = Vault::new(owner(), 0, 1);
+    contract.liquidity_request = Some(request.clone());
+
+    let mut map = UnorderedMap::new(StorageKey::CounterOffers);
+    map.insert(
+        &alice(),
+        &CounterOffer {
+            proposer: alice(),
+            amount: U128(900_000),
+            timestamp: 42,
+        },
+    );
+    contract.counter_offers = Some(map);
+
+    let msg = AcceptRequestMessage {
+        action: "AcceptLiquidityRequest".into(),
+        token: token.clone(),
+        amount: request.amount,
+        interest: request.interest,
+        collateral: request.collateral,
+        duration: request.duration,
+    };
+
+    let lender = bob();
+    let result = contract.try_accept_liquidity_request(lender, request.amount, msg, token);
+
+    assert!(result.is_ok(), "Expected success, got: {:?}", result);
+
+    let inspector: UnorderedMap<AccountId, CounterOffer> =
+        UnorderedMap::new(StorageKey::CounterOffers);
+    assert_eq!(
+        inspector.len(),
+        0,
+        "Counter offer storage prefix should be cleared"
+    );
+}
+
+#[test]
 fn test_try_accept_liquidity_request_fails_if_no_request() {
     // Setup context
     let ctx = get_context(owner(), NearToken::from_near(10), None);
