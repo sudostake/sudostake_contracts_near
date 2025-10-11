@@ -6,8 +6,8 @@ mod test_utils;
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
 use test_utils::{
-    create_test_validator, initialize_test_vault, request_and_accept_liquidity, setup_contracts,
-    setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
+    create_test_validator, initialize_test_vault, setup_contracts, setup_sandbox_and_accounts,
+    UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
 
 use std::sync::OnceLock;
@@ -342,7 +342,7 @@ async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()>
     // Fast-forward to simulate validator update
     worker.fast_forward(1).await?;
 
-    // Request and accept liquidity request with zero duration, so it expires immediately
+    // Request and accept liquidity request with a very short duration so it expires quickly
     root
         .call(vault.id(), "request_liquidity")
         .args_json(json!({
@@ -350,7 +350,7 @@ async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()>
             "amount": U128(1_000_000),
             "interest": U128(100_000),
             "collateral": NearToken::from_near(5),
-            "duration": 0
+            "duration": 1
         }))
         .deposit(NearToken::from_yoctonear(1))
         .gas(VAULT_CALL_GAS)
@@ -378,6 +378,18 @@ async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()>
         .transact()
         .await?
         .into_result()?;
+
+    // Ensure the loan has passed its expiration before processing claims by backdating it.
+    vault
+        .call("set_accepted_offer_timestamp")
+        .args_json(json!({ "timestamp": 0 }))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Small buffer to guarantee callbacks settle before liquidation kicks in.
+    worker.fast_forward(5).await?;
 
     // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
     lender
