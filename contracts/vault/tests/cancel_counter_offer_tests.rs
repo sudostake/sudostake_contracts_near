@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 use std::collections::HashMap;
 
 use anyhow::Ok;

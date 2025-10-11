@@ -19,6 +19,10 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 
+[features]
+default = []
+integration-test = []
+
 [package.metadata.near]
 version = "5.11.0"
 

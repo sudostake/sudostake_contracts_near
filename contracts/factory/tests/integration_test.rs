@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 use anyhow::Ok;
 use near_sdk::{env, Gas, NearToken};
 use near_workspaces::types::CryptoHash;

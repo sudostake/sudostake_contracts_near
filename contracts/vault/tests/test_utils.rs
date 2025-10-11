@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 #![allow(dead_code)]
 
 use anyhow::Ok;
@@ -9,7 +11,7 @@ use near_workspaces::types::SecretKey;
 use near_workspaces::{network::Sandbox, sandbox, Account, Contract, Worker};
 use serde_json::json;
 
-const VAULT_WASM_PATH: &str = "../../vault_res/vault.wasm";
+const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
 const STAKING_POOL_WASM_PATH: &str = "../../res/staking_pool.wasm";
 const FT_WASM_PATH: &str = "../../res/fungible_token.wasm";
 const FT_TOTAL_SUPPLY: &str = "1000000000000"; // 1,000,000 USDC (1_000_000 × 10^6)

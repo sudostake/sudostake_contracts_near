@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
-use crate::{contract::Vault, log_event};
+use crate::{
+    contract::{Vault, VaultExt},
+    log_event,
+};
+
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, PromiseOrValue,
 };
@@ -42,7 +46,6 @@ impl Vault {
 
         let offer = offers
             .get(&proposer_id)
-            .cloned()
             .expect("Counter offer from proposer not found");
 
         require!(

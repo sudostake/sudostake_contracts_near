@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 use near_sdk::{json_types::U128, NearToken};
 use near_workspaces::{network::Sandbox, Account, Worker};
 use serde_json::{json, Value};

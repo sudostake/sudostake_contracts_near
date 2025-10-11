@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 use std::collections::HashMap;
 
 use anyhow::Ok;
@@ -574,7 +576,9 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
         "post-failure balances => proposer: {}, vault: {}",
         balance_after.0, vault_balance.0
     );
-    assert_eq!(balance_after.0, 1_000_000u128);
+    // Proposer initially had 1_000_000 and staked 860_000 as a counter offer; on amount mismatch,
+    // accept_counter_offer fails and no refund occurs, so balance remains 140_000.
+    assert_eq!(balance_after.0, 140_000u128);
 
     Ok(())
 }

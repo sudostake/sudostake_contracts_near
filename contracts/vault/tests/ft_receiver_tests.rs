@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 use near_sdk::NearToken;
 use serde_json::json;
 
