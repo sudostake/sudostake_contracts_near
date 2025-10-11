@@ -29,6 +29,7 @@ impl Vault {
         // Update owner state
         let old_owner = self.owner.clone();
         self.owner = new_owner.clone();
+        self.is_listed_for_takeover = false;
 
         // Emit log
         log_event!(

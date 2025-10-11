@@ -41,6 +41,28 @@ fn test_transfer_ownership_success() {
 }
 
 #[test]
+fn test_transfer_ownership_clears_takeover_listing() {
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.is_listed_for_takeover = true;
+
+    let new_owner = alice();
+    vault.transfer_ownership(new_owner.clone());
+
+    assert_eq!(vault.owner, new_owner, "Owner should be updated");
+    assert!(
+        !vault.is_listed_for_takeover,
+        "Transfer should clear takeover listing"
+    );
+}
+
+#[test]
 #[should_panic(expected = "Only the vault owner can transfer ownership")]
 fn test_transfer_ownership_rejects_non_owner() {
     // Set up context where alice (not the owner) is calling with 1 yoctoNEAR
