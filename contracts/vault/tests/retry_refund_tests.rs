@@ -266,10 +266,10 @@ async fn test_retry_refund_removes_expired_entry() -> anyhow::Result<()> {
     // Get logs
     let logs = retry_result.logs().join("\n");
 
-    // Assert retry_refund_failed was logged
+    // Assert expired entry was detected and removed without retrying
     assert!(
-        logs.contains(r#""event":"retry_refund_failed""#),
-        "Expected retry_refund_failed log. Got:\n{logs}"
+        logs.contains(r#""event":"retry_refund_expired""#),
+        "Expected retry_refund_expired log. Got:\n{logs}"
     );
 
     // Assert refund_list is now empty
