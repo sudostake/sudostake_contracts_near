@@ -12,7 +12,7 @@ mod process_claims_unit_tests;
 mod repay_loan_unit_tests;
 mod request_liquidity_unit_tests;
 mod retry_refunds_unit_tests;
-mod test_utils;
+pub mod test_utils;
 mod transfer_ownership;
 mod try_accept_liquidity_request_tests;
 mod try_add_counter_offer_unit_tests;

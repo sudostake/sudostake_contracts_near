@@ -15,8 +15,10 @@ pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(120);
 /// Gas allocated for unstaking NEAR from a validator.
 pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(60);
 
+/// Number of yoctoNEAR in one NEAR.
+pub const YOCTO_PER_NEAR: u128 = 10u128.pow(24);
 /// Amount of NEAR reserved in the vault to prevent deletion from storage exhaustion.
-pub const STORAGE_BUFFER: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
+pub const STORAGE_BUFFER: u128 = YOCTO_PER_NEAR / 100; // 0.01 NEAR
 /// Number of epochs required before unstaked NEAR becomes withdrawable.
 pub const NUM_EPOCHS_TO_UNLOCK: EpochHeight = 4;
 /// Epochs after which failed refunds expire.

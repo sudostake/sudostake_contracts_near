@@ -129,6 +129,7 @@ fn test_try_accept_liquidity_request_clears_underlying_storage() {
 
     assert!(result.is_ok(), "Expected success, got: {:?}", result);
 
+    // Recreate the map with the same storage prefix to verify on-chain cleanup
     let inspector: UnorderedMap<AccountId, CounterOffer> =
         UnorderedMap::new(StorageKey::CounterOffers);
     assert_eq!(

@@ -7,7 +7,9 @@ mod tests {
         types::{AcceptedOffer, CounterOffer, Liquidation, RefundEntry, StorageKey, UnstakeEntry},
     };
 
-    use super::super::test_utils::{alice, bob, get_context, insert_refund_entry, owner};
+    use super::test_utils::{
+        alice, bob, create_valid_liquidity_request, get_context, insert_refund_entry, owner,
+    };
 
     use near_sdk::collections::{UnorderedMap, UnorderedSet};
 
@@ -18,9 +20,8 @@ mod tests {
 
         let mut vault = Vault::new(owner(), 1, 42);
 
-        vault.liquidity_request = Some(super::super::test_utils::create_valid_liquidity_request(
-            "usdc.test.near".parse().unwrap(),
-        ));
+        vault.liquidity_request =
+            Some(create_valid_liquidity_request("usdc.test.near".parse().unwrap()));
         vault.accepted_offer = Some(AcceptedOffer {
             lender: alice(),
             accepted_at: 777,
