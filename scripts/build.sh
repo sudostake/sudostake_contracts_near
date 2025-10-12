@@ -25,6 +25,14 @@ EOF
   exit 1
 fi
 
+if ! docker info >/dev/null 2>&1; then
+  cat <<'EOF' >&2
+❌ Docker CLI is installed but cannot reach the daemon.
+   Ensure Docker Desktop (or your Docker service) is running and rerun this script.
+EOF
+  exit 1
+fi
+
 OUT_DIR="res"
 CONTRACTS=("vault" "factory")
 
