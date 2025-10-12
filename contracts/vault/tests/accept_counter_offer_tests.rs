@@ -554,8 +554,6 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
         .transact()
         .await?;
 
-    println!("accept_counter_offer outcome: {:?}", outcome.failures());
-    println!("receipt outcomes: {:#?}", outcome.receipt_outcomes());
 
     let failure_text = format!("{:?}", outcome.failures());
     assert!(

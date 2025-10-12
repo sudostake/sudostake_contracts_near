@@ -80,7 +80,9 @@ download_near_sandbox() {
   archive="${tmp_dir}/near-sandbox.tar.gz"
   trap 'rm -rf "${tmp_dir}"' EXIT
 
-  local url="https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/${platform}/${SANDBOX_VERSION}/near-sandbox.tar.gz"
+  # Sandbox binaries are published to the NEAR build bucket; override SANDBOX_URL_BASE if the location changes.
+  local SANDBOX_URL_BASE="${SANDBOX_URL_BASE:-https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore}";
+  local url="${SANDBOX_URL_BASE}/${platform}/${SANDBOX_VERSION}/near-sandbox.tar.gz"
   log_info "Downloading near-sandbox ${SANDBOX_VERSION} for ${platform}..."
   if ! curl -fLsS "${url}" -o "${archive}"; then
     log_error "Failed to download near-sandbox from ${url}"
