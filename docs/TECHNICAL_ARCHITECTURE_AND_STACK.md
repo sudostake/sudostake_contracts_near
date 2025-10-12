@@ -156,7 +156,7 @@ Security & Safety Considerations
 
 Build & Test
 - Build all contracts: ./scripts/build.sh (requires wasm-opt)
-  - Copies pinned third-party Wasm into res/, produces res/vault.wasm + res/factory.wasm (wasm-opt -Oz), and records matching `.sha256` hash files for reproducibility checks
+  - Copies pinned third-party Wasm into res/, produces res/vault.wasm + res/factory.wasm (wasm-opt -Oz), copies their ABI artifacts (`*_abi.json`, `*_abi.zst`), and records matching `.sha256` hash files for reproducibility checks
 - Run unit/integration tests: ./scripts/factory_test.sh && ./scripts/vault_test.sh
   - scripts/vault_test.sh also builds a test-only wasm (feature = integration-test) at vault_res/vault.wasm for near-workspaces sandbox tests.
 

@@ -40,6 +40,15 @@ for contract in "${CONTRACTS[@]}"; do
     --out-dir "${OUT_DIR}"
 
   artifact="${OUT_DIR}/${contract}.wasm"
+  abi_json_src="target/near/${contract}/${contract}_abi.json"
+  abi_zst_src="target/near/${contract}/${contract}_abi.zst"
+
+  for abi_src in "${abi_json_src}" "${abi_zst_src}"; do
+    if [[ -f "${abi_src}" ]]; then
+      cp "${abi_src}" "${OUT_DIR}/"
+    fi
+  done
+
   if [[ -f "${artifact}" ]]; then
     if command -v sha256sum >/dev/null 2>&1; then
       hash_line="$(sha256sum "${artifact}")"

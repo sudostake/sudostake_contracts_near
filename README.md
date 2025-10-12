@@ -57,7 +57,7 @@ chmod +x scripts/build.sh   # first run only
 ./scripts/build.sh
 ```
 
-The helper populates `res/` (copying pinned third-party Wasm from `third_party/wasm`) and then drives `cargo near build reproducible-wasm` for the vault and factory contracts inside the dockerized toolchain described in each crate’s `Cargo.toml`. For each artifact it also writes `res/<name>.wasm.sha256` so you can compare hashes across build sessions. Reproducible builds require a clean git tree; stash or commit any outstanding edits first, or set `CARGO_NEAR_ALLOW_DIRTY=1` when you deliberately want to build from a dirty workspace.
+The helper populates `res/` (copying pinned third-party Wasm from `third_party/wasm`) and then drives `cargo near build reproducible-wasm` for the vault and factory contracts inside the dockerized toolchain described in each crate’s `Cargo.toml`. For each artifact it copies the generated ABI files (`*_abi.json`, `*_abi.zst`) and writes `res/<name>.wasm.sha256` so you can compare hashes across build sessions. Reproducible builds require a clean git tree; stash or commit any outstanding edits first, or set `CARGO_NEAR_ALLOW_DIRTY=1` when you deliberately want to build from a dirty workspace.
 
 Because `res/` is gitignored, rebuilds no longer churn the repository. The NEP‑330 metadata recorded inside each Wasm still points back to the exact git revision that produced it, so capture and publish the artifacts when you cut a release.
 
