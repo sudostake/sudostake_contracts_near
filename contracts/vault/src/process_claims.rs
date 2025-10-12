@@ -301,7 +301,7 @@ impl Vault {
                 })
             );
 
-            self.add_refund_entry(None, lender.clone(), U128(amount), None);
+            self.add_refund_entry(None, lender.clone(), U128(amount), None, None);
 
             if finalize {
                 let total_debt = self.total_debt();
