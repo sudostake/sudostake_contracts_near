@@ -52,6 +52,7 @@ impl Vault {
     /// Initializes a new vault instance with the specified owner, index, and version.
     /// This method is callable only once per vault contract (via `#[init]`).
     #[init]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub fn new(owner: AccountId, index: u64, version: u64) -> Self {
         assert!(!env::state_exists(), "Contract already initialized");
 
