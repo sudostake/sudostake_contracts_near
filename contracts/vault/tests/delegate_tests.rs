@@ -293,7 +293,7 @@ async fn test_delegate_fails_when_max_validators_reached() -> anyhow::Result<()>
     let root = worker.root_account()?;
 
     // Create distinct validators to fill the active set
-    let mut validators = Vec::with_capacity(MAX_ACTIVE_VALIDATORS + 1);
+    let mut validators = Vec::with_capacity((MAX_ACTIVE_VALIDATORS + 1) as usize);
     for i in 0..=MAX_ACTIVE_VALIDATORS {
         let name = format!("validator-limit-{}", i);
         validators.push(create_named_test_validator(&worker, &root, &name).await?);
@@ -332,6 +332,148 @@ async fn test_delegate_fails_when_max_validators_reached() -> anyhow::Result<()>
     assert!(
         failure_text.contains("You can only stake with"),
         "Expected validator cap failure, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_delegate_succeeds_for_existing_validator_when_set_full() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Ensure vault has ample balance to delegate multiple times.
+    root.transfer_near(vault.id(), NearToken::from_near(20))
+        .await?
+        .into_result()?;
+
+    // Create validators and fill the active set.
+    let mut validators = Vec::with_capacity(MAX_ACTIVE_VALIDATORS as usize);
+    for i in 0..MAX_ACTIVE_VALIDATORS {
+        let name = format!("reuse-validator-{i}");
+        let validator = create_named_test_validator(&worker, &root, &name).await?;
+        validators.push(validator);
+    }
+
+    for validator in validators.iter() {
+        root.call(vault.id(), "delegate")
+            .args_json(json!({
+                "validator": validator.id(),
+                "amount": NearToken::from_near(1),
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+    }
+
+    // Delegating again to an existing validator should succeed even though the set is full.
+    let existing = validators[0].id().clone();
+    let outcome = root
+        .call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": existing,
+            "amount": NearToken::from_near(1),
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    assert!(
+        outcome
+            .logs()
+            .iter()
+            .any(|log| log.contains("\"event\":\"delegate_completed\"")),
+        "Expected delegate_completed log when reusing existing validator"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_delegate_logs_failure_when_validator_contract_missing() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+
+    // Create an account without deploying the staking pool contract.
+    let invalid_validator = worker.dev_create_account().await?;
+
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    let outcome = root
+        .call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": invalid_validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let logs = outcome.logs().join("\n");
+    assert!(
+        logs.contains("\"event\":\"delegate_failed\""),
+        "Expected delegate_failed log when staking pool contract is absent. Logs: {logs}"
+    );
+
+    // Confirm the validator was not added to the active set.
+    let validators: Vec<String> = vault.view("get_active_validators").await?.json()?;
+    assert!(
+        !validators.contains(&invalid_validator.id().to_string()),
+        "Validator without staking contract must not be recorded as active"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_delegate_uses_reported_available_balance_slice() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+    let validator = create_test_validator(&worker, &root).await?;
+
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Top up the vault so we have a predictable available balance.
+    root.transfer_near(vault.id(), NearToken::from_near(5))
+        .await?
+        .into_result()?;
+
+    let available: U128 = vault.view("view_available_balance").await?.json()?;
+    assert!(available.0 > 1, "Expected positive available balance");
+    let stake_amount = available.0 / 2;
+
+    let outcome = root
+        .call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_yoctonear(stake_amount)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    assert!(
+        outcome
+            .logs()
+            .iter()
+            .any(|log| log.contains("\"event\":\"delegate_completed\"")),
+        "Expected delegate_completed log when delegating exact available balance"
+    );
+
+    // Confirm available balance decreased after staking a portion of it.
+    let remaining: U128 = vault.view("view_available_balance").await?.json()?;
+    assert!(
+        remaining.0 < available.0,
+        "Available balance should decrease"
     );
 
     Ok(())

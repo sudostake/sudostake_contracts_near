@@ -1,18 +1,16 @@
-#![allow(dead_code)]
-
 use crate::log_event;
 use crate::types::{
     AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
     ProcessingState, RefundEntry, StorageKey, UnstakeEntry,
 };
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::UnorderedMap;
-use near_sdk::{collections::UnorderedSet, env, near_bindgen, AccountId, PanicOnDefault};
+use near_sdk::collections::{UnorderedMap, UnorderedSet};
+use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 /// Represents the complete on-chain state of a single SudoStake vault instance.
 /// A vault allows its owner to stake NEAR, request liquidity against it, and manage repayments or liquidation flows.
+#[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Vault {
     /// Account ID of the vault owner (the borrower/staker).
     pub owner: AccountId,
