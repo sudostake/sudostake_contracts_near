@@ -7,7 +7,7 @@ mod tests {
         types::{AcceptedOffer, CounterOffer, Liquidation, RefundEntry, StorageKey, UnstakeEntry},
     };
 
-    use super::test_utils::{
+    use crate::unit::test_utils::{
         alice, bob, create_valid_liquidity_request, get_context, insert_refund_entry, owner,
     };
 
