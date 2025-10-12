@@ -208,7 +208,7 @@ impl Vault {
 
         let now = env::block_timestamp();
         // Saturating subtract guards against potential timestamp rollback, which would
-        // otherwise underflow and panic when the block clock restarts from a lower value.
+        // otherwise underflow and panic when block timestamps decrease.
         let elapsed = now.saturating_sub(self.processing_since);
 
         if self.processing_state != ProcessingState::Idle && elapsed >= LOCK_TIMEOUT {

@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use anyhow::Ok;
 use near_sdk::{json_types::U128, AccountId, NearToken};
 use serde_json::json;
-use std::sync::OnceLock;
 
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
@@ -14,13 +13,12 @@ use test_utils::{
 
 #[path = "test_utils.rs"]
 mod test_utils;
-
-static TEST_MUTEX: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+#[path = "test_lock.rs"]
+mod test_lock;
 
 #[tokio::test]
 async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| tokio::sync::Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Setup sandbox
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -174,8 +172,7 @@ async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Resu
 
 #[tokio::test]
 async fn test_accept_counter_offer_requires_yocto() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| tokio::sync::Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
 
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -270,8 +267,7 @@ async fn test_accept_counter_offer_requires_yocto() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_accept_counter_offer_rejects_non_owner() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| tokio::sync::Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
 
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -369,8 +365,7 @@ async fn test_accept_counter_offer_rejects_non_owner() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_accept_counter_offer_rejects_missing_proposer() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| tokio::sync::Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
 
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -471,8 +466,7 @@ async fn test_accept_counter_offer_rejects_missing_proposer() -> anyhow::Result<
 
 #[tokio::test]
 async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| tokio::sync::Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
 
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;

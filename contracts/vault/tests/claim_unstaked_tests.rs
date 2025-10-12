@@ -2,6 +2,8 @@
 
 #[path = "test_utils.rs"]
 mod test_utils;
+#[path = "test_lock.rs"]
+mod test_lock;
 
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
@@ -10,17 +12,11 @@ use test_utils::{
     UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
 
-use std::sync::OnceLock;
-use tokio::sync::Mutex;
-
-static TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
-
 // TODO: Cover claim_unstaked lock contention once a delayed-withdraw staking pool mock exists.
 
 #[tokio::test]
 async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up the sandbox environment and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -101,8 +97,7 @@ async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_without_yocto() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -163,8 +158,7 @@ async fn test_claim_unstaked_fails_without_yocto() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_if_not_owner() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and accounts
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -227,8 +221,7 @@ async fn test_claim_unstaked_fails_if_not_owner() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_if_no_entry() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -260,8 +253,7 @@ async fn test_claim_unstaked_fails_if_no_entry() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_if_epoch_not_ready() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
     let validator = create_test_validator(&worker, &root).await?;
@@ -313,8 +305,7 @@ async fn test_claim_unstaked_fails_if_epoch_not_ready() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Setup sandbox and accounts
     let (worker, root, lender) = setup_sandbox_and_accounts().await?;
 

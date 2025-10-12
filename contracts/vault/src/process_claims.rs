@@ -63,6 +63,7 @@ impl Vault {
         if should_continue {
             self.next_liquidation_step()
         } else {
+            // No further async actions required; resolve with a zero-cost self call.
             Promise::new(env::current_account_id())
         }
     }

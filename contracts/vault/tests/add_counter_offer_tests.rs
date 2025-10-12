@@ -3,25 +3,22 @@
 use anyhow::Ok;
 use near_sdk::{json_types::U128, AccountId, NearToken};
 use serde_json::json;
-use std::sync::OnceLock;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
     register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
 };
-use tokio::sync::Mutex;
 
 #[path = "test_utils.rs"]
 mod test_utils;
+#[path = "test_lock.rs"]
+mod test_lock;
 
 // TODO: Cover try_add_counter_offer lock contention once we can simulate delayed callbacks in the
 // sandbox.
 
-static TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
-
 #[tokio::test]
 async fn test_counter_offer_is_accepted_and_saved() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and accounts
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -153,8 +150,7 @@ async fn test_counter_offer_is_accepted_and_saved() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_counter_offer_eviction_after_max_offer() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and accounts
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -330,8 +326,7 @@ async fn test_counter_offer_eviction_after_max_offer() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_counter_offer_fails_when_no_request_exists() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
     let token = initialize_test_token(&root).await?;
@@ -398,8 +393,7 @@ async fn test_counter_offer_fails_when_no_request_exists() -> anyhow::Result<()>
 
 #[tokio::test]
 async fn test_counter_offer_rejects_if_not_better_than_best() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
     let validator = create_test_validator(&worker, &root).await?;
@@ -530,8 +524,7 @@ async fn test_counter_offer_rejects_if_not_better_than_best() -> anyhow::Result<
 
 #[tokio::test]
 async fn test_counter_offer_rejects_duplicate_proposer() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
     let validator = create_test_validator(&worker, &root).await?;
@@ -649,8 +642,7 @@ async fn test_counter_offer_rejects_duplicate_proposer() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_counter_offer_rejects_on_message_mismatch() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
     let validator = create_test_validator(&worker, &root).await?;
@@ -734,8 +726,7 @@ async fn test_counter_offer_rejects_on_message_mismatch() -> anyhow::Result<()> 
 
 #[tokio::test]
 async fn test_counter_offer_rejects_after_request_accepted() -> anyhow::Result<()> {
-    let mutex = TEST_MUTEX.get_or_init(|| Mutex::new(()));
-    let _guard = mutex.lock().await;
+    let _guard = test_lock::acquire_test_mutex().await;
 
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
