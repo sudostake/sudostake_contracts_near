@@ -137,12 +137,12 @@ Factory tests follow the same pattern as the vault instructions above:
 3. Execute the factory suite:
    ```bash
    chmod +x scripts/factory_test.sh   # first run only
-   ./scripts/factory_test.sh   # Automatically refreshes res/ and runs cargo test -p factory
+   ./scripts/factory_test.sh   # Automatically refreshes res/ and runs cargo test -p factory --features integration-test
    ```
    The script sets `RUST_TEST_THREADS=1` by default to avoid port conflicts inside the NEAR sandbox.
 4. Target specific factory tests after the Wasm is rebuilt:
    ```bash
-   RUST_TEST_THREADS=1 cargo test -p factory --release mint_vault_success
+   RUST_TEST_THREADS=1 cargo test -p factory --release --features integration-test mint_vault_success
    ```
 
 ### Run both suites together

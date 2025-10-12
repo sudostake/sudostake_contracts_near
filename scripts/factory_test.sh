@@ -92,6 +92,6 @@ NATIVE_TARGET=$(rustc -vV | grep "host:" | awk '{print $2}')
 echo "🧪 Running factory integration tests on native target: $NATIVE_TARGET"
 RUST_TEST_THREADS="${RUST_TEST_THREADS:-1}" \
   RUSTFLAGS="-C panic=unwind" \
-  cargo test -p factory --release --target "$NATIVE_TARGET"
+  cargo test -p factory --release --features integration-test --target "$NATIVE_TARGET"
 
 echo "✅ Factory tests passed!"
