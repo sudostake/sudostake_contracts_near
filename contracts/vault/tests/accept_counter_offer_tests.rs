@@ -48,7 +48,6 @@ async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Resu
     // Deploy validator, token, and vault
     let validator = create_test_validator(&worker, &root).await?;
     let token = initialize_test_token(&root).await?;
-    println!("token id: {}", token.id());
     let vault = initialize_test_vault(&root).await?.contract;
 
     // Register vault and users with the token

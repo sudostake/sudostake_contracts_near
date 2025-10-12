@@ -12,6 +12,7 @@ use near_sdk::{assert_one_yocto, env, near_bindgen, require, AccountId, NearToke
 impl Vault {
     /// Stakes `amount` of NEAR to the given validator on behalf of the vault owner.
     #[payable]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub fn delegate(&mut self, validator: AccountId, amount: NearToken) -> Promise {
         assert_one_yocto();
 
@@ -66,6 +67,7 @@ impl Vault {
     }
 
     #[private]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub fn on_deposit_and_stake(
         &mut self,
         validator: AccountId,

@@ -127,7 +127,7 @@ async fn withdraw_ft_emits_event() -> anyhow::Result<()> {
     register_account_with_token(&root, &token, &vault.id()).await?;
     register_account_with_token(&root, &token, &alice.id()).await?;
 
-    // Transfer 100 USDC to the vault via direct `ft_transfer`
+    // Transfer 100 USDC to the vault; direct transfer avoids triggering ft_on_transfer
     let amount = 100_000_000; // 100 USDC (6 decimals)
     root.call(token.id(), "ft_transfer")
         .args_json(json!({
