@@ -278,6 +278,26 @@ pub async fn register_account_with_token(
     Ok(())
 }
 
+/// Performs a direct `ft_transfer` from `caller` to `receiver_id` without invoking `ft_on_transfer`.
+pub async fn transfer_tokens_direct(
+    caller: &Account,
+    token: &Contract,
+    receiver_id: &AccountId,
+    amount: u128,
+) -> anyhow::Result<ExecutionFinalResult> {
+    let result = caller
+        .call(token.id(), "ft_transfer")
+        .args_json(json!({
+            "receiver_id": receiver_id,
+            "amount": amount.to_string()
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?;
+
+    Ok(result)
+}
+
 pub async fn transfer_tokens_to_vault(
     root: &Account,
     token: &Contract,

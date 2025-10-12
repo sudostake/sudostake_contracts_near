@@ -557,10 +557,6 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
 
     let balance_after = get_usdc_balance(&token, proposer.id()).await?;
     let vault_balance = get_usdc_balance(&token, vault.id()).await?;
-    println!(
-        "post-failure balances => proposer: {}, vault: {}",
-        balance_after.0, vault_balance.0
-    );
     // Proposer initially had 1_000_000 and staked 860_000 as a counter offer; on amount mismatch,
     // accept_counter_offer fails and no refund occurs, so balance remains 140_000.
     assert_eq!(balance_after.0, 140_000u128);

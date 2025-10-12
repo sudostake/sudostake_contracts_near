@@ -33,4 +33,4 @@ pub const NANOS_PER_SECOND: u64 = 1_000_000_000;
 pub const LOCK_TIMEOUT: u64 = 30 * 60 * NANOS_PER_SECOND; // 30 minutes
 /// Maximum supported loan duration in seconds.
 /// Computed so that `duration * 1e9` stays within `u64::MAX` for timestamp math.
-pub const MAX_LOAN_DURATION: u64 = u64::MAX / 1_000_000_000 - 1;
+pub const MAX_LOAN_DURATION: u64 = u64::MAX / NANOS_PER_SECOND - 1;

@@ -4,7 +4,8 @@
 mod test_utils;
 
 use crate::test_utils::{
-    get_usdc_balance, initialize_test_token, register_account_with_token, transfer_tokens_to_vault,
+    get_usdc_balance, initialize_test_token, register_account_with_token, transfer_tokens_direct,
+    transfer_tokens_to_vault,
 };
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
@@ -129,13 +130,7 @@ async fn withdraw_ft_emits_event() -> anyhow::Result<()> {
 
     // Transfer 100 USDC to the vault; direct transfer avoids triggering ft_on_transfer
     let amount = 100_000_000; // 100 USDC (6 decimals)
-    root.call(token.id(), "ft_transfer")
-        .args_json(json!({
-            "receiver_id": vault.id(),
-            "amount": amount.to_string()
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .transact()
+    transfer_tokens_direct(&root, &token, vault.id(), amount)
         .await?
         .into_result()?;
 
