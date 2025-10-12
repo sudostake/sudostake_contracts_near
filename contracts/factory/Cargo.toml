@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 borsh = { workspace = true }
 borsh-derive = { workspace = true }
 near-sdk = { workspace = true }
+schemars = { workspace = true }
 
 [dev-dependencies]
 near-workspaces = { workspace = true }
@@ -18,17 +19,19 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 
+[features]
+default = []
+integration-test = []
+
 [package.metadata.near]
 version = "5.11.0"
 
 [package.metadata.near.reproducible_build]
-image = "sourcescan/cargo-near:0.13.4-rust-1.85.1"
-image_digest = "sha256:1f8b71742802f38990d442e8678aa4c0cd1c8317dd3ff493f41c079675d4f35b"
+image = "sourcescan/cargo-near:0.16.2-rust-1.86.0"
+image_digest = "sha256:74c24d4d912f893198b8b13e01d43e0f78f3b00b3df45bf555a707eb4918a54e"
 passed_env = []
 container_build_command = [
-    "cargo",
-    "near",
-    "build",
-    "non-reproducible-wasm",
-    "--locked",
+    "bash",
+    "-lc",
+    "cd /home/near/code && set -euxo pipefail && cargo near build non-reproducible-wasm --locked --manifest-path contracts/vault/Cargo.toml && mkdir -p res && cp target/near/vault/vault.wasm res/vault.wasm && cargo near build non-reproducible-wasm --locked --manifest-path contracts/factory/Cargo.toml",
 ]

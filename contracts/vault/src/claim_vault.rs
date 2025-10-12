@@ -32,6 +32,9 @@ impl Vault {
 
         let old_owner = self.owner.clone();
 
+        // Prevent concurrent claims while the transfer is in flight
+        self.is_listed_for_takeover = false;
+
         // Proceed with transfer, and finalize in callback
         Promise::new(old_owner.clone()).transfer(deposit).then(
             Self::ext(env::current_account_id())
@@ -60,6 +63,25 @@ impl Vault {
                 })
             );
 
+            // Restore listing so another claimant can try again
+            self.is_listed_for_takeover = true;
+            self.add_refund_entry(None, new_owner, U128(amount), None);
+            return;
+        }
+
+        // Abort if vault ownership changed while the transfer was in flight
+        if self.owner != old_owner {
+            log_event!(
+                "claim_vault_stale",
+                near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
+                    "expected_owner": old_owner,
+                    "observed_owner": self.owner,
+                    "new_owner": new_owner
+                })
+            );
+
+            self.is_listed_for_takeover = true;
             self.add_refund_entry(None, new_owner, U128(amount), None);
             return;
         }

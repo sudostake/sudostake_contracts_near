@@ -1,8 +1,10 @@
+#![cfg(feature = "integration-test")]
+
 use anyhow::Ok;
 use near_sdk::{env, Gas, NearToken};
 use near_workspaces::types::CryptoHash;
 use near_workspaces::{self as workspaces, network::Sandbox, Account, Contract, Worker};
-use serde_json::json;
+use serde_json::{json, Value};
 
 const FACTORY_WASM_PATH: &str = "../../res/factory.wasm";
 const VAULT_WASM_PATH: &str = "../../res/vault.wasm";
@@ -338,6 +340,101 @@ async fn test_withdraw_balance_success_full_available_balance() -> anyhow::Resul
     assert!(
         owner_balance_after > owner_balance_before,
         "Owner balance should increase after withdrawal"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_transfer_ownership_updates_owner_in_state() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let owner = worker.dev_create_account().await?;
+    let new_owner = worker.dev_create_account().await?;
+    let factory_account = worker.dev_create_account().await?;
+
+    let factory_contract = factory_account
+        .deploy(&std::fs::read(FACTORY_WASM_PATH)?)
+        .await?
+        .into_result()?;
+
+    let minting_fee = calculate_minting_fee().await?;
+
+    owner
+        .call(factory_contract.id(), "new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": minting_fee
+        }))
+        .gas(FACTORY_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    owner
+        .call(factory_contract.id(), "transfer_ownership")
+        .args_json(serde_json::json!({
+            "new_owner": new_owner.id(),
+        }))
+        .gas(FACTORY_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let state: serde_json::Value = factory_contract
+        .view("get_contract_state")
+        .args_json(serde_json::json!({}))
+        .await?
+        .json()?;
+
+    assert_eq!(state["owner"], Value::String(new_owner.id().to_string()));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_get_contract_state_reflects_latest_values() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let owner = worker.dev_create_account().await?;
+    let user = worker.dev_create_account().await?;
+    let factory_account = worker.dev_create_account().await?;
+
+    let factory_contract = factory_account
+        .deploy(&std::fs::read(FACTORY_WASM_PATH)?)
+        .await?
+        .into_result()?;
+
+    let minting_fee = calculate_minting_fee().await?;
+
+    owner
+        .call(factory_contract.id(), "new")
+        .args_json(serde_json::json!({
+            "owner": owner.id(),
+            "vault_minting_fee": minting_fee.clone()
+        }))
+        .gas(FACTORY_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    user.call(factory_contract.id(), "mint_vault")
+        .deposit(minting_fee.clone())
+        .gas(FACTORY_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let state: serde_json::Value = factory_contract
+        .view("get_contract_state")
+        .args_json(serde_json::json!({}))
+        .await?
+        .json()?;
+
+    assert_eq!(state["owner"], Value::String(owner.id().to_string()));
+    assert_eq!(state["vault_counter"].as_u64(), Some(1));
+    let expected_fee = minting_fee.as_yoctonear().to_string();
+    assert_eq!(
+        state["vault_minting_fee"].as_str(),
+        Some(expected_fee.as_str())
     );
 
     Ok(())

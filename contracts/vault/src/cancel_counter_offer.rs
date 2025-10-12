@@ -26,10 +26,7 @@ impl Vault {
         );
 
         // Counter offers must exist
-        let offers_map = self
-            .counter_offers
-            .as_mut()
-            .expect("No counter offers found");
+        let mut offers_map = self.counter_offers.take().expect("No counter offers found");
 
         // Caller must have an active counter offer
         let caller = env::predecessor_account_id();
@@ -39,7 +36,11 @@ impl Vault {
 
         // Reset counter_offers to None when empty
         if offers_map.is_empty() {
+            // Explicitly clear storage of counter offers when map becomes empty.
+            offers_map.clear();
             self.counter_offers = None;
+        } else {
+            self.counter_offers = Some(offers_map);
         }
 
         // Log counter_offer_cancelled event
@@ -61,6 +62,6 @@ impl Vault {
         );
 
         // Attempt refund
-        self.refund_counter_offer(liquidity_request.token.clone(), offer);
+        let _ = self.refund_counter_offer(liquidity_request.token.clone(), offer);
     }
 }

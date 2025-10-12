@@ -1,15 +1,22 @@
+#![cfg(feature = "integration-test")]
+
 #[path = "test_utils.rs"]
 mod test_utils;
+#[path = "test_lock.rs"]
+mod test_lock;
 
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
 use test_utils::{
-    create_test_validator, initialize_test_vault, request_and_accept_liquidity, setup_contracts,
-    setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
+    create_test_validator, initialize_test_vault, setup_contracts, setup_sandbox_and_accounts,
+    UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
+
+// TODO: Cover claim_unstaked lock contention once a delayed-withdraw staking pool mock exists.
 
 #[tokio::test]
 async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up the sandbox environment and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -90,6 +97,7 @@ async fn test_claim_unstaked_happy_path() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_without_yocto() -> anyhow::Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -150,6 +158,7 @@ async fn test_claim_unstaked_fails_without_yocto() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_if_not_owner() -> anyhow::Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and accounts
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -212,6 +221,7 @@ async fn test_claim_unstaked_fails_if_not_owner() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_claim_unstaked_fails_if_no_entry() -> anyhow::Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
     // Set up sandbox and root account
     let worker = near_workspaces::sandbox().await?;
     let root = worker.root_account()?;
@@ -242,7 +252,60 @@ async fn test_claim_unstaked_fails_if_no_entry() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn test_claim_unstaked_fails_if_epoch_not_ready() -> anyhow::Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+    let validator = create_test_validator(&worker, &root).await?;
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    worker.fast_forward(1).await?;
+
+    root.call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Attempt to claim immediately without waiting the unlock epochs
+    let result = root
+        .call(vault.id(), "claim_unstaked")
+        .args_json(json!({
+            "validator": validator.id()
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("Unstaked funds not yet claimable"),
+        "Expected epoch guard failure, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
     // Setup sandbox and accounts
     let (worker, root, lender) = setup_sandbox_and_accounts().await?;
 
@@ -270,16 +333,53 @@ async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()>
     // Fast-forward to simulate validator update
     worker.fast_forward(1).await?;
 
-    // Request and accept liquidity request
-    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
-
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
+    // Request and accept liquidity request with a very short duration so it expires quickly
+    root.call(vault.id(), "request_liquidity")
+        .args_json(json!({
+            "token": token.id(),
+            "amount": U128(1_000_000),
+            "interest": U128(100_000),
+            "collateral": NearToken::from_near(5),
+            "duration": 1
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
         .transact()
         .await?
         .into_result()?;
+
+    // Fetch vault state to construct correct message
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let request = state
+        .liquidity_request
+        .expect("Expected liquidity_request to be present");
+
+    // Lender accepts the request
+    let msg = test_utils::make_accept_request_msg(&request);
+    lender
+        .call(token.id(), "ft_transfer_call")
+        .args_json(json!({
+            "receiver_id": vault.id(),
+            "amount": request.amount,
+            "msg": msg
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Ensure the loan has passed its expiration before processing claims by backdating it.
+    vault
+        .call("set_accepted_offer_timestamp")
+        .args_json(json!({ "timestamp": 0 }))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    // Small buffer to guarantee callbacks settle before liquidation kicks in.
+    worker.fast_forward(5).await?;
 
     // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
     lender

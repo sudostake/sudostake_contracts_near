@@ -68,11 +68,27 @@ impl Vault {
             "No refundable entries found for caller"
         );
 
+        let current_epoch = env::epoch_height();
+
         // Move matching entries into a temporary `to_retry` vector so the immutable
         // borrow on `refund_list` ends before we call `schedule_refund`, which may
         // mutate contract state (including `refund_list`).
         for (id, entry) in to_retry.drain(..) {
             self.refund_list.remove(&id);
+
+            // Skip expired entries instead of scheduling another transfer.
+            if current_epoch >= entry.added_at_epoch.saturating_add(REFUND_EXPIRY_EPOCHS) {
+                log_event!(
+                    "retry_refund_expired",
+                    near_sdk::serde_json::json!({
+                        "vault": env::current_account_id(),
+                        "refund_id": id,
+                        "proposer": entry.proposer
+                    })
+                );
+                continue;
+            }
+
             self.schedule_refund(id, entry);
         }
     }

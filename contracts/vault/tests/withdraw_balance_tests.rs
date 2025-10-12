@@ -1,8 +1,11 @@
+#![cfg(feature = "integration-test")]
+
 #[path = "test_utils.rs"]
 mod test_utils;
 
 use crate::test_utils::{
-    initialize_test_token, register_account_with_token, transfer_tokens_to_vault,
+    get_usdc_balance, initialize_test_token, register_account_with_token, transfer_tokens_direct,
+    transfer_tokens_to_vault,
 };
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
@@ -125,10 +128,11 @@ async fn withdraw_ft_emits_event() -> anyhow::Result<()> {
     register_account_with_token(&root, &token, &vault.id()).await?;
     register_account_with_token(&root, &token, &alice.id()).await?;
 
-    // Transfer 100 USDC to the vault
-    let amount = 100_000_000;
-    let msg = "init";
-    let _ = transfer_tokens_to_vault(&root, &token, &vault, amount, msg).await?;
+    // Transfer 100 USDC to the vault; direct transfer avoids triggering ft_on_transfer
+    let amount = 100_000_000; // 100 USDC (6 decimals)
+    transfer_tokens_direct(&root, &token, vault.id(), amount)
+        .await?
+        .into_result()?;
 
     // Withdraw from vault to alice
     let result = withdraw_ft(&vault, &token, &root, &alice, amount).await?;
@@ -150,13 +154,12 @@ async fn withdraw_ft_emits_event() -> anyhow::Result<()> {
         logs
     );
 
+    // Allow the asynchronous transfer to settle before querying balances.
+    worker.fast_forward(1).await?;
+
     // Query for Alice balance on the token contract
-    let alice_balance: U128 = token
-        .call("ft_balance_of")
-        .args_json(serde_json::json!({ "account_id": alice.id() }))
-        .view()
-        .await?
-        .json::<U128>()?;
+    // Query for Alice balance on the token contract using helper
+    let alice_balance = get_usdc_balance(&token, alice.id()).await?;
 
     // Assert alice received the tokens
     assert_eq!(alice_balance.0, amount);

@@ -1,4 +1,4 @@
-use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, NearToken};
+use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{create_valid_liquidity_request, get_context, owner};
 
 use crate::{
@@ -142,6 +142,41 @@ fn test_cancel_liquidity_request_succeeds_and_clears_state() {
     assert!(
         vault.counter_offers.is_none(),
         "Counter offers should be cleared"
+    );
+}
+
+#[test]
+fn test_cancel_liquidity_request_clears_underlying_storage() {
+    let ctx = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(ctx);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    let token = "usdc.token.near".parse().unwrap();
+    vault.liquidity_request = Some(create_valid_liquidity_request(token));
+
+    let mut counter_offers = UnorderedMap::new(StorageKey::CounterOffers);
+    counter_offers.insert(
+        &alice(),
+        &CounterOffer {
+            proposer: alice(),
+            amount: U128(1_000_000),
+            timestamp: 0,
+        },
+    );
+    vault.counter_offers = Some(counter_offers);
+
+    vault.cancel_liquidity_request();
+
+    let inspector: UnorderedMap<AccountId, CounterOffer> =
+        UnorderedMap::new(StorageKey::CounterOffers);
+    assert_eq!(
+        inspector.len(),
+        0,
+        "Counter offer storage should be cleared"
     );
 }
 

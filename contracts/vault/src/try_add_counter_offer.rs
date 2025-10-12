@@ -144,7 +144,7 @@ impl Vault {
                 );
 
                 // Refund lowest_offer
-                self.refund_counter_offer(token_contract, lowest_offer);
+                let _ = self.refund_counter_offer(token_contract, lowest_offer);
             }
         }
 

@@ -43,7 +43,12 @@ impl Vault {
         );
 
         // Calculate total amount due: principal + interest
-        let total_due = U128(request.amount.0 + request.interest.0);
+        let total_due = request
+            .amount
+            .0
+            .checked_add(request.interest.0)
+            .unwrap_or_else(|| env::panic_str("Total amount due exceeds supported range"));
+        let total_due = U128(total_due);
         let lender = offer.lender.clone();
         let token = request.token.clone();
 
@@ -84,6 +89,7 @@ impl Vault {
         // Loan was successfully repaid — clear loan state
         self.accepted_offer = None;
         self.liquidity_request = None;
+        self.pending_liquidity_request = None;
 
         // Log repay_loan_successful event
         log_event!(

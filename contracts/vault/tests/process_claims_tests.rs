@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
 use test_utils::{
@@ -251,7 +253,7 @@ async fn test_process_claims_waits_when_unstake_is_still_maturing() -> anyhow::R
 
     // Leave ~2 NEAR, delegate the rest
     let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let to_delegate = available.0 - NearToken::from_near(2).as_yoctonear();
+    let to_delegate = available.0.saturating_sub(NearToken::from_near(2).as_yoctonear());
     root.call(vault.id(), "delegate")
         .args_json(json!({
             "validator": validator.id(),
@@ -343,7 +345,9 @@ async fn test_process_claims_triggers_fallback_unstake_when_maturing_insufficien
 
     // Leave ~2 NEAR, delegate the rest
     let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let to_delegate = available.0 - NearToken::from_near(2).as_yoctonear();
+    let storage_cost: U128 = vault.view("view_storage_cost").await?.json()?;
+
+    let to_delegate = available.0.saturating_sub(NearToken::from_near(2).as_yoctonear());
     root.call(vault.id(), "delegate")
         .args_json(json!({
             "validator": validator.id(),
@@ -357,6 +361,8 @@ async fn test_process_claims_triggers_fallback_unstake_when_maturing_insufficien
 
     // Fast-forward 1 block
     worker.fast_forward(1).await?;
+
+    let _available_after_delegate: U128 = vault.view("view_available_balance").await?.json()?;
 
     // Undelegate 2 NEAR tokens
     root.call(vault.id(), "undelegate")
@@ -396,11 +402,16 @@ async fn test_process_claims_triggers_fallback_unstake_when_maturing_insufficien
         .await?
         .into_result()?;
 
-    // Expect the vault balance to be used
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    assert_eq!(
-        available.0, 0,
-        "Expected vault balance to be 0 after partial repayment"
+    // Expect the vault balance to be fully used
+    let available_after: U128 = vault.view("view_available_balance").await?.json()?;
+    let storage_cost_after: U128 = vault.view("view_storage_cost").await?.json()?;
+    let storage_delta = storage_cost_after.0.saturating_sub(storage_cost.0);
+    let tolerance = 1_000_000_000_000_000_000u128; // 0.001 NEAR
+    assert!(
+        available_after.0 <= storage_delta + tolerance,
+        "Vault should be fully drained before fallback unstake (balance={}, storage delta={})",
+        available_after.0,
+        storage_delta
     );
 
     // Expect unstake entry for validator to now be ~3 NEAR

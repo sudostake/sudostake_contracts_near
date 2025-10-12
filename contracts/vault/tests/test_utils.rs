@@ -1,3 +1,4 @@
+#![cfg(feature = "integration-test")]
 #![allow(dead_code)]
 
 use anyhow::Ok;
@@ -15,8 +16,9 @@ const FT_WASM_PATH: &str = "../../res/fungible_token.wasm";
 const FT_TOTAL_SUPPLY: &str = "1000000000000"; // 1,000,000 USDC (1_000_000 × 10^6)
 const FT_DECIMALS: u8 = 6;
 pub const VAULT_CALL_GAS: Gas = Gas::from_tgas(300);
-pub const MAX_COUNTER_OFFERS: u64 = 7;
 pub const YOCTO_NEAR: u128 = 10u128.pow(24);
+pub const MAX_COUNTER_OFFERS: u64 = 7;
+pub const MAX_ACTIVE_VALIDATORS: usize = 2;
 
 pub struct InstantiateTestVaultResult {
     pub execution_result: ExecutionFinalResult,
@@ -274,6 +276,26 @@ pub async fn register_account_with_token(
         .into_result()?;
 
     Ok(())
+}
+
+/// Performs a direct `ft_transfer` from `caller` to `receiver_id` without invoking `ft_on_transfer`.
+pub async fn transfer_tokens_direct(
+    caller: &Account,
+    token: &Contract,
+    receiver_id: &AccountId,
+    amount: u128,
+) -> anyhow::Result<ExecutionFinalResult> {
+    let result = caller
+        .call(token.id(), "ft_transfer")
+        .args_json(json!({
+            "receiver_id": receiver_id,
+            "amount": amount.to_string()
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?;
+
+    Ok(result)
 }
 
 pub async fn transfer_tokens_to_vault(

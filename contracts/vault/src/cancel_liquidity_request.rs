@@ -35,7 +35,6 @@ impl Vault {
 
         // Clean up state
         self.liquidity_request = None;
-        self.counter_offers = None;
 
         // Emit liquidity_request_cancelled event
         log_event!(

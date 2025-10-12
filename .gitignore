@@ -1,4 +1,6 @@
 target/
 vault_res/
+bin/
 .venv
 .DS_Store
+res/

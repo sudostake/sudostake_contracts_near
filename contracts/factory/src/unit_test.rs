@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::contract::FactoryContract;
-    use near_sdk::{test_utils::VMContextBuilder, testing_env, AccountId, NearToken, Promise};
+    use near_sdk::{env, test_utils::VMContextBuilder, testing_env, AccountId, NearToken, Promise};
 
     #[test]
     fn test_factory_initialization() {
@@ -85,7 +85,7 @@ mod tests {
         contract.mint_vault();
 
         // Assert vault counter incremented
-        // assert_eq!(contract.vault_counter, 1);
+        assert_eq!(contract.vault_counter, 1);
     }
 
     #[test]
@@ -344,5 +344,37 @@ mod tests {
 
         // Attempt to transfer ownership to self — should panic
         contract.transfer_ownership(owner);
+    }
+
+    #[test]
+    fn test_storage_byte_cost_matches_env() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+        let mut context = VMContextBuilder::new();
+        context.predecessor_account_id(owner.clone());
+        testing_env!(context.build());
+
+        let contract = FactoryContract::new(owner, NearToken::from_near(1));
+
+        assert_eq!(contract.storage_byte_cost(), env::storage_byte_cost());
+    }
+
+    #[test]
+    fn test_get_contract_state_returns_expected_values() {
+        let owner: AccountId = "owner.near".parse().unwrap();
+        let mut context = VMContextBuilder::new();
+        context.predecessor_account_id(owner.clone());
+        testing_env!(context.build());
+
+        let mut contract = FactoryContract::new(owner.clone(), NearToken::from_near(1));
+
+        // mutate state to validate view fields
+        contract.vault_counter = 42;
+        contract.vault_minting_fee = NearToken::from_near(3);
+
+        let state = contract.get_contract_state();
+
+        assert_eq!(state.owner, owner);
+        assert_eq!(state.vault_counter, 42);
+        assert_eq!(state.vault_minting_fee, NearToken::from_near(3));
     }
 }

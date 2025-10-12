@@ -1,7 +1,10 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::{contract::Vault, types::RefundEntry};
+use crate::{
+    contract::Vault,
+    types::{RefundEntry, REFUND_EXPIRY_EPOCHS},
+};
 use near_sdk::{
     json_types::U128, test_utils::get_logs, testing_env, AccountId, NearToken, PromiseError,
 };
@@ -92,6 +95,45 @@ fn test_retry_refunds_owner_can_retry_all_entries() {
     assert!(
         vault.refund_list.is_empty(),
         "All refund entries should be removed after retry_refunds by owner"
+    );
+}
+
+#[test]
+fn test_retry_refunds_skips_expired_entries() {
+    let mut context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    context.epoch_height = REFUND_EXPIRY_EPOCHS + 5;
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    insert_refund_entry(
+        &mut vault,
+        0,
+        RefundEntry {
+            proposer: alice(),
+            amount: U128(1_000_000),
+            token: None,
+            added_at_epoch: 0,
+        },
+    );
+
+    vault.retry_refunds();
+
+    assert!(
+        vault.refund_list.is_empty(),
+        "Expired refund entry should be removed"
+    );
+
+    let logs = get_logs();
+    let found = logs.iter().any(|log| log.contains("retry_refund_expired"));
+    assert!(
+        found,
+        "Expected 'retry_refund_expired' log not found. Logs: {:?}",
+        logs
     );
 }
 

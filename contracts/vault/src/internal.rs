@@ -47,17 +47,24 @@ impl Vault {
 
     /// Refunds all active counter offers by initiating `ft_transfer` calls
     /// for each proposer using the provided token contract.
-    pub(crate) fn refund_all_counter_offers(&self, token: AccountId) {
-        if let Some(counter_offers) = &self.counter_offers {
+    pub(crate) fn refund_all_counter_offers(&mut self, token: AccountId) {
+        if let Some(mut counter_offers) = self.counter_offers.take() {
             for (_, offer) in counter_offers.iter() {
-                self.refund_counter_offer(token.clone(), offer);
+                let _ = self.refund_counter_offer(token.clone(), offer);
             }
+
+            // Explicitly clear storage so stale offers do not linger between requests.
+            counter_offers.clear();
         }
     }
 
     /// Refunds a single counter offer by calling `ft_transfer`.
     /// A callback is attached to handle the refund result.
-    pub(crate) fn refund_counter_offer(&self, token_address: AccountId, offer: CounterOffer) {
+    pub(crate) fn refund_counter_offer(
+        &self,
+        token_address: AccountId,
+        offer: CounterOffer,
+    ) -> Promise {
         ext_fungible_token::ext(token_address.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FOR_FT_TRANSFER)
@@ -66,7 +73,7 @@ impl Vault {
                 offer.proposer.clone(),
                 offer.amount,
                 token_address,
-            ));
+            ))
     }
 
     /// Chains `withdraw_all` calls for the given list of validators,
@@ -200,10 +207,11 @@ impl Vault {
         assert!(kind != ProcessingState::Idle, "Cannot lock with Idle");
 
         let now = env::block_timestamp();
+        // Saturating subtract guards against potential timestamp rollback, which would
+        // otherwise underflow and panic when block timestamps decrease.
+        let elapsed = now.saturating_sub(self.processing_since);
 
-        if self.processing_state != ProcessingState::Idle
-            && now - self.processing_since >= LOCK_TIMEOUT
-        {
+        if self.processing_state != ProcessingState::Idle && elapsed >= LOCK_TIMEOUT {
             self.processing_state = ProcessingState::Idle;
             self.processing_since = 0;
         }

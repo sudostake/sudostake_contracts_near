@@ -155,17 +155,19 @@ Security & Safety Considerations
 
 
 Build & Test
-- Build all contracts: ./build.sh (requires wasm-opt)
-  - Produces res/vault.wasm and res/factory.wasm, optimized with wasm-opt -Oz
-- Run unit/integration tests: ./factory_test.sh && ./vault_test.sh
-  - vault_test.sh also builds a test-only wasm (feature = integration-test) at vault_res/vault.wasm for near-workspaces sandbox tests.
+- Build all contracts: ./scripts/build.sh (requires wasm-opt)
+  - Copies pinned third-party Wasm into res/, produces res/vault.wasm + res/factory.wasm (wasm-opt -Oz), copies their ABI artifacts (`*_abi.json`, `*_abi.zst`), and records matching `.sha256` hash files for reproducibility checks
+- Run unit/integration tests: ./scripts/factory_test.sh && ./scripts/vault_test.sh
+  - scripts/factory_test.sh enables the `integration-test` feature so the async sandbox tests are compiled and executed.
+  - scripts/vault_test.sh also builds a test-only wasm (feature = integration-test) at vault_res/vault.wasm for near-workspaces sandbox tests.
 
 
 Repository Structure (selected)
 - contracts/factory — factory contract code and tests
 - contracts/vault — vault contract code and tests
-- res/ — compiled optimized wasm artifacts (output)
-- value_flows.md — end-to-end value flow diagrams and notes
+- res/ — gitignored build outputs used by tests (populated by helper scripts)
+- third_party/wasm — pinned Wasm dependencies copied into res/
+- docs/value_flows.md — end-to-end value flow diagrams and notes
 - README.md — quickstart and reference for key methods
 
 
@@ -189,4 +191,3 @@ Appendix: Key Files
 - contracts/vault/src/*.rs — feature modules (staking, liquidity, repayment, liquidation, refunds, ownership)
 - contracts/vault/src/ext.rs — external interfaces for staking pools and FT
 - contracts/vault/src/macros.rs & contracts/factory/src/macros.rs — EVENT_JSON logging macro
-

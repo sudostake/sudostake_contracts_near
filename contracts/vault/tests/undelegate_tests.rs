@@ -1,3 +1,5 @@
+#![cfg(feature = "integration-test")]
+
 #[path = "test_utils.rs"]
 mod test_utils;
 
@@ -7,6 +9,9 @@ use test_utils::{
     create_test_validator, initialize_test_token, initialize_test_vault,
     register_account_with_token, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
+
+// TODO: Add integration coverage for undelegate lock contention once a mock validator that
+// delays callbacks is available.
 
 #[tokio::test]
 async fn test_undelegate_succeed() -> anyhow::Result<()> {
@@ -218,6 +223,48 @@ async fn test_undelegate_fails_if_validator_not_active() -> anyhow::Result<()> {
     assert!(
         failure_text.contains("Validator is not currently active"),
         "Expected failure due to inactive validator, got: {failure_text}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_undelegate_fails_if_amount_zero() -> anyhow::Result<()> {
+    let worker = near_workspaces::sandbox().await?;
+    let root = worker.root_account()?;
+    let validator = create_test_validator(&worker, &root).await?;
+    let vault = initialize_test_vault(&root).await?.contract;
+
+    // Delegate some stake so validator becomes active
+    root.call(vault.id(), "delegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_near(1)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?
+        .into_result()?;
+
+    worker.fast_forward(1).await?;
+
+    // Attempt to undelegate zero NEAR
+    let result = root
+        .call(vault.id(), "undelegate")
+        .args_json(json!({
+            "validator": validator.id(),
+            "amount": NearToken::from_yoctonear(0)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(Gas::from_tgas(300))
+        .transact()
+        .await?;
+
+    let failure_text = format!("{:?}", result.failures());
+    assert!(
+        failure_text.contains("Amount must be greater than 0"),
+        "Expected zero-amount guard, got: {failure_text}"
     );
 
     Ok(())

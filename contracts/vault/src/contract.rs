@@ -1,18 +1,16 @@
-#![allow(dead_code)]
-
 use crate::log_event;
 use crate::types::{
     AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
     ProcessingState, RefundEntry, StorageKey, UnstakeEntry,
 };
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::UnorderedMap;
-use near_sdk::{collections::UnorderedSet, env, near_bindgen, AccountId, PanicOnDefault};
+use near_sdk::collections::{UnorderedMap, UnorderedSet};
+use near_sdk::{env, near_bindgen, AccountId, PanicOnDefault};
 
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 /// Represents the complete on-chain state of a single SudoStake vault instance.
 /// A vault allows its owner to stake NEAR, request liquidity against it, and manage repayments or liquidation flows.
+#[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Vault {
     /// Account ID of the vault owner (the borrower/staker).
     pub owner: AccountId,
@@ -54,6 +52,7 @@ impl Vault {
     /// Initializes a new vault instance with the specified owner, index, and version.
     /// This method is callable only once per vault contract (via `#[init]`).
     #[init]
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub fn new(owner: AccountId, index: u64, version: u64) -> Self {
         assert!(!env::state_exists(), "Contract already initialized");
 

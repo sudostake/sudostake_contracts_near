@@ -5,7 +5,7 @@ use crate::contract::VaultExt;
 use crate::log_event;
 use crate::types::ProcessingState;
 use crate::types::GAS_FOR_CALLBACK;
-use crate::types::{LiquidityRequest, PendingLiquidityRequest};
+use crate::types::{LiquidityRequest, PendingLiquidityRequest, MAX_LOAN_DURATION};
 use near_sdk::json_types::U128;
 use near_sdk::require;
 use near_sdk::PromiseResult;
@@ -53,6 +53,13 @@ impl Vault {
         );
         require!(amount.0 > 0, "Requested amount must be greater than zero");
         require!(duration > 0, "Duration must be non-zero");
+        require!(
+            duration <= MAX_LOAN_DURATION,
+            format!(
+                "Loan duration exceeds maximum allowed value ({} seconds)",
+                MAX_LOAN_DURATION
+            )
+        );
 
         // Lock the vault for **RequestLiquidity** workflow
         self.acquire_processing_lock(ProcessingState::RequestLiquidity);

@@ -2,6 +2,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::serde::Serialize;
 use near_sdk::{env, near_bindgen, AccountId, Promise};
 use near_sdk::{Gas, NearToken};
+#[cfg(not(target_arch = "wasm32"))]
+use schemars::JsonSchema;
 
 use crate::log_event;
 
@@ -13,9 +15,12 @@ const GAS_FOR_VAULT_INIT: Gas = Gas::from_tgas(100);
 const VAULT_WASM_BYTES: &[u8] = include_bytes!("../../../res/vault.wasm");
 
 #[derive(Serialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct FactoryViewState {
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub owner: AccountId,
+    #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     pub vault_minting_fee: NearToken,
     pub vault_counter: u64,
 }

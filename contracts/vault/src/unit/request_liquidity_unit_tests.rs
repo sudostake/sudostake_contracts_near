@@ -3,7 +3,10 @@ mod test_utils;
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOffer, LiquidityRequest, PendingLiquidityRequest, StorageKey},
+    types::{
+        AcceptedOffer, CounterOffer, LiquidityRequest, PendingLiquidityRequest, StorageKey,
+        MAX_LOAN_DURATION,
+    },
 };
 use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{alice, get_context, owner};
@@ -39,6 +42,30 @@ fn test_request_liquidity_success() {
     assert!(vault.pending_liquidity_request.is_some());
     assert!(vault.liquidity_request.is_none());
     assert!(vault.counter_offers.is_none());
+}
+
+#[test]
+#[should_panic(expected = "Loan duration exceeds maximum allowed value")]
+fn test_request_liquidity_fails_if_duration_exceeds_max() {
+    let ctx = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(ctx);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault
+        .active_validators
+        .insert(&"validator1.near".parse::<AccountId>().unwrap());
+
+    vault.request_liquidity(
+        "usdc.token.near".parse().unwrap(),
+        U128(1_000_000),
+        U128(100_000),
+        NearToken::from_near(5),
+        MAX_LOAN_DURATION + 1,
+    );
 }
 
 #[test]
