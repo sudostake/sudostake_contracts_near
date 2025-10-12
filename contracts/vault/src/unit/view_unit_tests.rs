@@ -111,7 +111,7 @@ mod tests {
         let mut context = near_sdk::test_utils::VMContextBuilder::new();
         context
             .predecessor_account_id(owner())
-            .account_balance(NearToken::from_yoctonear(5 * 10u128.pow(24)))
+            .account_balance(NearToken::from_near(5))
             .storage_usage(1_000);
         testing_env!(context.build());
 

@@ -25,8 +25,10 @@ pub const REFUND_EXPIRY_EPOCHS: EpochHeight = 4;
 pub const MAX_COUNTER_OFFERS: u64 = 7;
 /// Maximum number of validators a vault can actively stake with.
 pub const MAX_ACTIVE_VALIDATORS: u64 = 2;
+/// Number of nanoseconds in one second.
+pub const NANOS_PER_SECOND: u64 = 1_000_000_000;
 /// Time in nanoseconds before a processing lock becomes stale.
-pub const LOCK_TIMEOUT: u64 = 30 * 60 * 1_000_000_000; // 30 minutes
+pub const LOCK_TIMEOUT: u64 = 30 * 60 * NANOS_PER_SECOND; // 30 minutes
 /// Maximum supported loan duration in seconds.
 /// Computed so that `duration * 1e9` stays within `u64::MAX` for timestamp math.
 pub const MAX_LOAN_DURATION: u64 = u64::MAX / 1_000_000_000 - 1;

@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+RUST_FALLBACK_VERSION="1.86.0"
+
 "${ROOT_DIR}/scripts/prepare_res_dirs.sh" >/dev/null || true
 
 if [[ -z "${NEAR_SANDBOX_BIN_PATH:-}" ]]; then
@@ -39,7 +41,7 @@ detect_toolchain_override() {
   fi
 
   if ! command -v rustup >/dev/null 2>&1; then
-    echo "⚠️  rustup not found; skipping automatic Rust 1.86 fallback. Set CARGO_NEAR_TOOLCHAIN_OVERRIDE manually if needed."
+    echo "⚠️  rustup not found; skipping automatic Rust ${RUST_FALLBACK_VERSION} fallback. Set CARGO_NEAR_TOOLCHAIN_OVERRIDE manually if needed."
     return
   fi
 
@@ -51,8 +53,8 @@ detect_toolchain_override() {
     local major="${BASH_REMATCH[1]}"
     local minor="${BASH_REMATCH[2]}"
     if (( major > 1 )) || (( major == 1 && minor >= 87 )); then
-      candidate="1.86.0-${host}"
-      alt_candidate="1.86.0"
+      candidate="${RUST_FALLBACK_VERSION}-${host}"
+      alt_candidate="${RUST_FALLBACK_VERSION}"
       if rustup toolchain list | grep -qE "^${candidate}(\s|\(|$)"; then
         echo "ℹ️  rustc ${release} detected; overriding cargo-near toolchain with ${candidate}."
         TOOLCHAIN_OVERRIDE="${candidate}"
@@ -61,9 +63,9 @@ detect_toolchain_override() {
         TOOLCHAIN_OVERRIDE="${alt_candidate}"
       else
         cat <<EOF
-❌ rustc ${release} is incompatible with the current nearcore VM. Install Rust 1.86 and rerun:
-    rustup toolchain install 1.86.0
-    CARGO_NEAR_TOOLCHAIN_OVERRIDE=1.86.0 ${ROOT_DIR}/scripts/vault_test.sh
+❌ rustc ${release} is incompatible with the current nearcore VM. Install Rust ${RUST_FALLBACK_VERSION} and rerun:
+    rustup toolchain install ${RUST_FALLBACK_VERSION}
+    CARGO_NEAR_TOOLCHAIN_OVERRIDE=${RUST_FALLBACK_VERSION} ${ROOT_DIR}/scripts/vault_test.sh
 EOF
         exit 1
       fi
