@@ -33,5 +33,5 @@ passed_env = []
 container_build_command = [
     "bash",
     "-lc",
-    "cd /home/near/code && cargo near build non-reproducible-wasm --locked --manifest-path contracts/vault/Cargo.toml --out-dir res && cargo near build non-reproducible-wasm --locked --manifest-path contracts/factory/Cargo.toml --out-dir res",
+    "cd /home/near/code && set -euxo pipefail && cargo near build non-reproducible-wasm --locked --manifest-path contracts/vault/Cargo.toml && mkdir -p res && cp target/near/vault/vault.wasm res/vault.wasm && cargo near build non-reproducible-wasm --locked --manifest-path contracts/factory/Cargo.toml",
 ]
