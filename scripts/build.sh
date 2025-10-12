@@ -38,6 +38,20 @@ for contract in "${CONTRACTS[@]}"; do
   cargo near build reproducible-wasm \
     --manifest-path "${manifest}" \
     --out-dir "${OUT_DIR}"
+
+  artifact="${OUT_DIR}/${contract}.wasm"
+  if [[ -f "${artifact}" ]]; then
+    if command -v sha256sum >/dev/null 2>&1; then
+      hash_line="$(sha256sum "${artifact}")"
+    else
+      hash_line="$(shasum -a 256 "${artifact}")"
+    fi
+    printf '%s\n' "${hash_line}" > "${artifact}.sha256"
+    hash_value="${hash_line%% *}"
+    echo "   SHA-256: ${hash_value}"
+  else
+    echo "⚠️  Expected artifact ${artifact} is missing." >&2
+  fi
 done
 
 echo "✅ Reproducible WASM artifacts written to ${OUT_DIR}"

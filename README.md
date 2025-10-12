@@ -57,11 +57,13 @@ chmod +x scripts/build.sh   # first run only
 ./scripts/build.sh
 ```
 
-The helper populates `res/` (copying pinned third-party Wasm from `third_party/wasm`) and then drives `cargo near build reproducible-wasm` for the vault and factory contracts inside the dockerized toolchain described in each crate’s `Cargo.toml`. Reproducible builds require a clean git tree; stash or commit any outstanding edits first, or set `CARGO_NEAR_ALLOW_DIRTY=1` when you deliberately want to build from a dirty workspace.
+The helper populates `res/` (copying pinned third-party Wasm from `third_party/wasm`) and then drives `cargo near build reproducible-wasm` for the vault and factory contracts inside the dockerized toolchain described in each crate’s `Cargo.toml`. For each artifact it also writes `res/<name>.wasm.sha256` so you can compare hashes across build sessions. Reproducible builds require a clean git tree; stash or commit any outstanding edits first, or set `CARGO_NEAR_ALLOW_DIRTY=1` when you deliberately want to build from a dirty workspace.
 
 Because `res/` is gitignored, rebuilds no longer churn the repository. The NEP‑330 metadata recorded inside each Wasm still points back to the exact git revision that produced it, so capture and publish the artifacts when you cut a release.
 
 Need just the pinned third-party dependencies after a fresh clone? Run `./scripts/prepare_res_dirs.sh` to copy the reference `staking_pool.wasm` and `fungible_token.wasm` into `res/` without rebuilding the in-repo contracts.
+
+To confirm reproducibility for a given commit, rerun `./scripts/build.sh` and compare the emitted `res/*.wasm.sha256` files—identical commits produce identical hashes.
 
 
 ## Build Artifacts
