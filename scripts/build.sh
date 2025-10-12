@@ -29,6 +29,7 @@ OUT_DIR="res"
 CONTRACTS=("vault" "factory")
 
 mkdir -p "${OUT_DIR}"
+"${ROOT_DIR}/scripts/prepare_res_dirs.sh" >/dev/null || true
 
 echo "📦 Building contracts with cargo-near reproducible pipeline..."
 for contract in "${CONTRACTS[@]}"; do

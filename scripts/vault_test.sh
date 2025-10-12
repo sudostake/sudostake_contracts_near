@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+"${ROOT_DIR}/scripts/prepare_res_dirs.sh" >/dev/null || true
+
 if [[ -z "${NEAR_SANDBOX_BIN_PATH:-}" ]]; then
   cat <<EOF
 ℹ️  NEAR_SANDBOX_BIN_PATH is not set; near-workspaces will attempt to download the sandbox binary.

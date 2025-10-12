@@ -5,7 +5,8 @@ Monorepo with NEAR smart contracts and docs for the SudoStake protocol.
 Repository layout
 - contracts/factory — mints per‑user Vaults (immutable subaccounts)
 - contracts/vault — staking + peer‑to‑peer liquidity/loans logic
-- res/ — compiled .wasm artifacts
+- res/ — locally generated Wasm artifacts (gitignored; populated by build scripts)
+- third_party/wasm — pinned Wasm dependencies copied into `res/`
 - scripts/ — helper tooling (`build.sh`, `factory_test.sh`, `vault_test.sh`, setup utilities)
 
 Further reading
@@ -56,19 +57,21 @@ chmod +x scripts/build.sh   # first run only
 ./scripts/build.sh
 ```
 
-The script drives `cargo near build reproducible-wasm` for both contracts inside the dockerized toolchain defined in each crate’s `Cargo.toml`. Reproducible builds require a clean git tree; stash or commit any outstanding edits first, or set `CARGO_NEAR_ALLOW_DIRTY=1` when you deliberately want to build from a dirty workspace.
+The helper populates `res/` (copying pinned third-party Wasm from `third_party/wasm`) and then drives `cargo near build reproducible-wasm` for the vault and factory contracts inside the dockerized toolchain described in each crate’s `Cargo.toml`. Reproducible builds require a clean git tree; stash or commit any outstanding edits first, or set `CARGO_NEAR_ALLOW_DIRTY=1` when you deliberately want to build from a dirty workspace.
 
-Outputs are written to ./res as factory.wasm and vault.wasm (ABI data is embedded automatically).
+Because `res/` is gitignored, rebuilds no longer churn the repository. The NEP‑330 metadata recorded inside each Wasm still points back to the exact git revision that produced it, so capture and publish the artifacts when you cut a release.
+
+Need just the pinned third-party dependencies after a fresh clone? Run `./scripts/prepare_res_dirs.sh` to copy the reference `staking_pool.wasm` and `fungible_token.wasm` into `res/` without rebuilding the in-repo contracts.
 
 
 ## Build Artifacts
 
 | Name | Description | Repo |
 |------|-------------|------|
-| factory.wasm | Proxy for minting vaults | [factory](contracts/factory) |
-| vault.wasm | Staking with peer‑to‑peer options trading | [vault](contracts/vault) |
-| staking_pool.wasm | Official NEAR staking/delegation contract | [staking-pool](https://github.com/near/core-contracts/tree/master/staking-pool) |
-| fungible_token.wasm | NEP‑141 token contract | [canonical FT contract](https://github.com/near-examples/FT) |
+| factory.wasm | Proxy for minting vaults (generated in `res/`) | [factory](contracts/factory) |
+| vault.wasm | Staking with peer‑to‑peer options trading (generated in `res/`) | [vault](contracts/vault) |
+| staking_pool.wasm | Official NEAR staking/delegation contract (pinned in `third_party/wasm`) | [staking-pool](https://github.com/near/core-contracts/tree/master/staking-pool) |
+| fungible_token.wasm | NEP‑141 token contract (pinned in `third_party/wasm`) | [canonical FT contract](https://github.com/near-examples/FT) |
 
 
 ## Contracts and key methods
@@ -108,7 +111,7 @@ Follow these steps whenever you want to exercise the full near-workspaces flow w
    chmod +x scripts/vault_test.sh   # first run only
    ./scripts/vault_test.sh
    ```
-   The script rebuilds `vault_res/vault.wasm` via `cargo near build non-reproducible-wasm --features integration-test`. If your default toolchain is Rust 1.87+, it automatically falls back to Rust 1.86 (installed in Step&nbsp;1). Because `cargo near` generates ABI metadata by default, ensure any structs returned from view methods derive `schemars::JsonSchema`. Export `RUST_TEST_THREADS=1` if you prefer to run the tests single-threaded.
+   The script rebuilds `vault_res/vault.wasm` via `cargo near build non-reproducible-wasm --features integration-test` and refreshes `res/` with the pinned third-party Wasm. If your default toolchain is Rust 1.87+, it automatically falls back to Rust 1.86 (installed in Step&nbsp;1). Because `cargo near` generates ABI metadata by default, ensure any structs returned from view methods derive `schemars::JsonSchema`. Export `RUST_TEST_THREADS=1` if you prefer to run the tests single-threaded.
 3. Focus on a single vault test once `vault_res/vault.wasm` is up to date:
    ```bash
    RUST_TEST_THREADS=1 cargo test -p vault --release --features integration-test delegate_tests
@@ -121,8 +124,9 @@ Follow these steps whenever you want to exercise the full near-workspaces flow w
 Factory tests follow the same pattern as the vault instructions above:
 
 1. Confirm the environment prep from Step&nbsp;1 (kernel params, Binaryen, optional sandbox binary) is still in place.
-2. Rebuild `res/factory.wasm` if you want to run tests manually:
+2. Refresh the pinned Wasm and rebuild `res/factory.wasm` if you want to run tests manually:
    ```bash
+   ./scripts/prepare_res_dirs.sh
    cargo near build non-reproducible-wasm \
      --manifest-path contracts/factory/Cargo.toml \
      --out-dir res
@@ -131,7 +135,7 @@ Factory tests follow the same pattern as the vault instructions above:
 3. Execute the factory suite:
    ```bash
    chmod +x scripts/factory_test.sh   # first run only
-   ./scripts/factory_test.sh   # Automatically rebuilds res/factory.wasm and runs cargo test -p factory
+   ./scripts/factory_test.sh   # Automatically refreshes res/ and runs cargo test -p factory
    ```
    The script sets `RUST_TEST_THREADS=1` by default to avoid port conflicts inside the NEAR sandbox.
 4. Target specific factory tests after the Wasm is rebuilt:
@@ -142,8 +146,8 @@ Factory tests follow the same pattern as the vault instructions above:
 ### Run both suites together
 ```
 # Runs unit + integration tests for both contracts (requires the native Rust target).
-# Ensure NEAR_SANDBOX_BIN_PATH is exported before invoking these scripts, and
-# that res/factory.wasm and vault_res/vault.wasm stay in sync with your latest code (rerun the helper scripts if in doubt).
+# Ensure NEAR_SANDBOX_BIN_PATH is exported before invoking these scripts.
+# Each script refreshes res/ and vault_res/ so the Wasm artifacts match the latest code.
 chmod +x scripts/factory_test.sh scripts/vault_test.sh   # first run only
 ./scripts/factory_test.sh && ./scripts/vault_test.sh
 ```

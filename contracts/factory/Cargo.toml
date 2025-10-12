@@ -31,9 +31,7 @@ image = "sourcescan/cargo-near:0.16.2-rust-1.86.0"
 image_digest = "sha256:74c24d4d912f893198b8b13e01d43e0f78f3b00b3df45bf555a707eb4918a54e"
 passed_env = []
 container_build_command = [
-    "cargo",
-    "near",
-    "build",
-    "non-reproducible-wasm",
-    "--locked",
+    "bash",
+    "-lc",
+    "cd /home/near/code && cargo near build non-reproducible-wasm --locked --manifest-path contracts/vault/Cargo.toml --out-dir res && cargo near build non-reproducible-wasm --locked --manifest-path contracts/factory/Cargo.toml --out-dir res",
 ]
