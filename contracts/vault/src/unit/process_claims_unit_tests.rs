@@ -576,7 +576,7 @@ fn test_on_lender_payout_complete_clears_state() {
 }
 
 #[test]
-#[should_panic(expected = "Loan duration exceeds supported range")]
+#[should_panic(expected = "Loan duration conversion overflow")]
 fn test_process_claims_duration_overflow_panics() {
     let now = 1_000_000_500;
     let context = get_context_with_timestamp(

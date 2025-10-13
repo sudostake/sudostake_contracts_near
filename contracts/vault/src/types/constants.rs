@@ -8,12 +8,14 @@ pub const GAS_FOR_WITHDRAW_ALL: Gas = Gas::from_tgas(35);
 pub const GAS_FOR_VIEW_CALL: Gas = Gas::from_tgas(10);
 /// Gas allocated for internal callback resolution logic.
 pub const GAS_FOR_CALLBACK: Gas = Gas::from_tgas(20);
+/// Gas allocated for transferring NEAR to the lender (covers callback for result handling).
+pub const GAS_FOR_LENDER_PAYOUT: Gas = Gas::from_tgas(40);
 /// Gas allocated for transferring FT tokens.
 pub const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(30);
 /// Gas allocated for depositing and staking NEAR on a validator.
 pub const GAS_FOR_DEPOSIT_AND_STAKE: Gas = Gas::from_tgas(120);
 /// Gas allocated for unstaking NEAR from a validator.
-pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(60);
+pub const GAS_FOR_UNSTAKE: Gas = Gas::from_tgas(30);
 
 /// Number of yoctoNEAR in one NEAR.
 pub const YOCTO_PER_NEAR: u128 = 10u128.pow(24);

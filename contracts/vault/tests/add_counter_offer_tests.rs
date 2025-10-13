@@ -8,10 +8,10 @@ use test_utils::{
     register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
 };
 
-#[path = "test_utils.rs"]
-mod test_utils;
 #[path = "test_lock.rs"]
 mod test_lock;
+#[path = "test_utils.rs"]
+mod test_utils;
 
 // TODO: Cover try_add_counter_offer lock contention once we can simulate delayed callbacks in the
 // sandbox.

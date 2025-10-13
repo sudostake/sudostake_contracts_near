@@ -1,9 +1,9 @@
 #![cfg(feature = "integration-test")]
 
-#[path = "test_utils.rs"]
-mod test_utils;
 #[path = "test_lock.rs"]
 mod test_lock;
+#[path = "test_utils.rs"]
+mod test_utils;
 
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;

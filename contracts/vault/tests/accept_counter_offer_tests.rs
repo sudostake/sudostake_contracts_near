@@ -11,10 +11,10 @@ use test_utils::{
     register_account_with_token, CounterOffer, VaultViewState, VAULT_CALL_GAS,
 };
 
-#[path = "test_utils.rs"]
-mod test_utils;
 #[path = "test_lock.rs"]
 mod test_lock;
+#[path = "test_utils.rs"]
+mod test_utils;
 
 #[tokio::test]
 async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Result<()> {
@@ -547,7 +547,6 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
         .gas(VAULT_CALL_GAS)
         .transact()
         .await?;
-
 
     let failure_text = format!("{:?}", outcome.failures());
     assert!(
