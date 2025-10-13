@@ -65,7 +65,7 @@ impl Vault {
 
             // Restore listing so another claimant can try again
             self.is_listed_for_takeover = true;
-            self.add_refund_entry(None, new_owner, U128(amount), None);
+            self.add_refund_entry(None, new_owner, U128(amount), None, None);
             return;
         }
 
@@ -82,7 +82,7 @@ impl Vault {
             );
 
             self.is_listed_for_takeover = true;
-            self.add_refund_entry(None, new_owner, U128(amount), None);
+            self.add_refund_entry(None, new_owner, U128(amount), None, None);
             return;
         }
 

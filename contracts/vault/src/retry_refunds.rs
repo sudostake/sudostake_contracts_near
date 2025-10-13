@@ -45,7 +45,7 @@ impl Vault {
             })
         );
 
-        self.add_refund_entry(Some(token_address), proposer, amount, None);
+        self.add_refund_entry(Some(token_address), proposer, amount, None, None);
     }
 
     /// Manually retries refunds that previously failed.
@@ -140,9 +140,16 @@ impl Vault {
         );
 
         // Only add it back to the list if it has not expired
+        let RefundEntry {
+            token,
+            proposer,
+            amount,
+            added_at_epoch,
+        } = entry;
+
         let current_epoch = env::epoch_height();
-        if current_epoch < entry.added_at_epoch + REFUND_EXPIRY_EPOCHS {
-            self.add_refund_entry(entry.token, entry.proposer, entry.amount, Some(id));
+        if current_epoch < added_at_epoch.saturating_add(REFUND_EXPIRY_EPOCHS) {
+            self.add_refund_entry(token, proposer, amount, Some(id), Some(added_at_epoch));
         }
     }
 }

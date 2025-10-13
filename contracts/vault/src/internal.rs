@@ -6,7 +6,7 @@ use crate::types::{
     GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, LOCK_TIMEOUT, STORAGE_BUFFER,
 };
 use near_sdk::json_types::U128;
-use near_sdk::{env, require, AccountId, NearToken, Promise};
+use near_sdk::{env, require, AccountId, EpochHeight, NearToken, Promise};
 
 /// Internal utility methods for the Vault contract.
 impl Vault {
@@ -169,15 +169,17 @@ impl Vault {
         proposer: AccountId,
         amount: U128,
         refund_id: Option<u64>,
+        added_at_epoch: Option<EpochHeight>,
     ) {
         let id = refund_id.unwrap_or_else(|| self.get_refund_nonce());
+        let epoch_recorded = added_at_epoch.unwrap_or_else(env::epoch_height);
         self.refund_list.insert(
             &id,
             &RefundEntry {
                 token,
                 proposer,
                 amount,
-                added_at_epoch: env::epoch_height(),
+                added_at_epoch: epoch_recorded,
             },
         );
     }

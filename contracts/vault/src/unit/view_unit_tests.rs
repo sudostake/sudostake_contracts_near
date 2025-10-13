@@ -20,8 +20,9 @@ mod tests {
 
         let mut vault = Vault::new(owner(), 1, 42);
 
-        vault.liquidity_request =
-            Some(create_valid_liquidity_request("usdc.test.near".parse().unwrap()));
+        vault.liquidity_request = Some(create_valid_liquidity_request(
+            "usdc.test.near".parse().unwrap(),
+        ));
         vault.accepted_offer = Some(AcceptedOffer {
             lender: alice(),
             accepted_at: 777,

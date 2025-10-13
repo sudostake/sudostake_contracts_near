@@ -1,762 +1,420 @@
 #![cfg(feature = "integration-test")]
 
+use anyhow::Result;
 use near_sdk::{json_types::U128, NearToken};
+use near_workspaces::result::ExecutionFinalResult;
+use near_workspaces::{network::Sandbox, Account, Contract, Worker};
 use serde_json::json;
 use test_utils::{
-    create_named_test_validator, request_and_accept_liquidity, setup_contracts,
-    setup_sandbox_and_accounts, UnstakeEntry, VaultViewState, VAULT_CALL_GAS, YOCTO_NEAR,
+    request_and_accept_liquidity, setup_contracts, setup_sandbox_and_accounts, UnstakeEntry,
+    VaultViewState, VAULT_CALL_GAS, YOCTO_NEAR,
 };
 
 #[path = "test_utils.rs"]
 mod test_utils;
 
-#[tokio::test]
-async fn test_process_claims_fulfills_immediate_repayment() -> anyhow::Result<()> {
-    // Setup sandbox and accounts
-    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+const BLOCKS_PER_EPOCH: u64 = 500;
+const MATURITY_PADDING_EPOCHS: u64 = 5;
+const PAST_TIMESTAMP: u64 = 1_000_000_000;
 
-    // Setup contracts
+mod helpers {
+    use super::*;
+
+    pub async fn delegate(
+        root: &Account,
+        vault: &Contract,
+        validator: &Contract,
+        amount: NearToken,
+    ) -> Result<()> {
+        root.call(vault.id(), "delegate")
+            .args_json(json!({ "validator": validator.id(), "amount": amount }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+        Ok(())
+    }
+
+    pub async fn undelegate(
+        root: &Account,
+        vault: &Contract,
+        validator: &Contract,
+        amount: NearToken,
+    ) -> Result<()> {
+        root.call(vault.id(), "undelegate")
+            .args_json(json!({ "validator": validator.id(), "amount": amount }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+        Ok(())
+    }
+
+    pub async fn withdraw_near(root: &Account, vault: &Contract, amount: u128) -> Result<()> {
+        if amount == 0 {
+            return Ok(());
+        }
+
+        root.call(vault.id(), "withdraw_balance")
+            .args_json(json!({
+                "token_address": null,
+                "amount": amount.to_string(),
+                "to": root.id()
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+        Ok(())
+    }
+
+    pub async fn available_balance(vault: &Contract) -> Result<u128> {
+        let balance: U128 = vault.view("view_available_balance").await?.json()?;
+        Ok(balance.0)
+    }
+
+    pub async fn fast_forward_epochs(worker: &Worker<Sandbox>, epochs: u64) -> Result<()> {
+        if epochs == 0 {
+            return Ok(());
+        }
+        worker.fast_forward(epochs * BLOCKS_PER_EPOCH).await?;
+        Ok(())
+    }
+
+    pub async fn force_offer_expired(vault: &Contract) -> Result<()> {
+        vault
+            .call("set_accepted_offer_timestamp")
+            .args_json(json!({ "timestamp": PAST_TIMESTAMP }))
+            .transact()
+            .await?
+            .into_result()?;
+        Ok(())
+    }
+
+    pub async fn process_claims(
+        caller: &Account,
+        vault: &Contract,
+    ) -> Result<ExecutionFinalResult> {
+        let result = caller
+            .call(vault.id(), "process_claims")
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?;
+        Ok(result)
+    }
+
+    pub fn find_unstake_amount(
+        entries: &[(String, UnstakeEntry)],
+        validator_id: &str,
+    ) -> Option<u128> {
+        entries
+            .iter()
+            .find(|(id, _)| id == validator_id)
+            .map(|(_, entry)| entry.amount)
+    }
+}
+
+#[tokio::test]
+async fn process_claims_transfers_entire_debt_when_balance_sufficient() -> Result<()> {
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
     let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
 
-    // Delegate 5 NEAR from vault to validator
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(5)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward to simulate staking
+    helpers::delegate(&root, &vault, &validator, NearToken::from_near(5)).await?;
     worker.fast_forward(1).await?;
 
-    // Request and accept liquidity request
     request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
+    helpers::force_offer_expired(&vault).await?;
 
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
+    let result = helpers::process_claims(&lender, &vault)
         .await?
         .into_result()?;
+    assert!(
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains(r#""event":"liquidation_complete""#)),
+        "Expected liquidation_complete event; logs: {:#?}",
+        result.logs()
+    );
 
-    // Call process_claims after expiration
-    let result = lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Check that liquidation was finalized
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     assert!(
         state.liquidity_request.is_none(),
-        "Expected liquidity_request to be cleared after full repayment"
+        "Expected liquidity_request to be cleared"
     );
     assert!(
         state.accepted_offer.is_none(),
-        "Expected accepted_offer to be cleared after full repayment"
+        "Expected accepted_offer to be cleared"
     );
-
-    // Verify liquidation_complete log was emitted
-    let logs = result.logs();
-    let matched = logs
-        .iter()
-        .any(|log| log.contains("EVENT_JSON") && log.contains(r#""event":"liquidation_complete""#));
     assert!(
-        matched,
-        "Expected liquidation_complete event not found: {:#?}",
-        logs
+        state.liquidation.is_none(),
+        "Expected liquidation snapshot to be cleared"
     );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_process_claims_triggers_unstake_after_partial_repayment() -> anyhow::Result<()> {
-    // Setup sandbox and accounts
+async fn process_claims_unstakes_full_shortfall_when_no_liquid_funds() -> Result<()> {
     let (worker, root, lender) = setup_sandbox_and_accounts().await?;
-
-    // Setup contracts
     let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
 
-    // Query the vault's available balance
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let available_yocto = available.0;
-
-    // Compute how much to delegate (leave 2 NEAR for repayment)
-    let leave_behind = NearToken::from_near(2).as_yoctonear();
-    let to_delegate = available_yocto - leave_behind;
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_yoctonear(to_delegate)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward to simulate validator update
+    helpers::delegate(&root, &vault, &validator, NearToken::from_near(5)).await?;
     worker.fast_forward(1).await?;
 
-    // Request and accept liquidity request
     request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
 
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
+    let available = helpers::available_balance(&vault).await?;
+    helpers::withdraw_near(&root, &vault, available).await?;
+
+    helpers::force_offer_expired(&vault).await?;
+    let result = helpers::process_claims(&lender, &vault)
         .await?
         .into_result()?;
+    assert!(
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains("unstake_recorded")),
+        "Expected unstake_recorded log; logs: {:#?}",
+        result.logs()
+    );
 
-    // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
-    lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Check vault state — loan should still be active
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     assert!(
         state.liquidity_request.is_some(),
-        "Liquidity request should still be open"
+        "Liquidity request should remain open after scheduling unstake"
     );
     assert!(
         state.accepted_offer.is_some(),
-        "Accepted offer should still be active"
+        "Accepted offer should remain until repayment completes"
     );
 
-    // Check validator is listed in active_validators
     let validator_id = validator.id().to_string();
-    assert!(
-        state.active_validators.contains(&validator_id),
-        "Validator should be listed in active_validators"
-    );
-
-    // Check unstake_entries has correct validator + ~3 NEAR
-    let unstaked_entry = state
-        .unstake_entries
-        .iter()
-        .find(|(v, _)| v == &validator_id)
+    let scheduled = helpers::find_unstake_amount(&state.unstake_entries, &validator_id)
         .expect("Expected unstake entry for validator");
-    let rounded = unstaked_entry.1.amount / YOCTO_NEAR;
-    assert_eq!(rounded, 3, "Expected 3 NEAR in unstake_entries");
-
-    // Check epoch is non-zero
-    assert!(state.current_epoch > 0, "Current epoch should be set");
-
-    // Check liquidation flag (should be true after expiration + process_claims)
-    assert!(
-        state.liquidation.is_some(),
-        "Vault should be in liquidation mode"
-    );
-
-    // Available balance should now be 0 (after partial repayment)
-    let remaining: U128 = vault.view("view_available_balance").await?.json()?;
     assert_eq!(
-        remaining.0, 0,
-        "Expected available balance to be 0 after partial repayment"
+        scheduled / YOCTO_NEAR,
+        5,
+        "Expected approximately 5 NEAR scheduled to unstake"
+    );
+    assert!(
+        state.active_validators.iter().all(|id| id != &validator_id),
+        "Validator should be removed from active set when fully unstaked"
     );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_process_claims_claims_matured_unstaked_near() -> anyhow::Result<()> {
-    // Setup sandbox and accounts
+async fn process_claims_combines_liquid_payout_with_unstake_when_partial_balance() -> Result<()> {
     let (worker, root, lender) = setup_sandbox_and_accounts().await?;
-
-    // Setup contracts
     let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
 
-    // Delegate most vault funds, leave 2 NEAR
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let leave_behind = NearToken::from_near(2).as_yoctonear();
-    let to_delegate = available.0 - leave_behind;
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_yoctonear(to_delegate)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward to simulate validator update
+    helpers::delegate(&root, &vault, &validator, NearToken::from_near(5)).await?;
     worker.fast_forward(1).await?;
 
-    // Request and accept liquidity request
     request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
 
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
+    let available = helpers::available_balance(&vault).await?;
+    let keep = NearToken::from_near(2).as_yoctonear();
+    helpers::withdraw_near(&root, &vault, available.saturating_sub(keep)).await?;
+
+    helpers::force_offer_expired(&vault).await?;
+    let result = helpers::process_claims(&lender, &vault)
         .await?
         .into_result()?;
 
-    // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
-    root.call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 5 epochs to mature the unstake
-    worker.fast_forward(5 * 500).await?;
-
-    // Call process_claims again — should now trigger withdraw_all unstake_entries
-    root.call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Verify: loan is now fully repaid and state is cleared
-    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     assert!(
-        state.liquidity_request.is_none(),
-        "Expected liquidity_request to be cleared after full repayment"
-    );
-    assert!(
-        state.accepted_offer.is_none(),
-        "Expected accepted_offer to be cleared after full repayment"
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains(r#""event":"lender_payout_succeeded""#)),
+        "Expected lender payout log; logs: {:#?}",
+        result.logs()
     );
 
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_process_claims_waits_when_unstake_is_still_maturing() -> anyhow::Result<()> {
-    // Setup sandbox and accounts
-    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
-
-    // Setup contracts
-    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
-
-    // Leave ~2 NEAR, delegate the rest
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let to_delegate = available.0.saturating_sub(NearToken::from_near(2).as_yoctonear());
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_yoctonear(to_delegate)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 epoch
-    worker.fast_forward(1).await?;
-
-    // Request and accept liquidity request
-    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
-
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Call process_claims — should use 2 NEAR, unstake remaining 3 NEAR
-    lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block not enough for the 3 NEAR to be unstaked
-    worker.fast_forward(1).await?;
-
-    // Call process_claims again — should detect maturing, not claim
-    let result = lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Expect: unstake_entry still exists
-    let entry: Option<UnstakeEntry> = vault
-        .view("get_unstake_entry")
-        .args_json(json!({ "validator": validator.id() }))
-        .await?
-        .json()?;
-    assert!(entry.is_some(), "Expected unstake_entry to still exist");
-
-    // Expect: loan is still active
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     assert!(
         state.liquidity_request.is_some(),
-        "Expected loan to still be active"
+        "Loan should remain active after partial repayment"
     );
     assert!(
         state.accepted_offer.is_some(),
-        "Expected accepted_offer to still be active"
+        "Accepted offer should remain active after partial repayment"
     );
 
-    // Expect: log indicates waiting
-    let matched = result.logs().iter().any(|log| {
-        log.contains("EVENT_JSON")
-            && log.contains(r#""event":"liquidation_progress""#)
-            && log.contains("waiting")
-    });
+    let validator_id = validator.id().to_string();
+    let scheduled = helpers::find_unstake_amount(&state.unstake_entries, &validator_id)
+        .expect("Expected unstake entry for validator");
+    assert_eq!(
+        scheduled / YOCTO_NEAR,
+        3,
+        "Expected approximately 3 NEAR to be unstaking after partial payout"
+    );
+
+    let remaining = helpers::available_balance(&vault).await?;
     assert!(
-        matched,
-        "Expected liquidation_progress waiting log not found: {:#?}",
+        remaining < 10u128.pow(20),
+        "Expected vault liquid balance to be drained after payout, found {}",
+        remaining
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn process_claims_waits_for_maturing_unstake_when_deficit_already_inflight() -> Result<()> {
+    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
+
+    helpers::delegate(&root, &vault, &validator, NearToken::from_near(10)).await?;
+    worker.fast_forward(1).await?;
+    helpers::undelegate(&root, &vault, &validator, NearToken::from_near(5)).await?;
+
+    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
+
+    let available = helpers::available_balance(&vault).await?;
+    helpers::withdraw_near(&root, &vault, available).await?;
+
+    helpers::force_offer_expired(&vault).await?;
+    let result = helpers::process_claims(&lender, &vault)
+        .await?
+        .into_result()?;
+    assert!(
+        result.logs().iter().any(|log| {
+            log.contains(r#""event":"liquidation_progress""#)
+                && log.contains(r#""reason":"NEAR unstaking""#)
+        }),
+        "Expected liquidation_progress waiting for NEAR unstaking; logs: {:#?}",
         result.logs()
     );
 
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let validator_id = validator.id().to_string();
+    let scheduled = helpers::find_unstake_amount(&state.unstake_entries, &validator_id)
+        .expect("Expected maturing unstake entry");
+    assert_eq!(
+        scheduled / YOCTO_NEAR,
+        5,
+        "Expected existing 5 NEAR unstake entry to remain in place"
+    );
+    assert!(
+        state.liquidity_request.is_some() && state.accepted_offer.is_some(),
+        "Loan should continue waiting on maturing stake"
+    );
+
     Ok(())
 }
 
 #[tokio::test]
-async fn test_process_claims_triggers_fallback_unstake_when_maturing_insufficient(
-) -> anyhow::Result<()> {
-    // Setup sandbox and accounts
+async fn process_claims_claims_matured_then_unstakes_remaining_shortfall() -> Result<()> {
     let (worker, root, lender) = setup_sandbox_and_accounts().await?;
-
-    // Setup contracts
     let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
 
-    // Leave ~2 NEAR, delegate the rest
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let storage_cost: U128 = vault.view("view_storage_cost").await?.json()?;
-
-    let to_delegate = available.0.saturating_sub(NearToken::from_near(2).as_yoctonear());
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_yoctonear(to_delegate)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
+    helpers::delegate(&root, &vault, &validator, NearToken::from_near(8)).await?;
     worker.fast_forward(1).await?;
+    helpers::undelegate(&root, &vault, &validator, NearToken::from_near(3)).await?;
+    helpers::fast_forward_epochs(&worker, MATURITY_PADDING_EPOCHS).await?;
 
-    let _available_after_delegate: U128 = vault.view("view_available_balance").await?.json()?;
-
-    // Undelegate 2 NEAR tokens
-    root.call(vault.id(), "undelegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(2)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
-    worker.fast_forward(1).await?;
-
-    // Request and accept liquidity request
     request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
 
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
+    let available = helpers::available_balance(&vault).await?;
+    helpers::withdraw_near(&root, &vault, available).await?;
+
+    helpers::force_offer_expired(&vault).await?;
+    let result = helpers::process_claims(&lender, &vault)
         .await?
         .into_result()?;
-
-    // Call process_claims — should
-    // use 2 NEAR available,
-    // see 2 NEAR tokens maturing
-    // unbond the extra 1 NEAR to cover the deficit
-    lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Expect the vault balance to be fully used
-    let available_after: U128 = vault.view("view_available_balance").await?.json()?;
-    let storage_cost_after: U128 = vault.view("view_storage_cost").await?.json()?;
-    let storage_delta = storage_cost_after.0.saturating_sub(storage_cost.0);
-    let tolerance = 1_000_000_000_000_000_000u128; // 0.001 NEAR
     assert!(
-        available_after.0 <= storage_delta + tolerance,
-        "Vault should be fully drained before fallback unstake (balance={}, storage delta={})",
-        available_after.0,
-        storage_delta
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains("unstake_recorded")),
+        "Expected fallback unstake to be scheduled; logs: {:#?}",
+        result.logs()
     );
-
-    // Expect unstake entry for validator to now be ~3 NEAR
-    let entry: UnstakeEntry = vault
-        .view("get_unstake_entry")
-        .args_json(json!({ "validator": validator.id() }))
-        .await?
-        .json()?;
-    let unstaked_rounded = entry.amount / YOCTO_NEAR;
-    assert_eq!(
-        unstaked_rounded, 3,
-        "Expected ~3 NEAR to be in unstake_entries, got: {} yocto",
-        entry.amount
-    );
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_process_claims_triggers_fallback_unstake_when_matured_insufficient(
-) -> anyhow::Result<()> {
-    // Setup sandbox and accounts
-    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
-
-    // Setup contracts
-    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
-
-    // Leave ~2 NEAR, delegate the rest
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let to_delegate = available.0 - NearToken::from_near(2).as_yoctonear();
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_yoctonear(to_delegate)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
-    worker.fast_forward(1).await?;
-
-    // Undelegate 2 NEAR tokens
-    root.call(vault.id(), "undelegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(2)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
-    worker.fast_forward(1).await?;
-
-    // Request and accept liquidity request
-    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
-
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Wait for more than 4 epochs for unstaked balance to mature
-    worker.fast_forward(5 * 500).await?;
-
-    // Call process_claims — should
-    // use 2 NEAR available,
-    // use 2 NEAR matured unstake entry
-    // unbond the extra 1 NEAR to cover the deficit
-    lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Expect the vault balance to be used
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    assert_eq!(
-        available.0, 0,
-        "Expected vault balance to be 0 after partial repayment"
-    );
-
-    // Expect unstake entry for validator to now be ~1 NEAR
-    let entry: UnstakeEntry = vault
-        .view("get_unstake_entry")
-        .args_json(json!({ "validator": validator.id() }))
-        .await?
-        .json()?;
-    let unstaked_rounded = entry.amount / YOCTO_NEAR;
-    assert_eq!(
-        unstaked_rounded, 1,
-        "Expected ~1 NEAR to be in unstake_entries, got: {} yocto",
-        entry.amount
-    );
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_process_claims_waits_when_matured_and_maturing_is_sufficient() -> anyhow::Result<()> {
-    // Setup sandbox and accounts
-    let (worker, root, lender) = setup_sandbox_and_accounts().await?;
-
-    // Setup contracts
-    let (validator_1, token, vault) = setup_contracts(&worker, &root, &lender).await?;
-
-    // Create another validator_2
-    let validator_2 = create_named_test_validator(&worker, &root, "validator_2").await?;
-
-    // Stake all but 4NEAR to validator_1
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let to_delegate = available.0 - NearToken::from_near(4).as_yoctonear();
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator_1.id(),
-            "amount": NearToken::from_yoctonear(to_delegate)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Stake 3NEAR to validator_2 leaving ~1NEAR as vault balance
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator_2.id(),
-            "amount": NearToken::from_near(3)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
-    worker.fast_forward(1).await?;
-
-    // Unstake 2NEAR from validator_1
-    root.call(vault.id(), "undelegate")
-        .args_json(json!({
-            "validator": validator_1.id(),
-            "amount": NearToken::from_near(2)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 5 epochs
-    worker.fast_forward(5 * 500).await?;
-
-    // Unstake 3NEAR from validator_2
-    root.call(vault.id(), "undelegate")
-        .args_json(json!({
-            "validator": validator_2.id(),
-            "amount": NearToken::from_near(3)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
-    worker.fast_forward(1).await?;
-
-    // Request and accept liquidity request
-    request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
-
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Call process_claims by lender
-    let result = lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Inspect logs to see "NEAR unstaking"
-    // Expect: log indicates waiting
-    let matched = result.logs().iter().any(|log| {
-        log.contains("EVENT_JSON")
-            && log.contains(r#""event":"liquidation_progress""#)
-            && log.contains("NEAR unstaking")
-    });
     assert!(
-        matched,
-        "Expected liquidation_progress `NEAR unstaking` log not found: {:#?}",
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains(r#""event":"lender_payout_succeeded""#)),
+        "Expected lender payout log; logs: {:#?}",
         result.logs()
     );
 
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
+    let validator_id = validator.id().to_string();
+    let scheduled = helpers::find_unstake_amount(&state.unstake_entries, &validator_id)
+        .expect("Expected new unstake entry for remaining shortfall");
+    assert!(
+        scheduled >= YOCTO_NEAR && scheduled <= 3 * YOCTO_NEAR,
+        "Expected remaining unstake between 1 and 3 NEAR, got {} yocto",
+        scheduled
+    );
+    assert!(
+        state.liquidity_request.is_some() && state.accepted_offer.is_some(),
+        "Loan should remain active until remaining unstake settles"
+    );
+
     Ok(())
 }
 
 #[tokio::test]
-async fn test_process_claims_prunes_zero_staked_validators() -> anyhow::Result<()> {
-    // Setup sandbox and accounts
+async fn process_claims_claims_matured_balance_and_completes_liquidation() -> Result<()> {
     let (worker, root, lender) = setup_sandbox_and_accounts().await?;
+    let (validator, token, vault) = setup_contracts(&worker, &root, &lender).await?;
 
-    // Setup contracts
-    let (validator_1, token, vault) = setup_contracts(&worker, &root, &lender).await?;
-
-    // Create another validator_2
-    let validator_2 = create_named_test_validator(&worker, &root, "validator_2").await?;
-
-    // Withdraw all available balance from vault leaving behind only 6NEAR
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    let to_withdraw = available.0 - NearToken::from_near(6).as_yoctonear();
-    root.call(vault.id(), "withdraw_balance")
-        .args_json(serde_json::json!({
-            "token_address": null,
-            "amount": to_withdraw.to_string(),
-            "to": root.id()
-        }))
-        .deposit(near_sdk::NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Delegate 3NEAR to validator_1
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator_1.id(),
-            "amount": NearToken::from_near(3)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
+    helpers::delegate(&root, &vault, &validator, NearToken::from_near(10)).await?;
     worker.fast_forward(1).await?;
+    helpers::undelegate(&root, &vault, &validator, NearToken::from_near(5)).await?;
+    helpers::fast_forward_epochs(&worker, MATURITY_PADDING_EPOCHS).await?;
 
-    // Delegate 2NEAR to validator_2
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator_2.id(),
-            "amount": NearToken::from_near(2)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fast-forward 1 block
-    worker.fast_forward(1).await?;
-
-    // Request and accept liquidity request
     request_and_accept_liquidity(&root, &lender, &vault, &token).await?;
 
-    // Patch accepted_at to simulate expiration
-    vault
-        .call("set_accepted_offer_timestamp")
-        .args_json(json!({ "timestamp": 1_000_000_000 }))
-        .transact()
+    let available = helpers::available_balance(&vault).await?;
+    helpers::withdraw_near(&root, &vault, available).await?;
+
+    helpers::force_offer_expired(&vault).await?;
+    let result = helpers::process_claims(&lender, &vault)
         .await?
         .into_result()?;
-
-    // Call process_claims by lender
-    lender
-        .call(vault.id(), "process_claims")
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Expect the vault balance to be used
-    let available: U128 = vault.view("view_available_balance").await?.json()?;
-    assert_eq!(
-        available.0, 0,
-        "Expected vault balance to be 0 after partial repayment"
-    );
-
-    // Expect ~3 NEAR to be in unstake_entries for validator_1
-    let entry: UnstakeEntry = vault
-        .view("get_unstake_entry")
-        .args_json(json!({ "validator": validator_1.id() }))
-        .await?
-        .json()?;
-    let unstaked_rounded = entry.amount / YOCTO_NEAR;
-    assert_eq!(
-        unstaked_rounded, 3,
-        "Expected ~3 NEAR to be in unstake_entries for validator_1, got: {} yocto",
-        entry.amount
-    );
-
-    // Expect ~1 NEAR to be in unstake_entries for validator_2
-    let entry: UnstakeEntry = vault
-        .view("get_unstake_entry")
-        .args_json(json!({ "validator": validator_2.id() }))
-        .await?
-        .json()?;
-    let unstaked_rounded = entry.amount / YOCTO_NEAR;
-    assert_eq!(
-        unstaked_rounded, 1,
-        "Expected ~1 NEAR to be in unstake_entries for validator_2, got: {} yocto",
-        entry.amount
-    );
-
-    // Query active validators list
-    let active_validators: Vec<String> = vault
-        .view("get_active_validators")
-        .await?
-        .json()
-        .expect("Failed to decode active validators");
-    assert_eq!(
-        active_validators.len(),
-        1,
-        "Only one validator should exist",
-    );
-
-    // Assert validator_1 is no longer in the active set
     assert!(
-        !active_validators.contains(&validator_1.id().to_string()),
-        "Validator_1 should be removed after unstaking to zero"
+        result
+            .logs()
+            .iter()
+            .any(|log| log.contains(r#""event":"liquidation_complete""#)),
+        "Expected liquidation_complete event; logs: {:#?}",
+        result.logs()
+    );
+    assert!(
+        result.logs().iter().any(|log| {
+            log.contains("lender_payout_succeeded") && log.contains("5000000000000000000000000")
+        }),
+        "Expected payout of 5 NEAR; logs: {:#?}",
+        result.logs()
     );
 
-    // Assert validator_2 is on the active set
+    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     assert!(
-        active_validators.contains(&validator_2.id().to_string()),
-        "Validator_2 should remain on the set"
+        state.liquidity_request.is_none(),
+        "Expected liquidity_request to be cleared once fully repaid"
+    );
+    assert!(
+        state.accepted_offer.is_none(),
+        "Expected accepted_offer to be cleared once fully repaid"
+    );
+    assert!(
+        state.liquidation.is_none(),
+        "Liquidation state should be cleared after completion"
+    );
+    assert!(
+        helpers::find_unstake_amount(&state.unstake_entries, &validator.id().to_string()).is_none(),
+        "No unstake entries should remain once liquidation completes"
     );
 
     Ok(())
