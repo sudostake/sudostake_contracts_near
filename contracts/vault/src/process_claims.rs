@@ -362,10 +362,7 @@ impl Vault {
     /// Processes the response from `batch_query_total_staked`, computing the
     /// amounts that still need to be unstaked.
     #[private]
-    pub fn on_total_staked_process_claims(
-        &mut self,
-        validator_ids: Vec<AccountId>,
-    ) -> Promise {
+    pub fn on_total_staked_process_claims(&mut self, validator_ids: Vec<AccountId>) -> Promise {
         self.log_gas_checkpoint("on_total_staked_process_claims");
 
         let available = self.get_available_balance().as_yoctonear();

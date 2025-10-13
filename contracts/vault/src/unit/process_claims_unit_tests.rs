@@ -26,7 +26,12 @@ fn expiry_timestamp() -> u64 {
     request.duration * NANOS_PER_SECOND + 1
 }
 
-fn context_builder(balance_near: u128, attached_deposit: Option<u128>, now: u64, epoch: u64) -> VMContextBuilder {
+fn context_builder(
+    balance_near: u128,
+    attached_deposit: Option<u128>,
+    now: u64,
+    epoch: u64,
+) -> VMContextBuilder {
     let mut builder = VMContextBuilder::new();
     builder
         .predecessor_account_id(owner())
@@ -43,7 +48,9 @@ fn context_builder(balance_near: u128, attached_deposit: Option<u128>, now: u64,
 
 fn new_vault_with_liquidity() -> Vault {
     let mut vault = Vault::new(owner(), 0, 1);
-    vault.liquidity_request = Some(create_valid_liquidity_request("usdc.test.near".parse().unwrap()));
+    vault.liquidity_request = Some(create_valid_liquidity_request(
+        "usdc.test.near".parse().unwrap(),
+    ));
     vault.accepted_offer = Some(AcceptedOffer {
         lender: alice(),
         accepted_at: 0,
@@ -51,7 +58,11 @@ fn new_vault_with_liquidity() -> Vault {
     vault
 }
 
-fn initialise_liquidation_context(balance_near: u128, attached_deposit: Option<u128>, epoch: u64) -> Vault {
+fn initialise_liquidation_context(
+    balance_near: u128,
+    attached_deposit: Option<u128>,
+    epoch: u64,
+) -> Vault {
     let now = expiry_timestamp();
     let builder = context_builder(balance_near, attached_deposit, now, epoch);
     testing_env!(builder.build());
@@ -65,7 +76,13 @@ fn set_env_with_promise_result(builder: VMContextBuilder, result: PromiseResult)
 
 fn set_env_with_promise_results(builder: VMContextBuilder, results: Vec<PromiseResult>) {
     let context = builder.build();
-    testing_env!(context, test_vm_config(), RuntimeFeesConfig::test(), Default::default(), results);
+    testing_env!(
+        context,
+        test_vm_config(),
+        RuntimeFeesConfig::test(),
+        Default::default(),
+        results
+    );
 }
 
 fn insert_unstake_entry(vault: &mut Vault, validator: &str, amount: u128, epoch_height: u64) {
@@ -103,7 +120,9 @@ fn process_claims_requires_offer() {
     testing_env!(builder.build());
 
     let mut vault = Vault::new(owner(), 0, 1);
-    vault.liquidity_request = Some(create_valid_liquidity_request("usdc.test.near".parse().unwrap()));
+    vault.liquidity_request = Some(create_valid_liquidity_request(
+        "usdc.test.near".parse().unwrap(),
+    ));
     vault.process_claims();
 }
 
@@ -205,11 +224,7 @@ fn process_claims_queries_additional_unstake_when_shortfall() {
     let epoch = 210;
     let mut vault = initialise_liquidation_context(10, Some(1), epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault
-        .liquidity_request
-        .as_mut()
-        .unwrap()
-        .collateral = NearToken::from_near(100);
+    vault.liquidity_request.as_mut().unwrap().collateral = NearToken::from_near(100);
 
     let _ = vault.process_claims();
 
@@ -229,11 +244,7 @@ fn process_claims_pays_lender_when_liquid_balance_sufficient() {
     let epoch = 300;
     let mut vault = initialise_liquidation_context(200, Some(1), epoch);
     let lender = alice();
-    vault
-        .liquidity_request
-        .as_mut()
-        .unwrap()
-        .collateral = NearToken::from_near(2);
+    vault.liquidity_request.as_mut().unwrap().collateral = NearToken::from_near(2);
 
     let _ = vault.process_claims();
 
@@ -250,7 +261,9 @@ fn process_claims_pays_lender_when_liquid_balance_sufficient() {
 fn on_lender_payout_complete_finalises_liquidation() {
     let mut vault = initialise_liquidation_context(5, None, 200);
     vault.processing_state = ProcessingState::ProcessClaims;
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
 
     let _ = vault.on_lender_payout_complete(alice(), 5 * YOCTO_NEAR, true, Ok(()));
 
@@ -264,7 +277,9 @@ fn on_lender_payout_complete_finalises_liquidation() {
 fn on_lender_payout_complete_records_partial_amount() {
     let mut vault = initialise_liquidation_context(2, None, 200);
     vault.processing_state = ProcessingState::ProcessClaims;
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
 
     let _ = vault.on_lender_payout_complete(alice(), 2 * YOCTO_NEAR, false, Ok(()));
 
@@ -285,19 +300,25 @@ fn promise_success_result(value: &[u8]) -> PromiseResult {
 }
 
 fn contains_function_call(receipts: &[Receipt], method: &str) -> bool {
-    receipts.iter().flat_map(|r| r.actions.iter()).any(|action| match action {
-        MockAction::FunctionCallWeight { method_name, .. } => method_name == method.as_bytes(),
-        _ => false,
-    })
+    receipts
+        .iter()
+        .flat_map(|r| r.actions.iter())
+        .any(|action| match action {
+            MockAction::FunctionCallWeight { method_name, .. } => method_name == method.as_bytes(),
+            _ => false,
+        })
 }
 
 fn find_transfer_to(receipts: &[Receipt], receiver: &AccountId) -> Option<NearToken> {
-    receipts.iter().find(|receipt| &receipt.receiver_id == receiver).and_then(|receipt| {
-        receipt.actions.iter().find_map(|action| match action {
-            MockAction::Transfer { deposit, .. } => Some(*deposit),
-            _ => None,
+    receipts
+        .iter()
+        .find(|receipt| &receipt.receiver_id == receiver)
+        .and_then(|receipt| {
+            receipt.actions.iter().find_map(|action| match action {
+                MockAction::Transfer { deposit, .. } => Some(*deposit),
+                _ => None,
+            })
         })
-    })
 }
 
 #[test]
@@ -310,7 +331,9 @@ fn on_batch_claim_unstaked_removes_successful_entries() {
         3 * YOCTO_NEAR,
         epoch - NUM_EPOCHS_TO_UNLOCK,
     );
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, Some(1), expiry_timestamp(), epoch);
@@ -335,7 +358,9 @@ fn on_batch_claim_unstaked_preserves_failed_entries() {
         3 * YOCTO_NEAR,
         epoch - NUM_EPOCHS_TO_UNLOCK,
     );
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, Some(1), expiry_timestamp(), epoch);
@@ -360,11 +385,16 @@ fn on_total_staked_process_claims_waits_when_deficit_is_zero() {
         5 * YOCTO_NEAR,
         epoch, // still maturing
     );
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
-    set_env_with_promise_result(builder, promise_success_result(&serde_json::to_vec(&U128(0)).unwrap()));
+    set_env_with_promise_result(
+        builder,
+        promise_success_result(&serde_json::to_vec(&U128(0)).unwrap()),
+    );
 
     let _ = vault.on_total_staked_process_claims(vec![VALIDATOR_A.parse().unwrap()]);
 
@@ -376,11 +406,16 @@ fn on_total_staked_process_claims_removes_zero_balance_validator() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
-    set_env_with_promise_result(builder, promise_success_result(&serde_json::to_vec(&U128(0)).unwrap()));
+    set_env_with_promise_result(
+        builder,
+        promise_success_result(&serde_json::to_vec(&U128(0)).unwrap()),
+    );
 
     let validator: AccountId = VALIDATOR_A.parse().unwrap();
     let _ = vault.on_total_staked_process_claims(vec![validator.clone()]);
@@ -396,7 +431,9 @@ fn on_total_staked_process_claims_schedules_unstake_for_deficit() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
@@ -418,7 +455,9 @@ fn on_total_staked_process_claims_handles_failed_queries() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
@@ -439,7 +478,9 @@ fn on_total_staked_process_claims_ignores_invalid_payloads() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
@@ -461,7 +502,9 @@ fn on_batch_unstake_updates_entries_on_success() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
@@ -486,7 +529,9 @@ fn on_batch_unstake_keeps_validator_for_partial_unstake() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
@@ -518,7 +563,9 @@ fn on_batch_unstake_handles_failed_promises() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(0, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(0, None, expiry_timestamp(), epoch);
@@ -544,7 +591,9 @@ fn on_batch_unstake_attempts_payout_when_liquid_balance_exists() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(1000, None, epoch);
     enable_active_validator(&mut vault, VALIDATOR_A);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
     let builder = context_builder(1000, None, expiry_timestamp(), epoch);
@@ -569,10 +618,17 @@ fn on_batch_unstake_attempts_payout_when_liquid_balance_exists() {
 fn lender_payout_failure_retains_state() {
     let epoch = 200;
     let mut vault = initialise_liquidation_context(5, None, epoch);
-    vault.liquidation = Some(Liquidation { liquidated: NearToken::from_yoctonear(0) });
+    vault.liquidation = Some(Liquidation {
+        liquidated: NearToken::from_yoctonear(0),
+    });
     vault.processing_state = ProcessingState::ProcessClaims;
 
-    let _ = vault.on_lender_payout_complete(alice(), YOCTO_NEAR, false, Err(near_sdk::PromiseError::Failed));
+    let _ = vault.on_lender_payout_complete(
+        alice(),
+        YOCTO_NEAR,
+        false,
+        Err(near_sdk::PromiseError::Failed),
+    );
 
     assert!(vault.liquidation.is_some());
     assert_eq!(vault.processing_state, ProcessingState::Idle);
