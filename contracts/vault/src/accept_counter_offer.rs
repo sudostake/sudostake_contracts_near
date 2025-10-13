@@ -29,9 +29,10 @@ impl Vault {
             "Only the vault owner can accept a counter offer"
         );
 
-        let liquidity_request = self
+        let token = self
             .liquidity_request
             .as_ref()
+            .map(|request| request.token.clone())
             .expect("No liquidity request available");
 
         require!(
@@ -45,7 +46,7 @@ impl Vault {
             .expect("No counter offers available");
 
         let offer = offers
-            .get(&proposer_id)
+            .remove(&proposer_id)
             .expect("Counter offer from proposer not found");
 
         require!(
@@ -53,27 +54,35 @@ impl Vault {
             "Provided amount does not match the counter offer"
         );
 
-        offers.remove(&proposer_id);
+        let accepted_amount = offer.amount;
 
         self.accepted_offer = Some(crate::types::AcceptedOffer {
             lender: proposer_id.clone(),
             accepted_at: env::block_timestamp(),
         });
 
-        let token = liquidity_request.token.clone();
+        let liquidity_request = {
+            let request = self
+                .liquidity_request
+                .as_mut()
+                .expect("No liquidity request available");
+            request.amount = accepted_amount;
+            request.clone()
+        };
 
         for other_offer in offers.values() {
             let _ = self.refund_counter_offer(token.clone(), other_offer);
         }
 
         offers.clear();
+        self.counter_offers = None;
 
         log_event!(
             "counter_offer_accepted",
             near_sdk::serde_json::json!({
                 "vault": env::current_account_id(),
                 "accepted_proposer": proposer_id,
-                "accepted_amount": amount.0.to_string(),
+                "accepted_amount": accepted_amount.0.to_string(),
                 "timestamp": env::block_timestamp(),
                 "request": liquidity_request
             })
