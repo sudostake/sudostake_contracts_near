@@ -151,6 +151,7 @@ impl Vault {
         }
 
         if offers_map.is_empty() {
+            // Explicitly clear to reclaim any persisted storage before dropping the map.
             offers_map.clear();
             self.counter_offers = None;
         } else {

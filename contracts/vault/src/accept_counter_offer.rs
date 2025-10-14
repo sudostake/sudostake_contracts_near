@@ -40,8 +40,7 @@ impl Vault {
             .expect("No counter offers available");
 
         let offer = offers
-            .get(&proposer_id)
-            .cloned()
+            .remove(&proposer_id)
             .expect("Counter offer from proposer not found");
 
         require!(
@@ -50,9 +49,6 @@ impl Vault {
         );
 
         let accepted_amount = offer.amount;
-        let offer = offers
-            .remove(&proposer_id)
-            .expect("Counter offer from proposer not found");
 
         self.accepted_offer = Some(crate::types::AcceptedOffer {
             lender: proposer_id.clone(),
