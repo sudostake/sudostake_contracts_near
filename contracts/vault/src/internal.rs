@@ -54,8 +54,6 @@ impl Vault {
             // Explicitly clear storage so stale offers do not linger between requests.
             counter_offers.clear();
 
-            self.counter_offers = None;
-
             self.schedule_counter_offer_refunds(token, pending_refunds);
         }
     }
