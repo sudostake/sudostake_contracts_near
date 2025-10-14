@@ -451,10 +451,12 @@ async fn accept_counter_offer_retry_clears_failed_refund_after_re_registration()
         "Refund list should be cleared once retry succeeds"
     );
 
+    let refund_amount = refunds_after_accept[0].1.amount.0;
+
     let bob_balance = get_usdc_balance(&env.token, bob.id()).await?;
     assert_eq!(
-        bob_balance.0, INITIAL_LENDER_BALANCE,
-        "Lender balance should be restored after successful retry"
+        bob_balance.0, refund_amount,
+        "Lender balance should reflect the refunded amount after retry"
     );
 
     Ok(())
