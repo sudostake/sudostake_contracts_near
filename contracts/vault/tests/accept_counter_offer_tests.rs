@@ -319,6 +319,148 @@ async fn accept_counter_offer_records_failed_refund_entry_when_lender_unregister
 }
 
 #[tokio::test]
+async fn accept_counter_offer_single_competing_offer_clears_refund_queue() -> Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
+
+    let bob = env
+        .create_lender("solo-bob", INITIAL_LENDER_BALANCE)
+        .await?;
+    let carol = env
+        .create_lender("solo-carol", INITIAL_LENDER_BALANCE)
+        .await?;
+
+    env.submit_counter_offer(&bob, 850_000, &request).await?;
+    env.submit_counter_offer(&carol, 900_000, &request).await?;
+
+    let outcome = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": carol.id(),
+            "amount": U128(900_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let logs = outcome.logs().join("\n");
+    assert!(
+        logs.contains(r#""event":"counter_offer_accepted""#),
+        "Accept call should emit accepted log. Logs: {logs}"
+    );
+
+    let refunds: Vec<(u64, RefundEntry)> = env
+        .vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
+    assert!(
+        refunds.is_empty(),
+        "Single competing offer should be refunded via direct callback without lingering entries"
+    );
+
+    let bob_balance = get_usdc_balance(&env.token, bob.id()).await?;
+    assert_eq!(
+        bob_balance.0, INITIAL_LENDER_BALANCE,
+        "Remaining lender should receive their refund"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn accept_counter_offer_retry_clears_failed_refund_after_re_registration() -> Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
+
+    let alice = env
+        .create_lender("retry-alice", INITIAL_LENDER_BALANCE)
+        .await?;
+    let bob = env
+        .create_lender("retry-bob", INITIAL_LENDER_BALANCE)
+        .await?;
+    let carol = env
+        .create_lender("retry-carol", INITIAL_LENDER_BALANCE)
+        .await?;
+
+    env.submit_counter_offer(&alice, 780_000, &request).await?;
+    env.submit_counter_offer(&bob, 860_000, &request).await?;
+    env.submit_counter_offer(&carol, 900_000, &request).await?;
+
+    bob.call(env.token.id(), "storage_unregister")
+        .args_json(json!({ "force": true }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    env.root
+        .call(env.vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": carol.id(),
+            "amount": U128(900_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let refunds_after_accept: Vec<(u64, RefundEntry)> = env
+        .vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
+    assert_eq!(
+        refunds_after_accept.len(),
+        1,
+        "Failed refund should remain pending after initial acceptance"
+    );
+
+    register_account_with_token(&env.root, &env.token, bob.id()).await?;
+
+    let retry_outcome = bob
+        .call(env.vault.id(), "retry_refunds")
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let retry_logs = retry_outcome.logs().join("\n");
+    assert!(
+        retry_logs.contains(r#""event":"retry_refund_succeeded""#),
+        "Retry path should report success. Logs: {retry_logs}"
+    );
+
+    let refunds_after_retry: Vec<(u64, RefundEntry)> = env
+        .vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
+    assert!(
+        refunds_after_retry.is_empty(),
+        "Refund list should be cleared once retry succeeds"
+    );
+
+    let bob_balance = get_usdc_balance(&env.token, bob.id()).await?;
+    assert_eq!(
+        bob_balance.0, INITIAL_LENDER_BALANCE,
+        "Lender balance should be restored after successful retry"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn accept_counter_offer_requires_one_yocto() -> Result<()> {
     let _guard = test_lock::acquire_test_mutex().await;
     let env = TestEnv::new().await?;
