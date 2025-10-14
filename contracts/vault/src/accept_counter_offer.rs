@@ -35,9 +35,10 @@ impl Vault {
         );
 
         // Ensure a liquidity request exists before touching counter offers.
-        self.liquidity_request
-            .as_ref()
-            .expect("No liquidity request available");
+        require!(
+            self.liquidity_request.is_some(),
+            "No liquidity request available"
+        );
 
         let mut offers = self
             .counter_offers
