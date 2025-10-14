@@ -73,7 +73,6 @@ impl Vault {
         let refunds: Vec<crate::types::CounterOffer> = offers.values().collect();
 
         offers.clear();
-        self.counter_offers = None;
 
         self.schedule_counter_offer_refunds(token, refunds);
 
