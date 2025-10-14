@@ -43,8 +43,13 @@ impl Vault {
             self.counter_offers = Some(offers_map);
         }
 
+        let liquidity_request = self
+            .liquidity_request
+            .as_ref()
+            .expect("No liquidity request available")
+            .clone();
+
         // Log counter_offer_cancelled event
-        let liquidity_request = self.liquidity_request.as_ref().unwrap();
         log_event!(
             "counter_offer_cancelled",
             near_sdk::serde_json::json!({

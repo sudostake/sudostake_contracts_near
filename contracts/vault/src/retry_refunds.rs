@@ -23,12 +23,14 @@ impl Vault {
     #[private]
     pub fn on_refund_complete(
         &mut self,
+        refund_id: RefundId,
         proposer: AccountId,
         amount: U128,
         token_address: AccountId,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
         self.log_gas_checkpoint("on_refund_complete");
+        self.refund_list.remove(&refund_id);
 
         if result.is_ok() {
             // 👌 Nothing more to do – the refund was successful.
@@ -45,7 +47,7 @@ impl Vault {
             })
         );
 
-        self.add_refund_entry(Some(token_address), proposer, amount, None, None);
+        let _ = self.add_refund_entry(Some(token_address), proposer, amount, Some(refund_id), None);
     }
 
     /// Manually retries refunds that previously failed.
@@ -94,7 +96,9 @@ impl Vault {
     }
 
     /// Schedules a refund promise and attaches the unified callback.
-    fn schedule_refund(&self, id: RefundId, entry: RefundEntry) {
+    fn schedule_refund(&mut self, id: RefundId, entry: RefundEntry) {
+        self.refund_list.insert(&id, &entry);
+
         let promise = if let Some(token) = &entry.token {
             ext_fungible_token::ext(token.clone())
                 .with_attached_deposit(NearToken::from_yoctonear(1))
@@ -119,6 +123,7 @@ impl Vault {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) {
         self.log_gas_checkpoint("on_retry_refund_complete");
+        self.refund_list.remove(&id);
 
         if result.is_ok() {
             log_event!(
@@ -149,7 +154,7 @@ impl Vault {
 
         let current_epoch = env::epoch_height();
         if current_epoch < added_at_epoch.saturating_add(REFUND_EXPIRY_EPOCHS) {
-            self.add_refund_entry(token, proposer, amount, Some(id), Some(added_at_epoch));
+            let _ = self.add_refund_entry(token, proposer, amount, Some(id), Some(added_at_epoch));
         }
     }
 }

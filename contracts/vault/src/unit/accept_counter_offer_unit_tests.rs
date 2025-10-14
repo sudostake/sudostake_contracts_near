@@ -1,5 +1,7 @@
 use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
-use test_utils::{alice, bob, get_context, owner};
+use test_utils::{
+    alice, bob, create_valid_liquidity_request, get_context, get_context_with_timestamp, owner,
+};
 
 use crate::{
     contract::Vault,
@@ -9,330 +11,246 @@ use crate::{
 #[path = "test_utils.rs"]
 mod test_utils;
 
-#[test]
-fn test_accept_counter_offer_succeeds() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
+fn set_env(predecessor: AccountId, deposit: Option<NearToken>) {
+    let ctx = get_context(predecessor, NearToken::from_near(10), deposit);
+    testing_env!(ctx);
+}
+
+fn set_env_with_timestamp(predecessor: AccountId, deposit: Option<NearToken>, timestamp: u64) {
+    let ctx = get_context_with_timestamp(
+        predecessor,
         NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
+        deposit,
+        Some(timestamp),
     );
     testing_env!(ctx);
+}
 
-    // Initialize vault and add liquidity request
+fn new_vault_with_request(token: AccountId) -> (Vault, LiquidityRequest) {
     let mut vault = Vault::new(owner(), 0, 1);
-    let token: AccountId = "usdc.test.near".parse().unwrap();
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let request = create_valid_liquidity_request(token);
+    vault.liquidity_request = Some(request.clone());
+    (vault, request)
+}
 
-    // Construct a valid counter offer message
-    let msg = CounterOfferMessage {
+fn counter_offer_message_from(request: &LiquidityRequest) -> CounterOfferMessage {
+    CounterOfferMessage {
         action: "NewCounterOffer".to_string(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+        token: request.token.clone(),
+        amount: request.amount,
+        interest: request.interest,
+        collateral: request.collateral,
+        duration: request.duration,
+    }
+}
 
-    // Propose counter offer by bob
-    let _ = vault.try_add_counter_offer(
-        "bob.near".parse().unwrap(),
-        U128(850_000),
-        msg.clone(),
-        token.clone(),
-    );
-
-    // Propose counter offer by alice
-    let _ = vault.try_add_counter_offer(alice(), U128(900_000), msg.clone(), token.clone());
-
-    // Accept alice's offer
-    vault.accept_counter_offer(alice(), U128(900_000));
-
-    // Assert vault state updated
-    let accepted = vault
-        .accepted_offer
-        .as_ref()
-        .expect("Expected accepted offer");
-    assert_eq!(accepted.lender, alice(), "Accepted lender should be alice");
-
-    // Assert counter offers cleared
-    assert!(
-        vault.counter_offers.is_none(),
-        "Counter offers should be cleared after acceptance"
-    );
+fn add_counter_offer(
+    vault: &mut Vault,
+    proposer: AccountId,
+    amount: u128,
+    request: &LiquidityRequest,
+) {
+    let msg = counter_offer_message_from(request);
+    vault
+        .try_add_counter_offer(proposer, U128(amount), msg, request.token.clone())
+        .expect("counter offer should be recorded");
 }
 
 #[test]
-fn test_accept_counter_offer_clears_underlying_storage() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
-
-    // Initialize vault and add liquidity request
-    let mut vault = Vault::new(owner(), 0, 1);
+fn accept_counter_offer_updates_request_and_clears_storage() {
     let token: AccountId = "usdc.test.near".parse().unwrap();
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let timestamp = 42_424_u64;
+    set_env_with_timestamp(owner(), Some(NearToken::from_yoctonear(1)), timestamp);
 
-    // Construct a valid counter offer message
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let (mut vault, request) = new_vault_with_request(token.clone());
+    add_counter_offer(&mut vault, bob(), 850_000, &request);
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
 
-    // Add offers from bob and carol
-    vault
-        .try_add_counter_offer(bob(), U128(850_000), msg.clone(), token.clone())
-        .expect("bob's offer should succeed");
-    let carol: AccountId = "carol.near".parse().unwrap();
-    vault
-        .try_add_counter_offer(carol.clone(), U128(900_000), msg, token.clone())
-        .expect("carol's offer should succeed");
+    vault.accept_counter_offer(alice(), U128(900_000));
 
-    // Accept carol's offer
-    vault.accept_counter_offer(carol.clone(), U128(900_000));
+    let accepted = vault
+        .accepted_offer
+        .as_ref()
+        .expect("expected accepted offer to be recorded");
+    assert_eq!(accepted.lender, alice(), "should store the lender account");
+    assert_eq!(
+        accepted.accepted_at, timestamp,
+        "accepted timestamp should use current block timestamp"
+    );
 
-    // Recreate the map directly on the storage key to inspect underlying data.
+    let updated_request = vault
+        .liquidity_request
+        .as_ref()
+        .expect("liquidity request should remain for active loan");
+    assert_eq!(
+        updated_request.amount,
+        U128(900_000),
+        "principal should match the accepted counter offer"
+    );
+    assert_eq!(
+        updated_request.token, request.token,
+        "token contract must stay unchanged"
+    );
+    assert_eq!(
+        updated_request.interest, request.interest,
+        "interest terms should remain intact"
+    );
+    assert_eq!(
+        updated_request.collateral, request.collateral,
+        "collateral should not be altered"
+    );
+    assert_eq!(
+        updated_request.duration, request.duration,
+        "duration should remain intact"
+    );
+
+    assert!(
+        vault.counter_offers.is_none(),
+        "counter offers should be cleared from state"
+    );
+
     let inspector: UnorderedMap<AccountId, crate::types::CounterOffer> =
         UnorderedMap::new(StorageKey::CounterOffers);
     assert_eq!(
         inspector.len(),
         0,
-        "Counter offers storage should be cleared after acceptance"
+        "underlying storage should be empty after acceptance"
     );
 }
 
 #[test]
-#[should_panic(expected = "Only the vault owner can accept a counter offer")]
-fn test_accept_fails_if_not_owner() {
-    // Set context as alice (not the owner)
-    let ctx = get_context(
-        alice(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
-
-    // Initialize vault and add liquidity request
-    let mut vault = Vault::new(owner(), 0, 1);
+fn accept_counter_offer_with_single_entry_clears_option() {
     let token: AccountId = "usdc.test.near".parse().unwrap();
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
 
-    // Add a valid counter offer from alice
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
-    vault
-        .try_add_counter_offer(alice(), U128(900_000), msg, token.clone())
-        .expect("Offer should be added successfully");
+    let (mut vault, request) = new_vault_with_request(token.clone());
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
 
-    // Alice attempts to accept her own offer (should panic)
+    vault.accept_counter_offer(alice(), U128(900_000));
+
+    assert!(
+        vault.counter_offers.is_none(),
+        "counter offers option should be None after acceptance"
+    );
+
+    let inspector: UnorderedMap<AccountId, crate::types::CounterOffer> =
+        UnorderedMap::new(StorageKey::CounterOffers);
+    assert_eq!(
+        inspector.len(),
+        0,
+        "underlying storage must be empty even when only a single offer existed"
+    );
+}
+
+#[test]
+fn accept_counter_offer_records_refunds_for_remaining_offers() {
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
+
+    let (mut vault, request) = new_vault_with_request(token.clone());
+    add_counter_offer(&mut vault, bob(), 800_000, &request);
+    let carol: AccountId = "carol.near".parse().unwrap();
+    add_counter_offer(&mut vault, carol.clone(), 850_000, &request);
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
+
+    vault.accept_counter_offer(alice(), U128(900_000));
+
+    let mut refunds: Vec<(AccountId, u128, Option<AccountId>)> = vault
+        .refund_list
+        .iter()
+        .map(|(_, entry)| (entry.proposer.clone(), entry.amount.0, entry.token.clone()))
+        .collect();
+    refunds.sort_by(|a, b| a.0.cmp(&b.0));
+
+    assert_eq!(
+        refunds,
+        vec![
+            (bob(), 800_000, Some(token.clone())),
+            (carol.clone(), 850_000, Some(token.clone()))
+        ],
+        "refund_list should retain entries for every non-accepted offer"
+    );
+}
+
+#[test]
+#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+fn accept_counter_offer_requires_exact_deposit() {
+    set_env(owner(), None);
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let (mut vault, request) = new_vault_with_request(token);
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
+
+    vault.accept_counter_offer(alice(), U128(900_000));
+}
+
+#[test]
+#[should_panic(expected = "Only the vault owner can accept a counter offer")]
+fn accept_counter_offer_rejects_non_owner() {
+    set_env(alice(), Some(NearToken::from_yoctonear(1)));
+
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let (mut vault, request) = new_vault_with_request(token);
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
+
     vault.accept_counter_offer(alice(), U128(900_000));
 }
 
 #[test]
 #[should_panic(expected = "No liquidity request available")]
-fn test_accept_fails_if_no_liquidity_request() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
-
-    // Initialize vault without liquidity request
+fn accept_counter_offer_requires_liquidity_request() {
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
     let mut vault = Vault::new(owner(), 0, 1);
 
-    // Try to accept (should panic because liquidity_request is None)
     vault.accept_counter_offer(alice(), U128(900_000));
 }
 
 #[test]
 #[should_panic(expected = "Liquidity request already accepted")]
-fn test_accept_fails_if_already_accepted() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
+fn accept_counter_offer_rejects_when_already_matched() {
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
 
-    // Create vault
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Add a liquidity request
     let token: AccountId = "usdc.test.near".parse().unwrap();
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
-
-    // Add an already accepted offer
+    let (mut vault, request) = new_vault_with_request(token);
     vault.accepted_offer = Some(AcceptedOffer {
-        lender: "bob.near".parse().unwrap(),
-        accepted_at: 12345678,
+        lender: bob(),
+        accepted_at: 99,
     });
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
 
-    // Attempt to accept another offer (should panic)
     vault.accept_counter_offer(alice(), U128(900_000));
 }
 
 #[test]
 #[should_panic(expected = "No counter offers available")]
-fn test_accept_fails_if_counter_offers_empty() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
+fn accept_counter_offer_requires_active_offers() {
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
 
-    // Create a vault
-    let mut vault = Vault::new(owner(), 0, 1);
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let (mut vault, _) = new_vault_with_request(token);
 
-    // Add a liquidity request
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
-
-    // Call accept_counter_offer without adding any offers
     vault.accept_counter_offer(alice(), U128(900_000));
 }
 
 #[test]
 #[should_panic(expected = "Counter offer from proposer not found")]
-fn test_accept_fails_if_proposer_does_not_exist() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
+fn accept_counter_offer_requires_existing_proposer_entry() {
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
 
-    // Create a vault
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Add a liquidity request
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
-
-    // Create counter offer message
     let token: AccountId = "usdc.test.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let (mut vault, request) = new_vault_with_request(token);
+    add_counter_offer(&mut vault, bob(), 850_000, &request);
 
-    // Add counter offer from bob
-    vault
-        .try_add_counter_offer(
-            "bob.near".parse().unwrap(),
-            U128(850_000),
-            msg,
-            token.clone(),
-        )
-        .expect("bob's offer should succeed");
-
-    // Attempt to accept alice's offer which doesn't exist
     vault.accept_counter_offer(alice(), U128(900_000));
 }
 
 #[test]
 #[should_panic(expected = "Provided amount does not match the counter offer")]
-fn test_accept_fails_if_amount_mismatch() {
-    // Set context as vault owner
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
+fn accept_counter_offer_rejects_amount_mismatch() {
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
 
-    // Create a vault
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Add a liquidity request
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
-
-    // Create counter offer message
     let token: AccountId = "usdc.test.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let (mut vault, request) = new_vault_with_request(token);
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
 
-    // Add a counter offer by alice
-    vault
-        .try_add_counter_offer(alice(), U128(900_000), msg, token.clone())
-        .expect("alice's offer should succeed");
-
-    // Accept alice's offer but pass the wrong amount (800_000 instead of 900_000)
     vault.accept_counter_offer(alice(), U128(800_000));
 }

@@ -2,13 +2,15 @@
 
 use std::collections::HashMap;
 
-use anyhow::Ok;
+use anyhow::{anyhow, Context, Result};
 use near_sdk::{json_types::U128, AccountId, NearToken};
+use near_workspaces::network::Sandbox;
+use near_workspaces::{Account, Contract, Worker};
 use serde_json::json;
-
 use test_utils::{
-    create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
-    register_account_with_token, CounterOffer, VaultViewState, VAULT_CALL_GAS,
+    create_test_validator, get_usdc_balance, initialize_test_token,
+    initialize_test_vault_on_sub_account, make_counter_offer_msg, register_account_with_token,
+    CounterOffer, LiquidityRequest, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[path = "test_lock.rs"]
@@ -16,106 +18,110 @@ mod test_lock;
 #[path = "test_utils.rs"]
 mod test_utils;
 
-#[tokio::test]
-async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Result<()> {
-    let _guard = test_lock::acquire_test_mutex().await;
-    // Setup sandbox
-    let worker = near_workspaces::sandbox().await?;
-    let root = worker.root_account()?;
+const REQUEST_AMOUNT: u128 = 1_000_000;
+const REQUEST_INTEREST: u128 = 100_000;
+const REQUEST_DURATION: u64 = 86_400;
+const COLLATERAL_NEAR: u128 = 5;
+const INITIAL_LENDER_BALANCE: u128 = 1_000_000;
 
-    // Create users
-    let alice = root
-        .create_subaccount("alice")
-        .initial_balance(NearToken::from_near(10))
-        .transact()
-        .await?
-        .into_result()?;
-    let bob = root
-        .create_subaccount("bob")
-        .initial_balance(NearToken::from_near(10))
-        .transact()
-        .await?
-        .into_result()?;
-    let carol = root
-        .create_subaccount("carol")
-        .initial_balance(NearToken::from_near(10))
-        .transact()
-        .await?
-        .into_result()?;
+struct TestEnv {
+    /// Keep worker alive for the lifetime of the test.
+    _worker: Worker<Sandbox>,
+    root: Account,
+    vault: Contract,
+    token: Contract,
+}
 
-    // Deploy validator, token, and vault
-    let validator = create_test_validator(&worker, &root).await?;
-    let token = initialize_test_token(&root).await?;
-    let vault = initialize_test_vault(&root).await?.contract;
+impl TestEnv {
+    async fn new() -> Result<Self> {
+        let worker = near_workspaces::sandbox().await?;
+        let root = worker.root_account()?;
+        let validator = create_test_validator(&worker, &root).await?;
+        let token = initialize_test_token(&root).await?;
+        let vault = initialize_test_vault_on_sub_account(&root).await?.contract;
 
-    // Register vault and users with the token
-    for account in [vault.id(), alice.id(), bob.id(), carol.id()] {
-        register_account_with_token(&root, &token, account).await?;
+        register_account_with_token(&root, &token, vault.id()).await?;
+
+        root.call(vault.id(), "delegate")
+            .args_json(json!({
+                "validator": validator.id(),
+                "amount": NearToken::from_near(COLLATERAL_NEAR),
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+
+        worker.fast_forward(1).await?;
+
+        Ok(Self {
+            _worker: worker,
+            root,
+            vault,
+            token,
+        })
     }
 
-    // Mint tokens to each user
-    for user in [&alice, &bob, &carol] {
-        root.call(token.id(), "ft_transfer")
-            .args_json(json!({ "receiver_id": user.id(), "amount": "1000000" }))
+    async fn open_standard_request(&self) -> Result<LiquidityRequest> {
+        self.root
+            .call(self.vault.id(), "request_liquidity")
+            .args_json(json!({
+                "token": self.token.id(),
+                "amount": U128(REQUEST_AMOUNT),
+                "interest": U128(REQUEST_INTEREST),
+                "collateral": NearToken::from_near(COLLATERAL_NEAR),
+                "duration": REQUEST_DURATION
+            }))
+            .deposit(NearToken::from_yoctonear(1))
+            .gas(VAULT_CALL_GAS)
+            .transact()
+            .await?
+            .into_result()?;
+
+        self.vault_state()
+            .await?
+            .liquidity_request
+            .ok_or_else(|| anyhow!("expected liquidity request to be recorded"))
+    }
+
+    async fn create_lender(&self, name: &str, tokens: u128) -> Result<Account> {
+        let lender = self
+            .root
+            .create_subaccount(name)
+            .initial_balance(NearToken::from_near(5))
+            .transact()
+            .await?
+            .into_result()?;
+
+        register_account_with_token(&self.root, &self.token, lender.id()).await?;
+
+        self.root
+            .call(self.token.id(), "ft_transfer")
+            .args_json(json!({
+                "receiver_id": lender.id(),
+                "amount": tokens.to_string()
+            }))
             .deposit(NearToken::from_yoctonear(1))
             .transact()
             .await?
             .into_result()?;
+
+        Ok(lender)
     }
 
-    // Delegate from vault to validator to pass collateral check
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(5),
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
+    async fn submit_counter_offer(
+        &self,
+        lender: &Account,
+        amount: u128,
+        request: &LiquidityRequest,
+    ) -> Result<()> {
+        let msg = make_counter_offer_msg(request);
 
-    // Fast-forward to let stake finalize
-    worker.fast_forward(1).await?;
-
-    // Open a liquidity request
-    root.call(vault.id(), "request_liquidity")
-        .args_json(json!({
-            "token": token.id(),
-            "amount": U128(1_000_000),
-            "interest": U128(100_000),
-            "collateral": NearToken::from_near(5),
-            "duration": 86400
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    // Fetch request details for offer message
-    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
-    let request = state
-        .liquidity_request
-        .expect("Liquidity request not found");
-
-    // Create a counter offer message for lender
-    let msg = serde_json::json!({
-        "action": "NewCounterOffer",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string();
-
-    // Each user submits a counter offer
-    let offer_amounts = vec![800_000, 850_000, 900_000];
-    for (user, amount) in [&alice, &bob, &carol].iter().zip(offer_amounts) {
-        user.call(token.id(), "ft_transfer_call")
+        lender
+            .call(self.token.id(), "ft_transfer_call")
             .args_json(json!({
-                "receiver_id": vault.id(),
+                "receiver_id": self.vault.id(),
                 "amount": amount.to_string(),
                 "msg": msg,
             }))
@@ -124,11 +130,36 @@ async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Resu
             .transact()
             .await?
             .into_result()?;
+
+        Ok(())
     }
 
-    // Vault owner accepts carol's offer (highest)
-    let result = root
-        .call(vault.id(), "accept_counter_offer")
+    async fn vault_state(&self) -> Result<VaultViewState> {
+        Ok(self.vault.view("get_vault_state").await?.json()?)
+    }
+
+    async fn counter_offers_map(&self) -> Result<Option<HashMap<String, CounterOffer>>> {
+        Ok(self.vault.view("get_counter_offers").await?.json()?)
+    }
+}
+
+#[tokio::test]
+async fn accept_counter_offer_happy_path_updates_state() -> Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
+
+    let alice = env.create_lender("alice", INITIAL_LENDER_BALANCE).await?;
+    let bob = env.create_lender("bob", INITIAL_LENDER_BALANCE).await?;
+    let carol = env.create_lender("carol", INITIAL_LENDER_BALANCE).await?;
+
+    env.submit_counter_offer(&alice, 800_000, &request).await?;
+    env.submit_counter_offer(&bob, 850_000, &request).await?;
+    env.submit_counter_offer(&carol, 900_000, &request).await?;
+
+    let accepted = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
         .args_json(json!({
             "proposer_id": carol.id(),
             "amount": U128(900_000)
@@ -139,118 +170,81 @@ async fn test_accept_counter_offer_succeeds_and_refunds_others() -> anyhow::Resu
         .await?
         .into_result()?;
 
-    // Extract and inspect logs
-    let logs = result.logs();
-    let found = logs.iter().any(|log| {
-        log.contains("EVENT_JSON")
-            && log.contains(r#""event":"counter_offer_accepted""#)
-            && log.contains(r#""accepted_proposer":"carol.test.near""#)
-    });
-    assert!(found, "Log should mention accepted proposer: {:#?}", logs);
-
-    // Verify accepted offer is set correctly
-    let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
-    let accepted = state.accepted_offer.expect("Accepted offer should exist");
-    assert!(accepted.get("lender").unwrap() == carol.id().as_str());
-
-    // Ensure counter_offers field is cleared
-    let offers: Option<HashMap<String, CounterOffer>> =
-        vault.view("get_counter_offers").await?.json()?;
+    let logs = accepted.logs();
     assert!(
-        offers.is_none() || offers.as_ref().unwrap().is_empty(),
-        "Expected counter offers to be cleared"
+        logs.iter().any(|log| {
+            log.contains(r#""event":"counter_offer_accepted""#)
+                && log.contains(carol.id().as_str())
+                && log.contains(r#""accepted_amount":"900000""#)
+        }),
+        "expected acceptance log, got: {logs:?}"
     );
 
-    // Ensure refunds were issued to alice and bob
-    let alice_balance = get_usdc_balance(&token, alice.id()).await?;
-    let bob_balance = get_usdc_balance(&token, bob.id()).await?;
-    assert_eq!(alice_balance.0, 1_000_000, "Alice should be refunded");
-    assert_eq!(bob_balance.0, 1_000_000, "Bob should be refunded");
+    let state = env.vault_state().await?;
+    let updated_request = state
+        .liquidity_request
+        .context("liquidity request should remain present after acceptance")?;
+    assert_eq!(
+        updated_request.amount.0, 900_000,
+        "principal should reflect accepted counter offer"
+    );
+
+    let accepted_offer = state
+        .accepted_offer
+        .context("accepted offer must be recorded")?;
+    let lender = accepted_offer
+        .get("lender")
+        .and_then(|v| v.as_str())
+        .context("accepted offer lender missing")?;
+    assert_eq!(
+        lender,
+        carol.id().as_str(),
+        "accepted offer lender should match proposer"
+    );
+
+    let counter_offers = env.counter_offers_map().await?;
+    assert!(
+        counter_offers.map(|m| m.is_empty()).unwrap_or(true),
+        "counter offers map should be cleared"
+    );
+
+    let alice_balance = get_usdc_balance(&env.token, alice.id()).await?;
+    let bob_balance = get_usdc_balance(&env.token, bob.id()).await?;
+    let carol_balance = get_usdc_balance(&env.token, carol.id()).await?;
+    assert_eq!(
+        alice_balance.0, INITIAL_LENDER_BALANCE,
+        "alice should receive a refund"
+    );
+    assert_eq!(
+        bob_balance.0, INITIAL_LENDER_BALANCE,
+        "bob should receive a refund"
+    );
+    assert_eq!(
+        carol_balance.0,
+        INITIAL_LENDER_BALANCE - 900_000,
+        "accepted lender balance should decrease by the accepted amount"
+    );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_accept_counter_offer_requires_yocto() -> anyhow::Result<()> {
+async fn accept_counter_offer_requires_one_yocto() -> Result<()> {
     let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
 
-    let worker = near_workspaces::sandbox().await?;
-    let root = worker.root_account()?;
-    let validator = create_test_validator(&worker, &root).await?;
-    let token = initialize_test_token(&root).await?;
-    let vault = initialize_test_vault(&root).await?.contract;
+    let lender = env
+        .create_lender("yocto-lender", INITIAL_LENDER_BALANCE)
+        .await?;
+    env.submit_counter_offer(&lender, 850_000, &request).await?;
 
-    register_account_with_token(&root, &token, vault.id()).await?;
-    root.transfer_near(vault.id(), NearToken::from_near(10))
-        .await?
-        .into_result()?;
-
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(5)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-    worker.fast_forward(1).await?;
-
-    root.call(vault.id(), "request_liquidity")
-        .args_json(json!({
-            "token": token.id(),
-            "amount": U128(1_000_000),
-            "interest": U128(100_000),
-            "collateral": NearToken::from_near(5),
-            "duration": 86400
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let lender = root
-        .create_subaccount("yocto_lender")
-        .initial_balance(NearToken::from_near(2))
-        .transact()
-        .await?
-        .into_result()?;
-    register_account_with_token(&root, &token, lender.id()).await?;
-    root.call(token.id(), "ft_transfer")
-        .args_json(json!({ "receiver_id": lender.id(), "amount": "1000000" }))
-        .deposit(NearToken::from_yoctonear(1))
-        .transact()
-        .await?
-        .into_result()?;
-
-    lender
-        .call(token.id(), "ft_transfer_call")
-        .args_json(json!({
-            "receiver_id": vault.id(),
-            "amount": "850000",
-            "msg": json!({
-                "action": "NewCounterOffer",
-                "token": token.id(),
-                "amount": U128(1_000_000),
-                "interest": U128(100_000),
-                "collateral": NearToken::from_near(5),
-                "duration": 86400
-            })
-            .to_string()
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let outcome = root
-        .call(vault.id(), "accept_counter_offer")
+    let outcome = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
         .args_json(json!({
             "proposer_id": lender.id(),
-            "amount": U128(850000)
+            "amount": U128(850_000)
         }))
         .gas(VAULT_CALL_GAS)
         .transact()
@@ -259,95 +253,28 @@ async fn test_accept_counter_offer_requires_yocto() -> anyhow::Result<()> {
     let failure_text = format!("{:?}", outcome.failures());
     assert!(
         failure_text.contains("Requires attached deposit of exactly 1 yoctoNEAR"),
-        "Expected yocto guard failure, got: {failure_text}"
+        "expected yocto guard failure, got: {failure_text}"
     );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_accept_counter_offer_rejects_non_owner() -> anyhow::Result<()> {
+async fn accept_counter_offer_rejects_non_owner() -> Result<()> {
     let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
 
-    let worker = near_workspaces::sandbox().await?;
-    let root = worker.root_account()?;
-    let validator = create_test_validator(&worker, &root).await?;
-    let token = initialize_test_token(&root).await?;
-    let vault = initialize_test_vault(&root).await?.contract;
+    let alice = env
+        .create_lender("non-owner", INITIAL_LENDER_BALANCE)
+        .await?;
+    env.submit_counter_offer(&alice, 820_000, &request).await?;
 
-    register_account_with_token(&root, &token, vault.id()).await?;
-    root.transfer_near(vault.id(), NearToken::from_near(10))
-        .await?
-        .into_result()?;
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(5)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-    worker.fast_forward(1).await?;
-    root.call(vault.id(), "request_liquidity")
-        .args_json(json!({
-            "token": token.id(),
-            "amount": U128(1_000_000),
-            "interest": U128(100_000),
-            "collateral": NearToken::from_near(5),
-            "duration": 86400
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let lender = root
-        .create_subaccount("non_owner_lender")
-        .initial_balance(NearToken::from_near(2))
-        .transact()
-        .await?
-        .into_result()?;
-    register_account_with_token(&root, &token, lender.id()).await?;
-    root.call(token.id(), "ft_transfer")
-        .args_json(json!({
-            "receiver_id": lender.id(),
-            "amount": "1000000"
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .transact()
-        .await?
-        .into_result()?;
-
-    lender
-        .call(token.id(), "ft_transfer_call")
-        .args_json(json!({
-            "receiver_id": vault.id(),
-            "amount": "820000",
-            "msg": json!({
-                "action": "NewCounterOffer",
-                "token": token.id(),
-                "amount": U128(1_000_000),
-                "interest": U128(100_000),
-                "collateral": NearToken::from_near(5),
-                "duration": 86400
-            })
-            .to_string()
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let alice = worker.dev_create_account().await?;
     let outcome = alice
-        .call(vault.id(), "accept_counter_offer")
+        .call(env.vault.id(), "accept_counter_offer")
         .args_json(json!({
-            "proposer_id": lender.id(),
-            "amount": U128(820000)
+            "proposer_id": alice.id(),
+            "amount": U128(820_000)
         }))
         .deposit(NearToken::from_yoctonear(1))
         .gas(VAULT_CALL_GAS)
@@ -357,94 +284,30 @@ async fn test_accept_counter_offer_rejects_non_owner() -> anyhow::Result<()> {
     let failure_text = format!("{:?}", outcome.failures());
     assert!(
         failure_text.contains("Only the vault owner can accept a counter offer"),
-        "Expected owner guard failure, got: {failure_text}"
+        "expected owner guard failure, got: {failure_text}"
     );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_accept_counter_offer_rejects_missing_proposer() -> anyhow::Result<()> {
+async fn accept_counter_offer_rejects_missing_proposer() -> Result<()> {
     let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
 
-    let worker = near_workspaces::sandbox().await?;
-    let root = worker.root_account()?;
-    let validator = create_test_validator(&worker, &root).await?;
-    let token = initialize_test_token(&root).await?;
-    let vault = initialize_test_vault(&root).await?.contract;
+    let lender = env
+        .create_lender("actual-lender", INITIAL_LENDER_BALANCE)
+        .await?;
+    env.submit_counter_offer(&lender, 870_000, &request).await?;
 
-    register_account_with_token(&root, &token, vault.id()).await?;
-    root.transfer_near(vault.id(), NearToken::from_near(10))
-        .await?
-        .into_result()?;
-    root.call(vault.id(), "delegate")
-        .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(5)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-    worker.fast_forward(1).await?;
-    root.call(vault.id(), "request_liquidity")
-        .args_json(json!({
-            "token": token.id(),
-            "amount": U128(1_000_000),
-            "interest": U128(100_000),
-            "collateral": NearToken::from_near(5),
-            "duration": 86400
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let lender = root
-        .create_subaccount("actual_lender")
-        .initial_balance(NearToken::from_near(2))
-        .transact()
-        .await?
-        .into_result()?;
-    register_account_with_token(&root, &token, lender.id()).await?;
-    root.call(token.id(), "ft_transfer")
-        .args_json(json!({
-            "receiver_id": lender.id(),
-            "amount": "1000000"
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .transact()
-        .await?
-        .into_result()?;
-    lender
-        .call(token.id(), "ft_transfer_call")
-        .args_json(json!({
-            "receiver_id": vault.id(),
-            "amount": "870000",
-            "msg": json!({
-                "action": "NewCounterOffer",
-                "token": token.id(),
-                "amount": U128(1_000_000),
-                "interest": U128(100_000),
-                "collateral": NearToken::from_near(5),
-                "duration": 86400
-            })
-            .to_string()
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let fake_proposer: AccountId = "fake.near".parse().unwrap();
-    let outcome = root
-        .call(vault.id(), "accept_counter_offer")
+    let fake_proposer: AccountId = "fake.test.near".parse()?;
+    let outcome = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
         .args_json(json!({
             "proposer_id": fake_proposer,
-            "amount": U128(870000)
+            "amount": U128(870_000)
         }))
         .deposit(NearToken::from_yoctonear(1))
         .gas(VAULT_CALL_GAS)
@@ -454,94 +317,38 @@ async fn test_accept_counter_offer_rejects_missing_proposer() -> anyhow::Result<
     let failure_text = format!("{:?}", outcome.failures());
     assert!(
         failure_text.contains("Counter offer from proposer not found"),
-        "Expected missing proposer failure, got: {failure_text}"
+        "expected missing proposer failure, got: {failure_text}"
     );
 
-    // Verify original offer still present
-    let offers: serde_json::Value = vault.view("get_counter_offers").await?.json()?;
-    assert!(offers.get(&lender.id().to_string()).is_some());
+    let offers = env
+        .counter_offers_map()
+        .await?
+        .context("expected counter offer to remain intact")?;
+    assert!(
+        offers.contains_key(lender.id().as_str()),
+        "existing counter offer should not be removed on failure"
+    );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<()> {
+async fn accept_counter_offer_rejects_amount_mismatch() -> Result<()> {
     let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
 
-    let worker = near_workspaces::sandbox().await?;
-    let root = worker.root_account()?;
-    let validator = create_test_validator(&worker, &root).await?;
-    let token = initialize_test_token(&root).await?;
-    let vault = initialize_test_vault(&root).await?.contract;
+    let lender = env
+        .create_lender("amount-lender", INITIAL_LENDER_BALANCE)
+        .await?;
+    env.submit_counter_offer(&lender, 860_000, &request).await?;
 
-    register_account_with_token(&root, &token, vault.id()).await?;
-    root.transfer_near(vault.id(), NearToken::from_near(10))
-        .await?
-        .into_result()?;
-    root.call(vault.id(), "delegate")
+    let outcome = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
         .args_json(json!({
-            "validator": validator.id(),
-            "amount": NearToken::from_near(5)
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-    worker.fast_forward(1).await?;
-    root.call(vault.id(), "request_liquidity")
-        .args_json(json!({
-            "token": token.id(),
-            "amount": U128(1_000_000),
-            "interest": U128(100_000),
-            "collateral": NearToken::from_near(5),
-            "duration": 86400
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let proposer = root
-        .create_subaccount("amount_lender")
-        .initial_balance(NearToken::from_near(2))
-        .transact()
-        .await?
-        .into_result()?;
-    register_account_with_token(&root, &token, proposer.id()).await?;
-    root.call(token.id(), "ft_transfer")
-        .args_json(json!({ "receiver_id": proposer.id(), "amount": "1000000" }))
-        .deposit(NearToken::from_yoctonear(1))
-        .transact()
-        .await?
-        .into_result()?;
-    proposer
-        .call(token.id(), "ft_transfer_call")
-        .args_json(json!({
-            "receiver_id": vault.id(),
-            "amount": "860000",
-            "msg": json!({
-                "action": "NewCounterOffer",
-                "token": token.id(),
-                "amount": U128(1_000_000),
-                "interest": U128(100_000),
-                "collateral": NearToken::from_near(5),
-                "duration": 86400
-            })
-            .to_string()
-        }))
-        .deposit(NearToken::from_yoctonear(1))
-        .gas(VAULT_CALL_GAS)
-        .transact()
-        .await?
-        .into_result()?;
-
-    let outcome = root
-        .call(vault.id(), "accept_counter_offer")
-        .args_json(json!({
-            "proposer_id": proposer.id(),
-            "amount": U128(850000)
+            "proposer_id": lender.id(),
+            "amount": U128(850_000)
         }))
         .deposit(NearToken::from_yoctonear(1))
         .gas(VAULT_CALL_GAS)
@@ -551,14 +358,29 @@ async fn test_accept_counter_offer_rejects_amount_mismatch() -> anyhow::Result<(
     let failure_text = format!("{:?}", outcome.failures());
     assert!(
         failure_text.contains("Provided amount does not match the counter offer"),
-        "Expected amount mismatch failure, got: {failure_text}"
+        "expected amount mismatch failure, got: {failure_text}"
     );
 
-    let balance_after = get_usdc_balance(&token, proposer.id()).await?;
-    let vault_balance = get_usdc_balance(&token, vault.id()).await?;
-    // Proposer initially had 1_000_000 and staked 860_000 as a counter offer; on amount mismatch,
-    // accept_counter_offer fails and no refund occurs, so balance remains 140_000.
-    assert_eq!(balance_after.0, 140_000u128);
+    let balance_after = get_usdc_balance(&env.token, lender.id()).await?;
+    assert_eq!(
+        balance_after.0,
+        INITIAL_LENDER_BALANCE - 860_000,
+        "counter offer funds should remain locked after failed acceptance"
+    );
+
+    let state = env.vault_state().await?;
+    assert!(
+        state.accepted_offer.is_none(),
+        "accepted offer should not be recorded on failure"
+    );
+    let offers = env
+        .counter_offers_map()
+        .await?
+        .context("counter offer should still be present")?;
+    assert!(
+        offers.contains_key(lender.id().as_str()),
+        "failed acceptance must not drop the counter offer"
+    );
 
     Ok(())
 }

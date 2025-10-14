@@ -126,15 +126,15 @@ async fn test_repay_loan_flow_successfully_clears_loan() -> anyhow::Result<()> {
         "liquidity_request should be None after repayment"
     );
 
-    // Lender's balance should now be 1,200,000
+    // Lender's balance should now be 1,100,000
     // Originally had 1,000,000 funded
     // proposed a counter offer with 900,000
-    // Got back 1,100,000 as repayment from the loan
-    // Total now 1,200,000
+    // Got back 1,000,000 as repayment from the loan (principal + interest)
+    // Total now 1,100,000
     let balance = get_usdc_balance(&token, lender.id()).await?;
     assert_eq!(
-        balance.0, 1_200_000,
-        "Lender should receive repayment of 1.1M on top of original 100K left"
+        balance.0, 1_100_000,
+        "Lender should receive repayment of 1.0M on top of original 100K left"
     );
 
     Ok(())

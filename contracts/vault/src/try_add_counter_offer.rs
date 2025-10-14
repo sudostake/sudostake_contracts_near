@@ -59,9 +59,10 @@ impl Vault {
         );
 
         // Get or initialize counter_offers map if needed
-        let offers_map = self
+        let mut offers_map = self
             .counter_offers
-            .get_or_insert_with(|| UnorderedMap::new(StorageKey::CounterOffers));
+            .take()
+            .unwrap_or_else(|| UnorderedMap::new(StorageKey::CounterOffers));
 
         // Proposer must not already have an offer
         require!(
@@ -104,6 +105,8 @@ impl Vault {
             },
         );
 
+        let mut evicted_offer: Option<CounterOffer> = None;
+
         // Log counter_offer_created event
         log_event!(
             "counter_offer_created",
@@ -143,9 +146,20 @@ impl Vault {
                     })
                 );
 
-                // Refund lowest_offer
-                let _ = self.refund_counter_offer(token_contract, lowest_offer);
+                evicted_offer = Some(lowest_offer);
             }
+        }
+
+        if offers_map.is_empty() {
+            // Explicitly clear to reclaim any persisted storage before dropping the map.
+            offers_map.clear();
+            self.counter_offers = None;
+        } else {
+            self.counter_offers = Some(offers_map);
+        }
+
+        if let Some(lowest_offer) = evicted_offer {
+            let _ = self.refund_counter_offer(token_contract, lowest_offer);
         }
 
         Ok(())

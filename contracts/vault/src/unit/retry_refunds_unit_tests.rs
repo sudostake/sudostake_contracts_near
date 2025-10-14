@@ -18,6 +18,7 @@ fn test_on_refund_complete_success_does_nothing() {
     let mut vault = Vault::new(alice(), 0, 1);
 
     vault.on_refund_complete(
+        0,
         alice(),
         U128(1_000_000),
         "usdc.mock.near".parse().unwrap(),
@@ -43,6 +44,7 @@ fn test_on_refund_complete_failure_adds_refund_entry() {
     let amount = U128(2_000_000);
 
     vault.on_refund_complete(
+        0,
         proposer.clone(),
         amount,
         token.clone(),
@@ -91,10 +93,37 @@ fn test_retry_refunds_owner_can_retry_all_entries() {
 
     vault.retry_refunds();
 
-    // Owner should be allowed to retry both: entries must be removed immediately
+    // Entries remain until callbacks complete.
+    assert_eq!(
+        vault.refund_list.iter().count(),
+        2,
+        "Entries should remain pending until refund callbacks succeed"
+    );
+
+    vault.on_retry_refund_complete(
+        0,
+        RefundEntry {
+            proposer: alice(),
+            amount: U128(1_000_000),
+            token: Some("usdc.mock.near".parse().unwrap()),
+            added_at_epoch: 0,
+        },
+        Ok(()),
+    );
+    vault.on_retry_refund_complete(
+        1,
+        RefundEntry {
+            proposer: bob(),
+            amount: U128(2_000_000),
+            token: None,
+            added_at_epoch: 0,
+        },
+        Ok(()),
+    );
+
     assert!(
         vault.refund_list.is_empty(),
-        "All refund entries should be removed after retry_refunds by owner"
+        "Refund entries should be cleared once callbacks succeed"
     );
 }
 
@@ -174,10 +203,21 @@ fn test_retry_refunds_proposer_can_only_retry_their_own_entries() {
 
     vault.retry_refunds();
 
-    // Alice’s entry should be removed
+    let entry = vault
+        .refund_list
+        .get(&0)
+        .expect("Alice's refund entry should remain pending");
+    assert_eq!(
+        entry.proposer,
+        alice(),
+        "Entry should still belong to Alice"
+    );
+
+    vault.on_retry_refund_complete(0, entry.clone(), Ok(()));
+
     assert!(
         vault.refund_list.get(&0).is_none(),
-        "Alice's refund entry should be removed after retry"
+        "Alice's refund entry should be cleared after successful callback"
     );
 
     // Bob's entry should remain untouched

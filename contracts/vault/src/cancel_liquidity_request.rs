@@ -19,10 +19,12 @@ impl Vault {
         );
 
         // Must have an active liquidity request
-        let request = self
+        let token = self
             .liquidity_request
             .as_ref()
-            .expect("No active liquidity request");
+            .expect("No active liquidity request")
+            .token
+            .clone();
 
         // Cannot cancel after an offer has been accepted
         require!(
@@ -31,7 +33,7 @@ impl Vault {
         );
 
         // Refund all counter offers
-        self.refund_all_counter_offers(request.token.clone());
+        self.refund_all_counter_offers(token);
 
         // Clean up state
         self.liquidity_request = None;

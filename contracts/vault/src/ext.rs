@@ -29,6 +29,7 @@ pub trait VaultExt {
 
     fn on_refund_complete(
         &mut self,
+        refund_id: u64,
         proposer: AccountId,
         amount: U128,
         token_address: AccountId,
