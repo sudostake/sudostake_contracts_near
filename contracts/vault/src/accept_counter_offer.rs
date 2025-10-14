@@ -70,12 +70,14 @@ impl Vault {
             request.clone()
         };
 
-        for other_offer in offers.values() {
-            let _ = self.refund_counter_offer(token.clone(), other_offer);
-        }
+        let refunds: Vec<crate::types::CounterOffer> = offers.values().collect();
 
         offers.clear();
         self.counter_offers = None;
+
+        for refund_offer in refunds {
+            let _ = self.refund_counter_offer(token.clone(), refund_offer);
+        }
 
         log_event!(
             "counter_offer_accepted",

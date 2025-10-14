@@ -49,27 +49,38 @@ impl Vault {
     /// for each proposer using the provided token contract.
     pub(crate) fn refund_all_counter_offers(&mut self, token: AccountId) {
         if let Some(mut counter_offers) = self.counter_offers.take() {
-            for (_, offer) in counter_offers.iter() {
-                let _ = self.refund_counter_offer(token.clone(), offer);
-            }
+            let pending_refunds: Vec<CounterOffer> = counter_offers.values().collect();
 
             // Explicitly clear storage so stale offers do not linger between requests.
             counter_offers.clear();
+
+            for offer in pending_refunds {
+                let _ = self.refund_counter_offer(token.clone(), offer);
+            }
         }
     }
 
     /// Refunds a single counter offer by calling `ft_transfer`.
     /// A callback is attached to handle the refund result.
     pub(crate) fn refund_counter_offer(
-        &self,
+        &mut self,
         token_address: AccountId,
         offer: CounterOffer,
     ) -> Promise {
+        let refund_id = self.add_refund_entry(
+            Some(token_address.clone()),
+            offer.proposer.clone(),
+            offer.amount,
+            None,
+            None,
+        );
+
         ext_fungible_token::ext(token_address.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(GAS_FOR_FT_TRANSFER)
             .ft_transfer(offer.proposer.clone(), offer.amount, None)
             .then(ext_self::ext(env::current_account_id()).on_refund_complete(
+                refund_id,
                 offer.proposer.clone(),
                 offer.amount,
                 token_address,
@@ -170,7 +181,7 @@ impl Vault {
         amount: U128,
         refund_id: Option<u64>,
         added_at_epoch: Option<EpochHeight>,
-    ) {
+    ) -> u64 {
         let id = refund_id.unwrap_or_else(|| self.get_refund_nonce());
         let epoch_recorded = added_at_epoch.unwrap_or_else(env::epoch_height);
         self.refund_list.insert(
@@ -182,6 +193,7 @@ impl Vault {
                 added_at_epoch: epoch_recorded,
             },
         );
+        id
     }
 
     /// Updates (or creates) an unstake entry for a given validator by adding the provided amount.
