@@ -29,12 +29,6 @@ impl Vault {
             "Only the vault owner can accept a counter offer"
         );
 
-        let token = self
-            .liquidity_request
-            .as_ref()
-            .map(|request| request.token.clone())
-            .expect("No liquidity request available");
-
         require!(
             self.accepted_offer.is_none(),
             "Liquidity request already accepted"
@@ -46,7 +40,8 @@ impl Vault {
             .expect("No counter offers available");
 
         let offer = offers
-            .remove(&proposer_id)
+            .get(&proposer_id)
+            .cloned()
             .expect("Counter offer from proposer not found");
 
         require!(
@@ -55,19 +50,22 @@ impl Vault {
         );
 
         let accepted_amount = offer.amount;
+        let offer = offers
+            .remove(&proposer_id)
+            .expect("Counter offer from proposer not found");
 
         self.accepted_offer = Some(crate::types::AcceptedOffer {
             lender: proposer_id.clone(),
             accepted_at: env::block_timestamp(),
         });
 
-        let liquidity_request = {
+        let (token, liquidity_request) = {
             let request = self
                 .liquidity_request
                 .as_mut()
                 .expect("No liquidity request available");
             request.amount = accepted_amount;
-            request.clone()
+            (request.token.clone(), request.clone())
         };
 
         let refunds: Vec<crate::types::CounterOffer> = offers.values().collect();
