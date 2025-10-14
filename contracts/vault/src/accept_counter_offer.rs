@@ -34,6 +34,11 @@ impl Vault {
             "Liquidity request already accepted"
         );
 
+        // Ensure a liquidity request exists before touching counter offers.
+        self.liquidity_request
+            .as_ref()
+            .expect("No liquidity request available");
+
         let mut offers = self
             .counter_offers
             .take()
