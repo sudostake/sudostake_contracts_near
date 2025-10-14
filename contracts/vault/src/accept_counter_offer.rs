@@ -75,9 +75,7 @@ impl Vault {
         offers.clear();
         self.counter_offers = None;
 
-        for refund_offer in refunds {
-            let _ = self.refund_counter_offer(token.clone(), refund_offer);
-        }
+        self.schedule_counter_offer_refunds(token, refunds);
 
         log_event!(
             "counter_offer_accepted",

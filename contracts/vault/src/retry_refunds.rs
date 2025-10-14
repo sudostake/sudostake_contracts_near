@@ -2,6 +2,7 @@
 
 use near_sdk::{
     assert_one_yocto, env, json_types::U128, near_bindgen, require, AccountId, NearToken, Promise,
+    PromiseResult,
 };
 
 use crate::{
@@ -48,6 +49,52 @@ impl Vault {
         );
 
         let _ = self.add_refund_entry(Some(token_address), proposer, amount, Some(refund_id), None);
+    }
+
+    #[private]
+    pub fn on_batch_refunds_complete(
+        &mut self,
+        token_address: AccountId,
+        refunds: Vec<(u64, AccountId, U128)>,
+    ) {
+        self.log_gas_checkpoint("on_batch_refunds_complete");
+
+        let results = env::promise_results_count();
+
+        for (idx, (refund_id, proposer, amount)) in refunds.into_iter().enumerate() {
+            self.refund_list.remove(&refund_id);
+
+            let success = if (idx as u64) < results {
+                matches!(
+                    env::promise_result(idx as u64),
+                    PromiseResult::Successful(_)
+                )
+            } else {
+                false
+            };
+
+            if success {
+                continue;
+            }
+
+            log_event!(
+                "refund_failed",
+                near_sdk::serde_json::json!({
+                    "vault": env::current_account_id(),
+                    "proposer": proposer.clone(),
+                    "amount": amount,
+                    "token": token_address.clone()
+                })
+            );
+
+            let _ = self.add_refund_entry(
+                Some(token_address.clone()),
+                proposer,
+                amount,
+                Some(refund_id),
+                None,
+            );
+        }
     }
 
     /// Manually retries refunds that previously failed.

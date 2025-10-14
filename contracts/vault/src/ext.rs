@@ -36,6 +36,12 @@ pub trait VaultExt {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     );
 
+    fn on_batch_refunds_complete(
+        &mut self,
+        token_address: AccountId,
+        refunds: Vec<(u64, AccountId, U128)>,
+    );
+
     fn on_retry_refund_complete(
         &mut self,
         id: u64,
