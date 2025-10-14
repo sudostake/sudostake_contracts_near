@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use near_sdk::{ext_contract, json_types::U128, AccountId, NearToken, Promise};
 
-use crate::types::RefundEntry;
+use crate::types::{RefundBatchItem, RefundEntry};
 
 #[ext_contract(ext_self)]
 pub trait VaultExt {
@@ -34,6 +34,12 @@ pub trait VaultExt {
         amount: U128,
         token_address: AccountId,
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
+    );
+
+    fn on_batch_refunds_complete(
+        &mut self,
+        token_address: AccountId,
+        refunds: Vec<RefundBatchItem>,
     );
 
     fn on_retry_refund_complete(

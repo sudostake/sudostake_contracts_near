@@ -2,7 +2,7 @@ use crate::contract::Vault;
 use crate::ext::{ext_fungible_token, ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    CounterOffer, ProcessingState, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER,
+    CounterOffer, ProcessingState, RefundBatchItem, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER,
     GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, LOCK_TIMEOUT, STORAGE_BUFFER,
 };
 use near_sdk::json_types::U128;
@@ -54,10 +54,71 @@ impl Vault {
             // Explicitly clear storage so stale offers do not linger between requests.
             counter_offers.clear();
 
-            for offer in pending_refunds {
-                let _ = self.refund_counter_offer(token.clone(), offer);
-            }
+            self.schedule_counter_offer_refunds(token, pending_refunds);
         }
+    }
+
+    pub(crate) fn schedule_counter_offer_refunds(
+        &mut self,
+        token: AccountId,
+        offers: Vec<CounterOffer>,
+    ) {
+        if offers.is_empty() {
+            return;
+        }
+
+        if offers.len() == 1 {
+            let offer = offers.into_iter().next().expect("len checked above");
+            let _ = self.refund_counter_offer(token, offer);
+            return;
+        }
+
+        let mut iter = offers.into_iter();
+        let first_offer = iter.next().expect("len checked above");
+        let mut refund_metadata: Vec<RefundBatchItem> = Vec::with_capacity(1 + iter.len());
+
+        let first_refund_id = self.add_refund_entry(
+            Some(token.clone()),
+            first_offer.proposer.clone(),
+            first_offer.amount,
+            None,
+            None,
+        );
+
+        refund_metadata.push((
+            first_refund_id,
+            first_offer.proposer.clone(),
+            first_offer.amount,
+        ));
+
+        let mut batch = ext_fungible_token::ext(token.clone())
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(GAS_FOR_FT_TRANSFER)
+            .ft_transfer(first_offer.proposer.clone(), first_offer.amount, None);
+
+        for offer in iter {
+            let refund_id = self.add_refund_entry(
+                Some(token.clone()),
+                offer.proposer.clone(),
+                offer.amount,
+                None,
+                None,
+            );
+
+            refund_metadata.push((refund_id, offer.proposer.clone(), offer.amount));
+
+            batch = batch.and(
+                ext_fungible_token::ext(token.clone())
+                    .with_attached_deposit(NearToken::from_yoctonear(1))
+                    .with_static_gas(GAS_FOR_FT_TRANSFER)
+                    .ft_transfer(offer.proposer.clone(), offer.amount, None),
+            );
+        }
+
+        let _ = batch.then(
+            ext_self::ext(env::current_account_id())
+                .on_batch_refunds_complete(token, refund_metadata),
+        );
     }
 
     /// Refunds a single counter offer by calling `ft_transfer`.
