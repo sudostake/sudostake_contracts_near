@@ -10,7 +10,7 @@ use serde_json::json;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token,
     initialize_test_vault_on_sub_account, make_counter_offer_msg, register_account_with_token,
-    CounterOffer, LiquidityRequest, VaultViewState, VAULT_CALL_GAS,
+    CounterOffer, LiquidityRequest, RefundEntry, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[path = "test_lock.rs"]
@@ -223,6 +223,96 @@ async fn accept_counter_offer_happy_path_updates_state() -> Result<()> {
         carol_balance.0,
         INITIAL_LENDER_BALANCE - 900_000,
         "accepted lender balance should decrease by the accepted amount"
+    );
+
+    let pending_refunds: Vec<(u64, RefundEntry)> = env
+        .vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
+    assert!(
+        pending_refunds.is_empty(),
+        "successful batch refund should leave no pending refund entries"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn accept_counter_offer_records_failed_refund_entry_when_lender_unregistered() -> Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
+
+    let alice = env.create_lender("alice", INITIAL_LENDER_BALANCE).await?;
+    let bob = env.create_lender("bob", INITIAL_LENDER_BALANCE).await?;
+    let carol = env.create_lender("carol", INITIAL_LENDER_BALANCE).await?;
+
+    env.submit_counter_offer(&alice, 800_000, &request).await?;
+    env.submit_counter_offer(&bob, 850_000, &request).await?;
+    env.submit_counter_offer(&carol, 900_000, &request).await?;
+
+    bob.call(env.token.id(), "storage_unregister")
+        .args_json(json!({ "force": true }))
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    let outcome = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": carol.id(),
+            "amount": U128(900_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    let logs = outcome.logs().join("\n");
+    assert!(
+        logs.contains(r#""event":"refund_failed""#),
+        "Expected refund_failed log when refunding unregistered lender. Logs: {logs}"
+    );
+
+    let mut refunds: Vec<(u64, RefundEntry)> = env
+        .vault
+        .view("get_refund_entries")
+        .args_json(json!({ "account_id": null }))
+        .await?
+        .json()?;
+    refunds.sort_by(|a, b| a.1.proposer.cmp(&b.1.proposer));
+
+    assert_eq!(
+        refunds.len(),
+        1,
+        "Only the failed refund should remain in state after batch completion"
+    );
+    let failed_refund = &refunds[0].1;
+    assert_eq!(
+        failed_refund.proposer,
+        bob.id().clone(),
+        "Refund entry should belong to the unregistered lender"
+    );
+    assert_eq!(
+        failed_refund.amount.0, 850_000,
+        "Recorded refund amount should match the failed transfer"
+    );
+
+    let alice_balance = get_usdc_balance(&env.token, alice.id()).await?;
+    assert_eq!(
+        alice_balance.0, INITIAL_LENDER_BALANCE,
+        "Registered lender should receive refund successfully"
+    );
+
+    let carol_balance = get_usdc_balance(&env.token, carol.id()).await?;
+    assert_eq!(
+        carol_balance.0,
+        INITIAL_LENDER_BALANCE - 900_000,
+        "Accepted lender balance should reflect loan amount"
     );
 
     Ok(())
