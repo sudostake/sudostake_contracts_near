@@ -143,6 +143,36 @@ fn accept_counter_offer_with_single_entry_clears_option() {
 }
 
 #[test]
+fn accept_counter_offer_records_refunds_for_remaining_offers() {
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    set_env(owner(), Some(NearToken::from_yoctonear(1)));
+
+    let (mut vault, request) = new_vault_with_request(token.clone());
+    add_counter_offer(&mut vault, bob(), 800_000, &request);
+    let carol: AccountId = "carol.near".parse().unwrap();
+    add_counter_offer(&mut vault, carol.clone(), 850_000, &request);
+    add_counter_offer(&mut vault, alice(), 900_000, &request);
+
+    vault.accept_counter_offer(alice(), U128(900_000));
+
+    let mut refunds: Vec<(AccountId, u128, Option<AccountId>)> = vault
+        .refund_list
+        .iter()
+        .map(|(_, entry)| (entry.proposer.clone(), entry.amount.0, entry.token.clone()))
+        .collect();
+    refunds.sort_by(|a, b| a.0.cmp(&b.0));
+
+    assert_eq!(
+        refunds,
+        vec![
+            (bob(), 800_000, Some(token.clone())),
+            (carol.clone(), 850_000, Some(token.clone()))
+        ],
+        "refund_list should retain entries for every non-accepted offer"
+    );
+}
+
+#[test]
 #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
 fn accept_counter_offer_requires_exact_deposit() {
     set_env(owner(), None);
