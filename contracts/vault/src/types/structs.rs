@@ -118,6 +118,9 @@ pub struct RefundEntry {
     pub added_at_epoch: EpochHeight,
 }
 
+/// Metadata describing a batched refund attempt `(refund_id, proposer, amount)`.
+pub type RefundBatchItem = (u64, AccountId, U128);
+
 /// Public view state returned from the `get_vault_state` method.
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]

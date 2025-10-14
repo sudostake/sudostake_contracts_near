@@ -2,7 +2,7 @@ use crate::contract::Vault;
 use crate::ext::{ext_fungible_token, ext_self, ext_staking_pool};
 use crate::log_event;
 use crate::types::{
-    CounterOffer, ProcessingState, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER,
+    CounterOffer, ProcessingState, RefundBatchItem, RefundEntry, UnstakeEntry, GAS_FOR_FT_TRANSFER,
     GAS_FOR_VIEW_CALL, GAS_FOR_WITHDRAW_ALL, LOCK_TIMEOUT, STORAGE_BUFFER,
 };
 use near_sdk::json_types::U128;
@@ -77,7 +77,7 @@ impl Vault {
 
         let mut iter = offers.into_iter();
         let first_offer = iter.next().expect("len checked above");
-        let mut refund_metadata: Vec<(u64, AccountId, U128)> = Vec::with_capacity(1 + iter.len());
+        let mut refund_metadata: Vec<RefundBatchItem> = Vec::with_capacity(1 + iter.len());
 
         let first_refund_id = self.add_refund_entry(
             Some(token.clone()),

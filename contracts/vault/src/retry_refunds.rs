@@ -9,7 +9,7 @@ use crate::{
     contract::{Vault, VaultExt},
     ext::ext_fungible_token,
     log_event,
-    types::{RefundEntry, GAS_FOR_FT_TRANSFER, REFUND_EXPIRY_EPOCHS},
+    types::{RefundBatchItem, RefundEntry, GAS_FOR_FT_TRANSFER, REFUND_EXPIRY_EPOCHS},
 };
 
 /// Convenient alias for the refund identifier.
@@ -55,7 +55,7 @@ impl Vault {
     pub fn on_batch_refunds_complete(
         &mut self,
         token_address: AccountId,
-        refunds: Vec<(u64, AccountId, U128)>,
+        refunds: Vec<RefundBatchItem>,
     ) {
         self.log_gas_checkpoint("on_batch_refunds_complete");
 
@@ -64,11 +64,9 @@ impl Vault {
         for (idx, (refund_id, proposer, amount)) in refunds.into_iter().enumerate() {
             self.refund_list.remove(&refund_id);
 
-            let success = if (idx as u64) < results {
-                matches!(
-                    env::promise_result(idx as u64),
-                    PromiseResult::Successful(_)
-                )
+            let idx_u64 = idx as u64;
+            let success = if idx_u64 < results {
+                matches!(env::promise_result(idx_u64), PromiseResult::Successful(_))
             } else {
                 false
             };

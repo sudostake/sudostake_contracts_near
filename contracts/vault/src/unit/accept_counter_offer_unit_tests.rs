@@ -8,7 +8,7 @@ use test_utils::{
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, StorageKey},
+    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, RefundBatchItem, StorageKey},
 };
 
 #[path = "test_utils.rs"]
@@ -269,7 +269,7 @@ fn accept_counter_offer_batch_refunds_requeues_failures() {
 
     vault.accept_counter_offer(alice(), U128(900_000));
 
-    let mut metadata: Vec<(u64, AccountId, U128)> = vault
+    let mut metadata: Vec<RefundBatchItem> = vault
         .refund_list
         .iter()
         .map(|(id, entry)| (id, entry.proposer.clone(), entry.amount))
