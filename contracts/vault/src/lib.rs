@@ -6,7 +6,6 @@ mod claim_vault;
 mod contract;
 mod delegate;
 mod ext;
-mod ft_receiver;
 mod ft;
 mod internal;
 mod process_claims;

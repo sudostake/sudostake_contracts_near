@@ -42,12 +42,7 @@ impl FungibleTokenReceiver for Vault {
                         token_contract,
                     )
                 } else {
-                    self.try_add_counter_offer(
-                        sender_id.clone(),
-                        amount,
-                        parsed,
-                        token_contract,
-                    )
+                    self.try_add_counter_offer(sender_id.clone(), amount, parsed, token_contract)
                 };
 
                 return match result {
