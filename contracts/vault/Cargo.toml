@@ -5,7 +5,7 @@ edition = "2021"
 repository = "https://github.com/sudostake/sudostake_contracts_near"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 borsh = { workspace = true }
