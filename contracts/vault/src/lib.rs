@@ -15,7 +15,7 @@ mod retry_refunds;
 mod transfer_ownership;
 mod try_accept_liquidity_request;
 mod try_add_counter_offer;
-mod types;
+pub mod types;
 mod undelegate;
 mod view;
 mod withdraw_balance;
