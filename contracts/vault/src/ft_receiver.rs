@@ -33,31 +33,27 @@ impl FungibleTokenReceiver for Vault {
                     .map(|request| request.amount == amount)
                     .unwrap_or(false);
 
-                if is_direct_accept {
-                    let result = self.try_accept_liquidity_request(
+                let token_contract = env::predecessor_account_id();
+                let result = if is_direct_accept {
+                    self.try_accept_liquidity_request(
                         sender_id.clone(),
                         amount,
-                        parsed,
-                        env::predecessor_account_id(),
-                    );
-
-                    return match result {
-                        Ok(_) => PromiseOrValue::Value(U128(0)),
-                        Err(_) => PromiseOrValue::Value(amount),
-                    };
+                        parsed.clone(),
+                        token_contract,
+                    )
                 } else {
-                    let result = self.try_add_counter_offer(
+                    self.try_add_counter_offer(
                         sender_id.clone(),
                         amount,
                         parsed,
-                        env::predecessor_account_id(),
-                    );
+                        token_contract,
+                    )
+                };
 
-                    return match result {
-                        Ok(_) => PromiseOrValue::Value(U128(0)),
-                        Err(_) => PromiseOrValue::Value(amount),
-                    };
-                }
+                return match result {
+                    Ok(_) => PromiseOrValue::Value(U128(0)),
+                    Err(_) => PromiseOrValue::Value(amount),
+                };
             }
         }
 
