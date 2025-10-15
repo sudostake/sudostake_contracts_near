@@ -7,6 +7,9 @@ use near_sdk::{AccountId, NearToken};
 #[cfg(not(target_arch = "wasm32"))]
 use schemars::JsonSchema;
 
+/// Action literal expected in `ApplyCounterOfferMessage`.
+pub const APPLY_COUNTER_OFFER_ACTION: &str = "ApplyCounterOffer";
+
 /// Message format used by lenders to apply their funds toward a request.
 #[derive(Deserialize, Clone)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
@@ -18,7 +21,9 @@ pub struct ApplyCounterOfferMessage {
     /// Token contract offered by the lender.
     pub token: AccountId,
     #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
-    /// Principal amount the lender will provide.
+    /// Principal amount recorded against the request. This must always equal the
+    /// original `LiquidityRequest.amount`; lenders propose smaller counter offers
+    /// solely by attaching a lower `ft_on_transfer` deposit than the value here.
     pub amount: U128,
     #[cfg_attr(not(target_arch = "wasm32"), schemars(with = "String"))]
     /// Interest the lender requests.

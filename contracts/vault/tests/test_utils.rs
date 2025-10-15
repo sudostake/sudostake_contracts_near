@@ -9,6 +9,7 @@ use near_workspaces::result::ExecutionFinalResult;
 use near_workspaces::types::SecretKey;
 use near_workspaces::{network::Sandbox, sandbox, Account, Contract, Worker};
 use serde_json::json;
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 
 const VAULT_WASM_PATH: &str = "../../vault_res/vault.wasm";
 const STAKING_POOL_WASM_PATH: &str = "../../res/staking_pool.wasm";
@@ -341,8 +342,6 @@ pub async fn withdraw_ft(
 
     Ok(result)
 }
-
-pub const APPLY_COUNTER_OFFER_ACTION: &str = "ApplyCounterOffer";
 
 pub fn make_apply_counter_offer_msg(request: &LiquidityRequest) -> String {
     serde_json::json!({

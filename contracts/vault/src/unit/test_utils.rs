@@ -4,11 +4,10 @@ use serde_json::json;
 
 use crate::{
     contract::Vault,
-    types::{ApplyCounterOfferMessage, LiquidityRequest, RefundEntry},
+    types::{ApplyCounterOfferMessage, LiquidityRequest, RefundEntry, APPLY_COUNTER_OFFER_ACTION},
 };
 
 pub const YOCTO_NEAR: u128 = 10u128.pow(24);
-pub const APPLY_COUNTER_OFFER_ACTION: &str = "ApplyCounterOffer";
 
 pub fn alice() -> AccountId {
     "alice.near".parse().unwrap()
