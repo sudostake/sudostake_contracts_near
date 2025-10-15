@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use anyhow::Ok;
 use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
     register_account_with_token, CounterOffer, VaultViewState, VAULT_CALL_GAS,

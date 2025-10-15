@@ -3,6 +3,7 @@
 use anyhow::Ok;
 use near_sdk::{json_types::U128, AccountId, NearToken};
 use serde_json::json;
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
     make_apply_counter_offer_msg, register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS,
