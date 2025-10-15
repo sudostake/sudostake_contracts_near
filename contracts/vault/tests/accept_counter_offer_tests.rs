@@ -9,8 +9,9 @@ use near_workspaces::{Account, Contract, Worker};
 use serde_json::json;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token,
-    initialize_test_vault_on_sub_account, make_counter_offer_msg, register_account_with_token,
-    CounterOffer, LiquidityRequest, RefundEntry, VaultViewState, VAULT_CALL_GAS,
+    initialize_test_vault_on_sub_account, make_apply_counter_offer_msg,
+    register_account_with_token, CounterOffer, LiquidityRequest, RefundEntry, VaultViewState,
+    VAULT_CALL_GAS,
 };
 
 #[path = "test_lock.rs"]
@@ -116,7 +117,7 @@ impl TestEnv {
         amount: u128,
         request: &LiquidityRequest,
     ) -> Result<()> {
-        let msg = make_counter_offer_msg(request);
+        let msg = make_apply_counter_offer_msg(request);
 
         lender
             .call(self.token.id(), "ft_transfer_call")

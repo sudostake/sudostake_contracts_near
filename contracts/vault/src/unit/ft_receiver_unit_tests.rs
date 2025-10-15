@@ -6,7 +6,8 @@ use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use crate::contract::Vault;
 
 use super::test_utils::{
-    alice, bob, create_valid_liquidity_request, get_context, get_context_with_timestamp, owner,
+    alice, apply_counter_offer_msg_string, bob, create_valid_liquidity_request, get_context,
+    get_context_with_timestamp, owner,
 };
 
 #[test]
@@ -70,15 +71,7 @@ fn test_ft_on_transfer_accepts_request_when_amount_matches() {
     let request = create_valid_liquidity_request(token.clone());
     vault.liquidity_request = Some(request.clone());
 
-    let msg = json!({
-        "action": "ApplyCounterOffer",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string();
+    let msg = apply_counter_offer_msg_string(&request);
 
     let lender = alice();
     let result = vault.ft_on_transfer(lender.clone(), request.amount, msg);
@@ -115,15 +108,7 @@ fn test_ft_on_transfer_records_counter_offer_when_amount_is_lower() {
     let request = create_valid_liquidity_request(token.clone());
     vault.liquidity_request = Some(request.clone());
 
-    let msg = json!({
-        "action": "ApplyCounterOffer",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string();
+    let msg = apply_counter_offer_msg_string(&request);
 
     let lender = bob();
     let offer_amount = U128(request.amount.0 - 100_000);

@@ -1,9 +1,11 @@
 use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
-use test_utils::{get_context, owner};
+use test_utils::{
+    apply_counter_offer_message_from, create_valid_liquidity_request, get_context, owner,
+};
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, ApplyCounterOfferMessage, LiquidityRequest, StorageKey},
+    types::{AcceptedOffer, StorageKey},
     unit::test_utils::alice,
 };
 
@@ -24,24 +26,12 @@ fn test_cancel_counter_offer_succeeds() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     // Insert a liquidity request into the vault
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+    vault.liquidity_request = Some(request.clone());
 
     // Create a valid counter offer message matching the request
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Simulate a new offer from alice
     let proposer: AccountId = alice();
@@ -77,23 +67,10 @@ fn test_cancel_counter_offer_clears_underlying_storage_when_last_offer() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     let token: AccountId = "usdc.test.near".parse().unwrap();
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let request = create_valid_liquidity_request(token.clone());
+    vault.liquidity_request = Some(request.clone());
 
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".to_string(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     vault
         .try_add_counter_offer(alice(), U128(800_000), msg, token)
@@ -143,14 +120,9 @@ fn test_cancel_fails_if_offer_already_accepted() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     // Insert a liquidity request into the vault
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+    vault.liquidity_request = Some(request.clone());
 
     // Simulate an already accepted liquidity request
     vault.accepted_offer = Some(AcceptedOffer {
@@ -177,14 +149,9 @@ fn test_cancel_fails_if_no_offer_exists() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     // Insert a liquidity request into the vault
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+    vault.liquidity_request = Some(request.clone());
 
     // try to cancel offer
     vault.cancel_counter_offer();
@@ -205,24 +172,12 @@ fn test_cancel_fails_if_offer_not_from_caller() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     // Add liquidity request
-    vault.liquidity_request = Some(LiquidityRequest {
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-        created_at: 0,
-    });
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+    vault.liquidity_request = Some(request.clone());
 
     // Create a valid counter offer message matching the request
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Add a counter offer from bob (not alice)
     vault

@@ -342,21 +342,11 @@ pub async fn withdraw_ft(
     Ok(result)
 }
 
-pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
-    serde_json::json!({
-        "action": "ApplyCounterOffer",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string()
-}
+pub const APPLY_COUNTER_OFFER_ACTION: &str = "ApplyCounterOffer";
 
-pub fn make_counter_offer_msg(request: &LiquidityRequest) -> String {
+pub fn make_apply_counter_offer_msg(request: &LiquidityRequest) -> String {
     serde_json::json!({
-        "action": "ApplyCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,
@@ -448,7 +438,7 @@ pub async fn request_and_accept_liquidity(
         .expect("Expected liquidity_request to be present");
 
     // Lender sends ft_transfer_call to accept the request
-    let msg = make_accept_request_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
     let result = lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({

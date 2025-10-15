@@ -5,7 +5,8 @@ use near_sdk::{json_types::U128, AccountId, NearToken};
 use serde_json::json;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
-    register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
+    make_apply_counter_offer_msg, register_account_with_token, VaultViewState, MAX_COUNTER_OFFERS,
+    VAULT_CALL_GAS,
 };
 
 #[path = "test_lock.rs"]
@@ -86,15 +87,7 @@ async fn test_counter_offer_is_accepted_and_saved() -> anyhow::Result<()> {
         .expect("Liquidity request not found");
 
     // Create a counter offer message for lender
-    let msg = serde_json::json!({
-        "action": "ApplyCounterOffer",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string();
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Lender submits a counter offer of 900_000 USDC via ft_transfer_call
     let result = lender
@@ -203,15 +196,7 @@ async fn test_counter_offer_eviction_after_max_offer() -> anyhow::Result<()> {
         .expect("Liquidity request not found");
 
     // Create a counter offer message
-    let msg = serde_json::json!({
-        "action": "ApplyCounterOffer",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string();
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Add MAX_COUNTER_OFFERS lenders with increasing offers (100_000 to 190_000)
     let mut proposers: Vec<AccountId> = vec![];

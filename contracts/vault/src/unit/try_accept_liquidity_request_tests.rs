@@ -1,9 +1,12 @@
 use crate::{
     contract::Vault,
-    types::{ApplyCounterOfferMessage, CounterOffer, StorageKey},
+    types::{CounterOffer, StorageKey},
 };
 use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
-use test_utils::{alice, bob, create_valid_liquidity_request, get_context, owner};
+use test_utils::{
+    alice, apply_counter_offer_message_from, bob, create_valid_liquidity_request, get_context,
+    owner,
+};
 
 #[path = "test_utils.rs"]
 mod test_utils;
@@ -25,14 +28,7 @@ fn test_try_accept_liquidity_request_success() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct the message the lender will send
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Define lender and token contract
     let lender = alice();
@@ -74,14 +70,7 @@ fn test_try_accept_liquidity_request_clears_counter_offers() {
     );
     contract.counter_offers = Some(map);
 
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     let lender = bob();
     let result = contract.try_accept_liquidity_request(lender, request.amount, msg, token);
@@ -115,14 +104,7 @@ fn test_try_accept_liquidity_request_clears_underlying_storage() {
     );
     contract.counter_offers = Some(map);
 
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     let lender = bob();
     let result = contract.try_accept_liquidity_request(lender, request.amount, msg, token);
@@ -152,14 +134,8 @@ fn test_try_accept_liquidity_request_fails_if_no_request() {
     let mut contract = Vault::new(owner(), 0, 1);
 
     // Construct a message that would match a valid request
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let request = create_valid_liquidity_request(token.clone());
+    let msg = apply_counter_offer_message_from(&request);
 
     // Attempt to accept the request
     let result = contract.try_accept_liquidity_request(alice(), U128(1_000_000), msg, token);
@@ -190,14 +166,7 @@ fn test_try_accept_liquidity_request_fails_if_already_accepted() {
     });
 
     // Construct a matching accept message
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Attempt to accept again
     let result = contract.try_accept_liquidity_request(alice(), request.amount, msg, token);
@@ -224,14 +193,7 @@ fn test_try_accept_liquidity_request_fails_if_lender_is_owner() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct a matching accept message
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Attempt to accept as the vault owner
     let result = contract.try_accept_liquidity_request(owner(), request.amount, msg, token);
@@ -262,14 +224,7 @@ fn test_try_accept_liquidity_request_fails_if_token_contract_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct a matching accept message (token matches)
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(), // correct in msg
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Call with wrong token contract (predecessor)
     let result =
@@ -300,14 +255,8 @@ fn test_try_accept_liquidity_request_fails_if_msg_token_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct accept message with wrong token
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: wrong_msg_token,
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.token = wrong_msg_token;
 
     // Call using correct token contract as predecessor, but wrong msg.token
     let result = contract.try_accept_liquidity_request(alice(), request.amount, msg, correct_token);
@@ -332,14 +281,8 @@ fn test_try_accept_liquidity_request_fails_if_msg_amount_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Create accept message with wrong amount
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: U128(2_000_000), // mismatch here
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.amount = U128(2_000_000); // mismatch here
 
     // Attempt to accept
     let result = contract.try_accept_liquidity_request(
@@ -369,14 +312,7 @@ fn test_try_accept_liquidity_request_fails_if_attached_amount_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct a valid message (msg.amount is correct)
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount, // correct in msg
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Pass wrong attached amount (e.g. off by 1)
     let wrong_attached_amount = U128(request.amount.0 - 1);
@@ -408,14 +344,8 @@ fn test_try_accept_liquidity_request_fails_if_interest_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct message with mismatched interest
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: U128(request.interest.0 + 1), // mismatch here
-        collateral: request.collateral,
-        duration: request.duration,
-    };
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.interest = U128(request.interest.0 + 1); // mismatch here
 
     // Call with correct attached amount
     let result = contract.try_accept_liquidity_request(alice(), request.amount, msg, token);
@@ -440,14 +370,8 @@ fn test_try_accept_liquidity_request_fails_if_collateral_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct message with mismatched collateral
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: NearToken::from_near(6), // mismatch here
-        duration: request.duration,
-    };
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.collateral = NearToken::from_near(6); // mismatch here
 
     // Call with correct attached amount
     let result = contract.try_accept_liquidity_request(alice(), request.amount, msg, token);
@@ -472,14 +396,8 @@ fn test_try_accept_liquidity_request_fails_if_duration_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct message with mismatched duration
-    let msg = ApplyCounterOfferMessage {
-        action: "ApplyCounterOffer".into(),
-        token: token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration + 1, // mismatch here
-    };
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.duration = request.duration + 1; // mismatch here
 
     // Call with correct attached amount
     let result = contract.try_accept_liquidity_request(alice(), request.amount, msg, token);

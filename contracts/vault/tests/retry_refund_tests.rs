@@ -6,9 +6,9 @@ use near_sdk::NearToken;
 use near_workspaces::{network::Sandbox, Account, Contract, Worker};
 use serde_json::json;
 use test_utils::{
-    create_test_validator, initialize_test_vault_on_sub_account, make_accept_request_msg,
-    make_counter_offer_msg, register_account_with_token, setup_contracts,
-    setup_sandbox_and_accounts, RefundEntry, VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
+    create_test_validator, initialize_test_vault_on_sub_account, make_apply_counter_offer_msg,
+    register_account_with_token, setup_contracts, setup_sandbox_and_accounts, RefundEntry,
+    VaultViewState, MAX_COUNTER_OFFERS, VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -326,7 +326,7 @@ async fn test_cancel_counter_offer_adds_refund_if_user_unregistered() -> anyhow:
     let request = state
         .liquidity_request
         .expect("Liquidity request not found");
-    let msg = make_counter_offer_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Lender submits a counter offer
     lender
@@ -426,7 +426,7 @@ async fn test_cancel_liquidity_request_adds_refunds_on_failure() -> anyhow::Resu
     let request = state
         .liquidity_request
         .expect("Liquidity request not found");
-    let msg = make_counter_offer_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Lender submits a counter offer
     lender
@@ -518,7 +518,7 @@ async fn test_counter_offer_eviction_adds_refund_on_failed_transfer() -> anyhow:
     let request = state
         .liquidity_request
         .expect("Liquidity request not found");
-    let msg = make_counter_offer_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Add MAX_COUNTER_OFFERS lenders with increasing offers (100_000 to 190_000)
     let mut proposers: Vec<Account> = vec![];
@@ -669,7 +669,7 @@ async fn test_accept_offer_adds_refund_for_failed_non_winner() -> anyhow::Result
     let request = state
         .liquidity_request
         .expect("Liquidity request not found");
-    let msg = make_counter_offer_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Each lender submits a counter offer
     let offer_amounts = vec![800_000, 850_000];
@@ -790,7 +790,7 @@ async fn test_accept_liquidity_request_adds_refunds_on_failure() -> anyhow::Resu
     let request = state
         .liquidity_request
         .expect("Liquidity request not found");
-    let msg = make_counter_offer_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
 
     // Lender submits a counter offer
     lender
@@ -818,7 +818,7 @@ async fn test_accept_liquidity_request_adds_refunds_on_failure() -> anyhow::Resu
         .into_result()?;
 
     // Other_lender accepts the liquidity request
-    let accept_liquidity_request_msg = make_accept_request_msg(&request);
+    let accept_liquidity_request_msg = make_apply_counter_offer_msg(&request);
     other_lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({
