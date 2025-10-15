@@ -5,7 +5,7 @@ use near_sdk::{json_types::U128, NearToken};
 use serde_json::json;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
-    make_counter_offer_msg, register_account_with_token, VaultViewState, VAULT_CALL_GAS,
+    make_apply_counter_offer_msg, register_account_with_token, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -81,7 +81,7 @@ async fn test_repay_loan_flow_successfully_clears_loan() -> anyhow::Result<()> {
         .expect("Liquidity request not found");
 
     // Lender sends a counter offer
-    let msg = make_counter_offer_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
     lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({
@@ -205,7 +205,7 @@ async fn test_repay_loan_releases_rights_to_undelegate() -> anyhow::Result<()> {
 
     // Lender submits a counter offer
     let request: VaultViewState = vault.view("get_vault_state").await?.json()?;
-    let offer_msg = make_counter_offer_msg(&request.liquidity_request.unwrap());
+    let offer_msg = make_apply_counter_offer_msg(&request.liquidity_request.unwrap());
     lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({

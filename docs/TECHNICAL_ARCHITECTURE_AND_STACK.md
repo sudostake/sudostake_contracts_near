@@ -100,9 +100,8 @@ Contracts
      - Owner-only; not already pending/open/accepted; counter_offers must be None.
      - Creates PendingLiquidityRequest, then batch-queries total staked across active validators.
      - If total staked >= collateral, finalizes LiquidityRequest and logs liquidity_request_opened.
-   - Offers are submitted via FT transfer hooks (ft_on_transfer):
-     - AcceptLiquidityRequest message: exact match on token, amount, interest, collateral, duration; sets accepted_offer and refunds any counter offers.
-     - NewCounterOffer message: must be for the same request; offered_amount > 0 and < requested amount; only one active offer per proposer; keeps only up to MAX_COUNTER_OFFERS (evicting and refunding the lowest when exceeding capacity).
+  - Offers are submitted via FT transfer hooks (ft_on_transfer):
+    - ApplyCounterOffer message: exact match on token, amount, interest, collateral, duration; if the attached amount matches the requested amount, the offer is accepted immediately (clearing counter offers); otherwise, the amount must be > 0 and < requested, and is recorded as a counter offer (enforcing unique proposer, ordering, and MAX_COUNTER_OFFERS eviction/refund rules).
    - accept_counter_offer(proposer, amount) [payable 1y]:
      - Owner-only; request must exist and be unaccepted; amount must match stored offer; sets accepted_offer and refunds all other counter offers.
    - cancel_counter_offer() [payable 1y]: proposer withdraws their own offer; refund attempted.
@@ -172,9 +171,7 @@ Repository Structure (selected)
 
 
 Integration Notes
-- Use ft_transfer_call (ft_on_transfer hook) to submit offers to a vault using the following JSON messages:
-  - AcceptLiquidityRequest: { action, token, amount, interest, collateral, duration }
-  - NewCounterOffer: { action, token, amount, interest, collateral, duration }
+- Use ft_transfer_call (ft_on_transfer hook) to submit offers to a vault using the ApplyCounterOffer JSON message: { action, token, amount, interest, collateral, duration }.
 - Index EVENT_JSON logs for off-chain state tracking.
 - Respect the processing lock: retry actions after lock_released or timeout.
 - Budget gas appropriately per call; see constants in contracts/vault/src/types.rs and process_claims.rs.

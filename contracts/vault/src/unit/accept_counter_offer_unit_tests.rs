@@ -3,12 +3,13 @@ use near_sdk::{
     testing_env, AccountId, NearToken, PromiseResult, RuntimeFeesConfig,
 };
 use test_utils::{
-    alice, bob, create_valid_liquidity_request, get_context, get_context_with_timestamp, owner,
+    alice, apply_counter_offer_message_from, bob, create_valid_liquidity_request, get_context,
+    get_context_with_timestamp, owner,
 };
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, RefundBatchItem, StorageKey},
+    types::{AcceptedOffer, LiquidityRequest, RefundBatchItem, StorageKey},
 };
 
 #[path = "test_utils.rs"]
@@ -36,24 +37,13 @@ fn new_vault_with_request(token: AccountId) -> (Vault, LiquidityRequest) {
     (vault, request)
 }
 
-fn counter_offer_message_from(request: &LiquidityRequest) -> CounterOfferMessage {
-    CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: request.token.clone(),
-        amount: request.amount,
-        interest: request.interest,
-        collateral: request.collateral,
-        duration: request.duration,
-    }
-}
-
 fn add_counter_offer(
     vault: &mut Vault,
     proposer: AccountId,
     amount: u128,
     request: &LiquidityRequest,
 ) {
-    let msg = counter_offer_message_from(request);
+    let msg = apply_counter_offer_message_from(request);
     vault
         .try_add_counter_offer(proposer, U128(amount), msg, request.token.clone())
         .expect("counter offer should be recorded");

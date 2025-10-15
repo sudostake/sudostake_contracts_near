@@ -1,6 +1,6 @@
 use crate::contract::Vault;
 use crate::log_event;
-use crate::types::AcceptRequestMessage;
+use crate::types::ApplyCounterOfferMessage;
 
 use near_sdk::json_types::U128;
 use near_sdk::{env, AccountId};
@@ -10,7 +10,7 @@ impl Vault {
         &mut self,
         lender: AccountId,
         amount: U128,
-        msg: AcceptRequestMessage,
+        msg: ApplyCounterOfferMessage,
         token_contract: AccountId,
     ) -> Result<(), String> {
         // Must have a liquidity request

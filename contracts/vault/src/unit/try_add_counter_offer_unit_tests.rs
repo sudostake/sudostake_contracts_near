@@ -1,9 +1,11 @@
 use near_sdk::{json_types::U128, testing_env, AccountId, NearToken};
-use test_utils::{get_context, owner};
+use test_utils::{
+    apply_counter_offer_message_from, create_valid_liquidity_request, get_context, owner,
+};
 
 use crate::{
     contract::Vault,
-    types::{CounterOfferMessage, LiquidityRequest, MAX_COUNTER_OFFERS},
+    types::{LiquidityRequest, MAX_COUNTER_OFFERS},
 };
 
 #[path = "test_utils.rs"]
@@ -18,25 +20,18 @@ fn test_adds_first_offer_successfully() {
     // Create a new vault
     let mut vault = Vault::new(owner(), 0, 1);
 
-    // Insert a liquidity request into the vault
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
+    };
+    vault.liquidity_request = Some(request.clone());
 
     // Create a valid counter offer message matching the request
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Simulate a new offer from alice
     let proposer: AccountId = "alice.near".parse().unwrap();
@@ -71,25 +66,19 @@ fn test_rejects_duplicate_proposer() {
     let mut vault = Vault::new(owner(), 0, 1);
 
     // Add liquidity request
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
+    };
+    vault.liquidity_request = Some(request.clone());
 
     // Create counter offer message
     let proposer: AccountId = "alice.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // First offer should succeed
     let _ = vault.try_add_counter_offer(
@@ -122,25 +111,19 @@ fn test_rejects_if_gte_requested_amount() {
 
     // Add liquidity request
     let requested_amount = U128(1_000_000);
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
+    };
+    vault.liquidity_request = Some(request.clone());
 
     // Create counter offer message
     let proposer: AccountId = "alice.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: requested_amount,
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
 
     // Offer amount == requested amount — should panic
     vault
@@ -163,46 +146,32 @@ fn test_rejects_if_lte_best_offer() {
     // Create vault
     let mut vault = Vault::new(owner(), 0, 1);
 
-    // Add liquidity request
     let requested_amount = U128(1_000_000);
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
+    };
+    vault.liquidity_request = Some(request.clone());
 
     // First offer (800_000) — sets the best offer
     let proposer_1: AccountId = "bob.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: requested_amount,
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
     vault
         .try_add_counter_offer(
             proposer_1.clone(),
             U128(800_000),
-            msg.clone(),
+            msg,
             "usdc.test.near".parse().unwrap(),
         )
         .unwrap();
 
     // Second offer (700_000) — worse than best — should panic
     let proposer_2: AccountId = "carol.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: requested_amount,
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
     vault
         .try_add_counter_offer(
             proposer_2,
@@ -225,24 +194,19 @@ fn test_rejects_if_message_fields_mismatch() {
 
     // Add valid liquidity request
     let requested_amount = U128(1_000_000);
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
+    };
+    vault.liquidity_request = Some(request.clone());
 
     // Create message with mismatched interest
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: requested_amount,
-        interest: U128(999_999), // ❌ MISMATCHED
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.interest = U128(999_999); // ❌ MISMATCHED
 
     // This should panic due to mismatch
     let proposer: AccountId = "alice.near".parse().unwrap();
@@ -267,28 +231,22 @@ fn test_eviction_happens_when_over_max_offers() {
 
     // Add a liquidity request
     let requested_amount = U128(1_000_000);
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
+    };
+    vault.liquidity_request = Some(request.clone());
 
     // Insert MAX_COUNTER_OFFERS offers with increasing amounts starting from 100_000
     for i in 0..MAX_COUNTER_OFFERS {
         let proposer = format!("user_{}.near", i).parse().unwrap();
         let offered_amount = U128(100_000u128 + i as u128 * 10_000);
 
-        let msg = CounterOfferMessage {
-            action: "NewCounterOffer".to_string(),
-            token: "usdc.test.near".parse().unwrap(),
-            amount: requested_amount,
-            interest: U128(100_000),
-            collateral: NearToken::from_near(5),
-            duration: 86400,
-        };
+        let msg = apply_counter_offer_message_from(&request);
 
         vault
             .try_add_counter_offer(
@@ -310,14 +268,7 @@ fn test_eviction_happens_when_over_max_offers() {
     // Add the (MAX_COUNTER_OFFERS + 1)th offer with better amount (e.g. 999_000)
     let best_proposer: AccountId = "best.near".parse().unwrap();
     let best_amount = U128(999_000);
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: requested_amount,
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let msg = apply_counter_offer_message_from(&request);
     vault
         .try_add_counter_offer(
             best_proposer.clone(),
@@ -362,24 +313,19 @@ fn test_rejects_if_token_does_not_match() {
 
     // Add a liquidity request
     let requested_amount = U128(1_000_000);
-    vault.liquidity_request = Some(LiquidityRequest {
+    let request = LiquidityRequest {
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
         collateral: NearToken::from_near(5),
         duration: 86400,
         created_at: 0,
-    });
-
-    // Build a counter offer message matching the request
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.token.near".parse().unwrap(),
-        amount: requested_amount,
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
     };
+    vault.liquidity_request = Some(request.clone());
+
+    // Build a counter offer message with mismatched token
+    let mut msg = apply_counter_offer_message_from(&request);
+    msg.token = "usdc.token.near".parse().unwrap();
 
     // Simulate call coming from a different token contract (wrong origin)
     vault
@@ -404,14 +350,8 @@ fn test_rejects_if_no_liquidity_request_exists() {
 
     // Try to add a counter offer
     let proposer: AccountId = "alice.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
-        token: "usdc.test.near".parse().unwrap(),
-        amount: U128(900_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 86400,
-    };
+    let request = create_valid_liquidity_request("usdc.test.near".parse().unwrap());
+    let msg = apply_counter_offer_message_from(&request);
 
     // This should panic
     vault

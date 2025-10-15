@@ -5,6 +5,7 @@ mod test_utils;
 
 use near_sdk::{json_types::U128, Gas, NearToken};
 use serde_json::json;
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 use test_utils::{
     create_test_validator, initialize_test_token, initialize_test_vault,
     register_account_with_token, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
@@ -339,7 +340,7 @@ async fn test_undelegate_fails_if_offer_already_accepted() -> anyhow::Result<()>
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     let request = state.liquidity_request.unwrap();
     let msg = serde_json::json!({
-        "action": "NewCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,

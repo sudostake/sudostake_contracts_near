@@ -355,7 +355,7 @@ async fn test_claim_unstaked_fails_if_liquidation_active() -> anyhow::Result<()>
         .expect("Expected liquidity_request to be present");
 
     // Lender accepts the request
-    let msg = test_utils::make_accept_request_msg(&request);
+    let msg = test_utils::make_apply_counter_offer_msg(&request);
     lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({

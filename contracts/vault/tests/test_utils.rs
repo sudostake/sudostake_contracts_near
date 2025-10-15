@@ -9,6 +9,7 @@ use near_workspaces::result::ExecutionFinalResult;
 use near_workspaces::types::SecretKey;
 use near_workspaces::{network::Sandbox, sandbox, Account, Contract, Worker};
 use serde_json::json;
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 
 const VAULT_WASM_PATH: &str = "../../vault_res/vault.wasm";
 const STAKING_POOL_WASM_PATH: &str = "../../res/staking_pool.wasm";
@@ -342,21 +343,9 @@ pub async fn withdraw_ft(
     Ok(result)
 }
 
-pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
+pub fn make_apply_counter_offer_msg(request: &LiquidityRequest) -> String {
     serde_json::json!({
-        "action": "AcceptLiquidityRequest",
-        "token": request.token,
-        "amount": request.amount,
-        "interest": request.interest,
-        "collateral": request.collateral,
-        "duration": request.duration
-    })
-    .to_string()
-}
-
-pub fn make_counter_offer_msg(request: &LiquidityRequest) -> String {
-    serde_json::json!({
-        "action": "NewCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,
@@ -448,7 +437,7 @@ pub async fn request_and_accept_liquidity(
         .expect("Expected liquidity_request to be present");
 
     // Lender sends ft_transfer_call to accept the request
-    let msg = make_accept_request_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
     let result = lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({

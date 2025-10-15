@@ -3,10 +3,10 @@
 use near_sdk::{json_types::U128, NearToken};
 use near_workspaces::{network::Sandbox, Account, Worker};
 use serde_json::{json, Value};
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
-    make_accept_request_msg, make_counter_offer_msg, register_account_with_token, VaultViewState,
-    VAULT_CALL_GAS,
+    make_apply_counter_offer_msg, register_account_with_token, VaultViewState, VAULT_CALL_GAS,
 };
 
 #[path = "test_utils.rs"]
@@ -106,7 +106,7 @@ async fn test_accept_liquidity_request_succeeds() -> anyhow::Result<()> {
         .expect("Expected liquidity_request to be present");
 
     // Counter lender submits a counter offer below the requested amount
-    let counter_msg = make_counter_offer_msg(&request);
+    let counter_msg = make_apply_counter_offer_msg(&request);
     counter_lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({
@@ -121,7 +121,7 @@ async fn test_accept_liquidity_request_succeeds() -> anyhow::Result<()> {
         .into_result()?;
 
     // Lender sends ft_transfer_call to accept the request
-    let msg = make_accept_request_msg(&request);
+    let msg = make_apply_counter_offer_msg(&request);
     let result = lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({
@@ -222,7 +222,7 @@ async fn test_accept_liquidity_request_refunds_on_token_mismatch() -> anyhow::Re
 
     // Prepare a message with the wrong token while keeping all other fields valid
     let wrong_msg = serde_json::json!({
-        "action": "AcceptLiquidityRequest",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": "wrong-token.test.near",
         "amount": request.amount,
         "interest": request.interest,
@@ -336,7 +336,7 @@ async fn test_counter_offer_proposer_gets_refunded_on_accept() -> anyhow::Result
         .expect("Expected liquidity_request to exist");
 
     // Submit a counter offer below the requested amount
-    let counter_msg = make_counter_offer_msg(&request);
+    let counter_msg = make_apply_counter_offer_msg(&request);
     lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({
@@ -351,7 +351,7 @@ async fn test_counter_offer_proposer_gets_refunded_on_accept() -> anyhow::Result
         .into_result()?;
 
     // Accept the request with the same lender
-    let accept_msg = make_accept_request_msg(&request);
+    let accept_msg = make_apply_counter_offer_msg(&request);
     let outcome = lender
         .call(token.id(), "ft_transfer_call")
         .args_json(json!({
