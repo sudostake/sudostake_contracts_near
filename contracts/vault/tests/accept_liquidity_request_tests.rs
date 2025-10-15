@@ -222,7 +222,7 @@ async fn test_accept_liquidity_request_refunds_on_token_mismatch() -> anyhow::Re
 
     // Prepare a message with the wrong token while keeping all other fields valid
     let wrong_msg = serde_json::json!({
-        "action": "AcceptLiquidityRequest",
+        "action": "ApplyCounterOffer",
         "token": "wrong-token.test.near",
         "amount": request.amount,
         "interest": request.interest,

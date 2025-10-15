@@ -3,7 +3,7 @@ use test_utils::{get_context, owner};
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, StorageKey},
+    types::{AcceptedOffer, ApplyCounterOfferMessage, LiquidityRequest, StorageKey},
     unit::test_utils::alice,
 };
 
@@ -34,8 +34,8 @@ fn test_cancel_counter_offer_succeeds() {
     });
 
     // Create a valid counter offer message matching the request
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
         interest: U128(100_000),
@@ -86,8 +86,8 @@ fn test_cancel_counter_offer_clears_underlying_storage_when_last_offer() {
         created_at: 0,
     });
 
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: token.clone(),
         amount: U128(1_000_000),
         interest: U128(100_000),
@@ -215,8 +215,8 @@ fn test_cancel_fails_if_offer_not_from_caller() {
     });
 
     // Create a valid counter offer message matching the request
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
         interest: U128(100_000),

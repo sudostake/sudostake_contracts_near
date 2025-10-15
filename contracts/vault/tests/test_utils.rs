@@ -344,7 +344,7 @@ pub async fn withdraw_ft(
 
 pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
     serde_json::json!({
-        "action": "AcceptLiquidityRequest",
+        "action": "ApplyCounterOffer",
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,
@@ -356,7 +356,7 @@ pub fn make_accept_request_msg(request: &LiquidityRequest) -> String {
 
 pub fn make_counter_offer_msg(request: &LiquidityRequest) -> String {
     serde_json::json!({
-        "action": "NewCounterOffer",
+        "action": "ApplyCounterOffer",
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,

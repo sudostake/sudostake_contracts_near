@@ -1,6 +1,6 @@
 use crate::{
     contract::Vault,
-    types::{AcceptRequestMessage, CounterOffer, StorageKey},
+    types::{ApplyCounterOfferMessage, CounterOffer, StorageKey},
 };
 use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
 use test_utils::{alice, bob, create_valid_liquidity_request, get_context, owner};
@@ -25,8 +25,8 @@ fn test_try_accept_liquidity_request_success() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct the message the lender will send
-    let msg = AcceptRequestMessage {
-        action: "AcceptLiquidityRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,
@@ -74,8 +74,8 @@ fn test_try_accept_liquidity_request_clears_counter_offers() {
     );
     contract.counter_offers = Some(map);
 
-    let msg = AcceptRequestMessage {
-        action: "AcceptLiquidityRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,
@@ -115,8 +115,8 @@ fn test_try_accept_liquidity_request_clears_underlying_storage() {
     );
     contract.counter_offers = Some(map);
 
-    let msg = AcceptRequestMessage {
-        action: "AcceptLiquidityRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,
@@ -152,8 +152,8 @@ fn test_try_accept_liquidity_request_fails_if_no_request() {
     let mut contract = Vault::new(owner(), 0, 1);
 
     // Construct a message that would match a valid request
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: U128(1_000_000),
         interest: U128(100_000),
@@ -190,8 +190,8 @@ fn test_try_accept_liquidity_request_fails_if_already_accepted() {
     });
 
     // Construct a matching accept message
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,
@@ -224,8 +224,8 @@ fn test_try_accept_liquidity_request_fails_if_lender_is_owner() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct a matching accept message
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,
@@ -262,8 +262,8 @@ fn test_try_accept_liquidity_request_fails_if_token_contract_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct a matching accept message (token matches)
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(), // correct in msg
         amount: request.amount,
         interest: request.interest,
@@ -300,8 +300,8 @@ fn test_try_accept_liquidity_request_fails_if_msg_token_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct accept message with wrong token
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: wrong_msg_token,
         amount: request.amount,
         interest: request.interest,
@@ -332,8 +332,8 @@ fn test_try_accept_liquidity_request_fails_if_msg_amount_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Create accept message with wrong amount
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: U128(2_000_000), // mismatch here
         interest: request.interest,
@@ -369,8 +369,8 @@ fn test_try_accept_liquidity_request_fails_if_attached_amount_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct a valid message (msg.amount is correct)
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount, // correct in msg
         interest: request.interest,
@@ -408,8 +408,8 @@ fn test_try_accept_liquidity_request_fails_if_interest_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct message with mismatched interest
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: U128(request.interest.0 + 1), // mismatch here
@@ -440,8 +440,8 @@ fn test_try_accept_liquidity_request_fails_if_collateral_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct message with mismatched collateral
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,
@@ -472,8 +472,8 @@ fn test_try_accept_liquidity_request_fails_if_duration_mismatch() {
     contract.liquidity_request = Some(request.clone());
 
     // Construct message with mismatched duration
-    let msg = AcceptRequestMessage {
-        action: "AcceptRequest".into(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".into(),
         token: token.clone(),
         amount: request.amount,
         interest: request.interest,

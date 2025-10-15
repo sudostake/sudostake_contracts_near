@@ -3,7 +3,7 @@ use test_utils::{get_context, owner};
 
 use crate::{
     contract::Vault,
-    types::{CounterOfferMessage, LiquidityRequest, MAX_COUNTER_OFFERS},
+    types::{ApplyCounterOfferMessage, LiquidityRequest, MAX_COUNTER_OFFERS},
 };
 
 #[path = "test_utils.rs"]
@@ -29,8 +29,8 @@ fn test_adds_first_offer_successfully() {
     });
 
     // Create a valid counter offer message matching the request
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
         interest: U128(100_000),
@@ -82,8 +82,8 @@ fn test_rejects_duplicate_proposer() {
 
     // Create counter offer message
     let proposer: AccountId = "alice.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(1_000_000),
         interest: U128(100_000),
@@ -133,8 +133,8 @@ fn test_rejects_if_gte_requested_amount() {
 
     // Create counter offer message
     let proposer: AccountId = "alice.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
@@ -176,8 +176,8 @@ fn test_rejects_if_lte_best_offer() {
 
     // First offer (800_000) — sets the best offer
     let proposer_1: AccountId = "bob.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
@@ -195,8 +195,8 @@ fn test_rejects_if_lte_best_offer() {
 
     // Second offer (700_000) — worse than best — should panic
     let proposer_2: AccountId = "carol.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
@@ -235,8 +235,8 @@ fn test_rejects_if_message_fields_mismatch() {
     });
 
     // Create message with mismatched interest
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(999_999), // ❌ MISMATCHED
@@ -281,8 +281,8 @@ fn test_eviction_happens_when_over_max_offers() {
         let proposer = format!("user_{}.near", i).parse().unwrap();
         let offered_amount = U128(100_000u128 + i as u128 * 10_000);
 
-        let msg = CounterOfferMessage {
-            action: "NewCounterOffer".to_string(),
+        let msg = ApplyCounterOfferMessage {
+            action: "ApplyCounterOffer".to_string(),
             token: "usdc.test.near".parse().unwrap(),
             amount: requested_amount,
             interest: U128(100_000),
@@ -310,8 +310,8 @@ fn test_eviction_happens_when_over_max_offers() {
     // Add the (MAX_COUNTER_OFFERS + 1)th offer with better amount (e.g. 999_000)
     let best_proposer: AccountId = "best.near".parse().unwrap();
     let best_amount = U128(999_000);
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
@@ -372,8 +372,8 @@ fn test_rejects_if_token_does_not_match() {
     });
 
     // Build a counter offer message matching the request
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.token.near".parse().unwrap(),
         amount: requested_amount,
         interest: U128(100_000),
@@ -404,8 +404,8 @@ fn test_rejects_if_no_liquidity_request_exists() {
 
     // Try to add a counter offer
     let proposer: AccountId = "alice.near".parse().unwrap();
-    let msg = CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+    let msg = ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: "usdc.test.near".parse().unwrap(),
         amount: U128(900_000),
         interest: U128(100_000),

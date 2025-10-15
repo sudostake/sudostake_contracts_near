@@ -191,7 +191,7 @@ flowchart LR
 
 ## 4. Liquidity: request, offers, accept
 - `request_liquidity`: Owner posts request (token, amount, interest, collateral, duration).
-- Lenders send `ft_transfer_call` with `NewCounterOffer` or `AcceptLiquidityRequest`.
+- Lenders send `ft_transfer_call` with `ApplyCounterOffer` (matching the requested amount accepts immediately; lower amounts become counter offers if eligible).
 - Owner may accept a single counter offer; non‑winners are refunded.
 
 ```mermaid

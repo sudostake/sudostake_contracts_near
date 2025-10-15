@@ -87,7 +87,7 @@ async fn test_counter_offer_is_accepted_and_saved() -> anyhow::Result<()> {
 
     // Create a counter offer message for lender
     let msg = serde_json::json!({
-        "action": "NewCounterOffer",
+        "action": "ApplyCounterOffer",
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,
@@ -204,7 +204,7 @@ async fn test_counter_offer_eviction_after_max_offer() -> anyhow::Result<()> {
 
     // Create a counter offer message
     let msg = serde_json::json!({
-        "action": "NewCounterOffer",
+        "action": "ApplyCounterOffer",
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,
@@ -360,7 +360,7 @@ async fn test_counter_offer_fails_when_no_request_exists() -> anyhow::Result<()>
             "receiver_id": vault.id(),
             "amount": "900000",
             "msg": json!({
-                "action": "NewCounterOffer",
+                "action": "ApplyCounterOffer",
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -457,7 +457,7 @@ async fn test_counter_offer_rejects_if_not_better_than_best() -> anyhow::Result<
             "receiver_id": vault.id(),
             "amount": "900000",
             "msg": json!({
-                "action": "NewCounterOffer",
+                "action": "ApplyCounterOffer",
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -496,7 +496,7 @@ async fn test_counter_offer_rejects_if_not_better_than_best() -> anyhow::Result<
             "receiver_id": vault.id(),
             "amount": "800000",
             "msg": json!({
-                "action": "NewCounterOffer",
+                "action": "ApplyCounterOffer",
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -578,7 +578,7 @@ async fn test_counter_offer_rejects_duplicate_proposer() -> anyhow::Result<()> {
         .into_result()?;
 
     let msg = json!({
-        "action": "NewCounterOffer",
+        "action": "ApplyCounterOffer",
         "token": token.id(),
         "amount": U128(1_000_000),
         "interest": U128(100_000),
@@ -617,7 +617,7 @@ async fn test_counter_offer_rejects_duplicate_proposer() -> anyhow::Result<()> {
             "receiver_id": vault.id(),
             "amount": "800000",
             "msg": json!({
-                "action": "NewCounterOffer",
+                "action": "ApplyCounterOffer",
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -701,7 +701,7 @@ async fn test_counter_offer_rejects_on_message_mismatch() -> anyhow::Result<()> 
             "receiver_id": vault.id(),
             "amount": "850000",
             "msg": json!({
-                "action": "NewCounterOffer",
+                "action": "ApplyCounterOffer",
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(123_456),
@@ -784,7 +784,7 @@ async fn test_counter_offer_rejects_after_request_accepted() -> anyhow::Result<(
         .into_result()?;
 
     let msg = json!({
-        "action": "NewCounterOffer",
+        "action": "ApplyCounterOffer",
         "token": token.id(),
         "amount": U128(1_000_000),
         "interest": U128(100_000),
@@ -840,7 +840,7 @@ async fn test_counter_offer_rejects_after_request_accepted() -> anyhow::Result<(
             "receiver_id": vault.id(),
             "amount": "830000",
             "msg": json!({
-                "action": "NewCounterOffer",
+                "action": "ApplyCounterOffer",
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),

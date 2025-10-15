@@ -8,7 +8,9 @@ use test_utils::{
 
 use crate::{
     contract::Vault,
-    types::{AcceptedOffer, CounterOfferMessage, LiquidityRequest, RefundBatchItem, StorageKey},
+    types::{
+        AcceptedOffer, ApplyCounterOfferMessage, LiquidityRequest, RefundBatchItem, StorageKey,
+    },
 };
 
 #[path = "test_utils.rs"]
@@ -36,9 +38,9 @@ fn new_vault_with_request(token: AccountId) -> (Vault, LiquidityRequest) {
     (vault, request)
 }
 
-fn counter_offer_message_from(request: &LiquidityRequest) -> CounterOfferMessage {
-    CounterOfferMessage {
-        action: "NewCounterOffer".to_string(),
+fn counter_offer_message_from(request: &LiquidityRequest) -> ApplyCounterOfferMessage {
+    ApplyCounterOfferMessage {
+        action: "ApplyCounterOffer".to_string(),
         token: request.token.clone(),
         amount: request.amount,
         interest: request.interest,

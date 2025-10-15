@@ -1,7 +1,7 @@
 use crate::contract::Vault;
 
 use crate::log_event;
-use crate::types::{CounterOffer, CounterOfferMessage, StorageKey, MAX_COUNTER_OFFERS};
+use crate::types::{ApplyCounterOfferMessage, CounterOffer, StorageKey, MAX_COUNTER_OFFERS};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::{env, require, AccountId};
@@ -11,7 +11,7 @@ impl Vault {
         &mut self,
         proposer: AccountId,
         offered_amount: U128,
-        msg: CounterOfferMessage,
+        msg: ApplyCounterOfferMessage,
         token_contract: AccountId,
     ) -> Result<(), String> {
         // Must have a liquidity request
