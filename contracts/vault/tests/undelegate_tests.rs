@@ -339,7 +339,7 @@ async fn test_undelegate_fails_if_offer_already_accepted() -> anyhow::Result<()>
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     let request = state.liquidity_request.unwrap();
     let msg = serde_json::json!({
-        "action": "ApplyCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,

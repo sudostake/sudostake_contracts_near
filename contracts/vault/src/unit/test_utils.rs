@@ -1,11 +1,9 @@
 #![allow(dead_code)]
-use near_sdk::{json_types::U128, test_utils::VMContextBuilder, AccountId, NearToken};
-use serde_json::json;
-
 use crate::{
     contract::Vault,
     types::{ApplyCounterOfferMessage, LiquidityRequest, RefundEntry, APPLY_COUNTER_OFFER_ACTION},
 };
+use near_sdk::{json_types::U128, test_utils::VMContextBuilder, AccountId, NearToken};
 
 pub const YOCTO_NEAR: u128 = 10u128.pow(24);
 
@@ -93,15 +91,7 @@ pub fn apply_counter_offer_message_from(request: &LiquidityRequest) -> ApplyCoun
 
 pub fn apply_counter_offer_msg_string(request: &LiquidityRequest) -> String {
     let message = apply_counter_offer_message_from(request);
-    json!({
-        "action": message.action,
-        "token": message.token,
-        "amount": message.amount,
-        "interest": message.interest,
-        "collateral": message.collateral,
-        "duration": message.duration
-    })
-    .to_string()
+    serde_json::to_string(&message).expect("serialize ApplyCounterOfferMessage")
 }
 
 /// Inserts a test refund entry into the vault's refund list

@@ -345,7 +345,7 @@ async fn test_counter_offer_fails_when_no_request_exists() -> anyhow::Result<()>
             "receiver_id": vault.id(),
             "amount": "900000",
             "msg": json!({
-                "action": "ApplyCounterOffer",
+                "action": APPLY_COUNTER_OFFER_ACTION,
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -442,7 +442,7 @@ async fn test_counter_offer_rejects_if_not_better_than_best() -> anyhow::Result<
             "receiver_id": vault.id(),
             "amount": "900000",
             "msg": json!({
-                "action": "ApplyCounterOffer",
+                "action": APPLY_COUNTER_OFFER_ACTION,
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -481,7 +481,7 @@ async fn test_counter_offer_rejects_if_not_better_than_best() -> anyhow::Result<
             "receiver_id": vault.id(),
             "amount": "800000",
             "msg": json!({
-                "action": "ApplyCounterOffer",
+                "action": APPLY_COUNTER_OFFER_ACTION,
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -563,7 +563,7 @@ async fn test_counter_offer_rejects_duplicate_proposer() -> anyhow::Result<()> {
         .into_result()?;
 
     let msg = json!({
-        "action": "ApplyCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": token.id(),
         "amount": U128(1_000_000),
         "interest": U128(100_000),
@@ -602,7 +602,7 @@ async fn test_counter_offer_rejects_duplicate_proposer() -> anyhow::Result<()> {
             "receiver_id": vault.id(),
             "amount": "800000",
             "msg": json!({
-                "action": "ApplyCounterOffer",
+                "action": APPLY_COUNTER_OFFER_ACTION,
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),
@@ -686,7 +686,7 @@ async fn test_counter_offer_rejects_on_message_mismatch() -> anyhow::Result<()> 
             "receiver_id": vault.id(),
             "amount": "850000",
             "msg": json!({
-                "action": "ApplyCounterOffer",
+                "action": APPLY_COUNTER_OFFER_ACTION,
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(123_456),
@@ -769,7 +769,7 @@ async fn test_counter_offer_rejects_after_request_accepted() -> anyhow::Result<(
         .into_result()?;
 
     let msg = json!({
-        "action": "ApplyCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": token.id(),
         "amount": U128(1_000_000),
         "interest": U128(100_000),
@@ -825,7 +825,7 @@ async fn test_counter_offer_rejects_after_request_accepted() -> anyhow::Result<(
             "receiver_id": vault.id(),
             "amount": "830000",
             "msg": json!({
-                "action": "ApplyCounterOffer",
+                "action": APPLY_COUNTER_OFFER_ACTION,
                 "token": token.id(),
                 "amount": U128(1_000_000),
                 "interest": U128(100_000),

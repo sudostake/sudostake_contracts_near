@@ -1,7 +1,7 @@
 use crate::{
     contract::{Vault, VaultExt},
     log_event,
-    types::ApplyCounterOfferMessage,
+    types::{ApplyCounterOfferMessage, APPLY_COUNTER_OFFER_ACTION},
 };
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::{env, json_types::U128, near_bindgen, AccountId, PromiseOrValue};
@@ -26,7 +26,7 @@ impl FungibleTokenReceiver for Vault {
 
         // Try ApplyCounterOffer
         if let Ok(parsed) = near_sdk::serde_json::from_str::<ApplyCounterOfferMessage>(&msg) {
-            if parsed.action == "ApplyCounterOffer" {
+            if parsed.action == APPLY_COUNTER_OFFER_ACTION {
                 let is_direct_accept = self
                     .liquidity_request
                     .as_ref()

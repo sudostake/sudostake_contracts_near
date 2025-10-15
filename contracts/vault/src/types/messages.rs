@@ -1,7 +1,7 @@
 //! Message payloads exchanged via `ft_transfer_call`.
 
 use near_sdk::json_types::U128;
-use near_sdk::serde::Deserialize;
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{AccountId, NearToken};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -11,7 +11,7 @@ use schemars::JsonSchema;
 pub const APPLY_COUNTER_OFFER_ACTION: &str = "ApplyCounterOffer";
 
 /// Message format used by lenders to apply their funds toward a request.
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(JsonSchema))]
 #[serde(crate = "near_sdk::serde")]
 pub struct ApplyCounterOfferMessage {

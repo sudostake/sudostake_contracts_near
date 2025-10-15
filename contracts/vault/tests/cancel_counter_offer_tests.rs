@@ -100,7 +100,7 @@ async fn test_cancel_counter_offer_refunds_proposer_only() -> anyhow::Result<()>
 
     // Create a counter offer message for lender
     let msg = serde_json::json!({
-        "action": "ApplyCounterOffer",
+        "action": APPLY_COUNTER_OFFER_ACTION,
         "token": request.token,
         "amount": request.amount,
         "interest": request.interest,
