@@ -180,14 +180,18 @@ impl Vault {
     }
 
     /// Queries `get_account_staked_balance` for every validator in `validator_ids`,
-    /// chaining the results and finally executing `callback`.
+    /// chaining the results and finally executing `callback_builder`, which receives
+    /// ownership of the original validator list to feed into the callback payload.
     ///
     /// * Panics* if `validator_ids` is empty.
-    pub(crate) fn batch_query_total_staked(
+    pub(crate) fn batch_query_total_staked<F>(
         &self,
-        validator_ids: &[AccountId],
-        callback: Promise,
-    ) -> Promise {
+        validator_ids: Vec<AccountId>,
+        callback_builder: F,
+    ) -> Promise
+    where
+        F: FnOnce(Vec<AccountId>) -> Promise,
+    {
         // Pre‑checks
         let mut iter = validator_ids.iter();
         let first = iter
@@ -208,6 +212,7 @@ impl Vault {
         });
 
         // Attach final callback
+        let callback = callback_builder(validator_ids);
         chain.then(callback)
     }
 

@@ -270,11 +270,11 @@ impl Vault {
     /// Query validators to figure out how much more needs to be unstaked.
     fn query_additional_unstaking(&mut self) -> Promise {
         let validators = self.get_ordered_validator_list();
-        let callback = Self::ext(env::current_account_id())
-            .with_static_gas(GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS)
-            .on_total_staked_process_claims(validators.clone());
-
-        self.batch_query_total_staked(&validators, callback)
+        self.batch_query_total_staked(validators, |validator_ids| {
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_FOR_CALLBACK_ON_TOTAL_STAKED_PROCESS_CLAIMS)
+                .on_total_staked_process_claims(validator_ids)
+        })
     }
 
     /// Handles the result of `batch_claim_unstaked`.

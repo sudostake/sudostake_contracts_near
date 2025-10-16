@@ -71,10 +71,11 @@ impl Vault {
 
         // Batch query total staked balance across all active validators
         let validators = self.get_ordered_validator_list();
-        let cb = Self::ext(env::current_account_id())
-            .with_static_gas(GAS_FOR_CALLBACK)
-            .on_check_total_staked(validators.clone(), request);
-        self.batch_query_total_staked(&validators, cb)
+        self.batch_query_total_staked(validators, |validator_ids| {
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_FOR_CALLBACK)
+                .on_check_total_staked(validator_ids, request)
+        })
     }
 
     #[private]
