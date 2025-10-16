@@ -25,29 +25,44 @@ impl Vault {
             "Cannot cancel after offer is accepted"
         );
 
-        // Counter offers must exist
-        let mut offers_map = self.counter_offers.take().expect("No counter offers found");
-
-        // Caller must have an active counter offer
         let caller = env::predecessor_account_id();
-        let offer = offers_map
-            .remove(&caller)
-            .expect("No active offer to cancel");
+        // Counter offers must exist and the caller must have an entry.
+        let mut emptied = false;
+        let offer = {
+            let offers_map = self
+                .counter_offers
+                .as_mut()
+                .expect("No counter offers found");
+            let offer = offers_map
+                .remove(&caller)
+                .expect("No active offer to cancel");
 
-        // Reset counter_offers to None when empty
-        if offers_map.is_empty() {
-            // Explicitly clear storage of counter offers when map becomes empty.
-            offers_map.clear();
+            if offers_map.is_empty() {
+                // Explicitly clear storage of counter offers when map becomes empty.
+                offers_map.clear();
+                emptied = true;
+            }
+
+            offer
+        };
+
+        if emptied {
             self.counter_offers = None;
-        } else {
-            self.counter_offers = Some(offers_map);
         }
 
-        let liquidity_request = self
-            .liquidity_request
-            .as_ref()
-            .expect("No liquidity request available")
-            .clone();
+        let (token_id, amount, interest, collateral, duration) = {
+            let liquidity_request = self
+                .liquidity_request
+                .as_ref()
+                .expect("No liquidity request available");
+            (
+                liquidity_request.token.clone(),
+                liquidity_request.amount,
+                liquidity_request.interest,
+                liquidity_request.collateral.clone(),
+                liquidity_request.duration,
+            )
+        };
 
         // Log counter_offer_cancelled event
         log_event!(
@@ -57,16 +72,16 @@ impl Vault {
                 "proposer": caller,
                 "amount": offer.amount,
                 "request": {
-                    "token": liquidity_request.token,
-                    "amount": liquidity_request.amount,
-                    "interest": liquidity_request.interest,
-                    "collateral": liquidity_request.collateral,
-                    "duration": liquidity_request.duration
+                    "token": token_id.clone(),
+                    "amount": amount,
+                    "interest": interest,
+                    "collateral": collateral,
+                    "duration": duration
                 }
             })
         );
 
         // Attempt refund
-        let _ = self.refund_counter_offer(liquidity_request.token.clone(), offer);
+        let _ = self.refund_counter_offer(token_id, offer);
     }
 }
