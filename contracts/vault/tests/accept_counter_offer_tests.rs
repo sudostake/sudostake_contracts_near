@@ -619,3 +619,62 @@ async fn accept_counter_offer_rejects_amount_mismatch() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn accept_counter_offer_rejects_when_already_matched() -> Result<()> {
+    let _guard = test_lock::acquire_test_mutex().await;
+    let env = TestEnv::new().await?;
+    let request = env.open_standard_request().await?;
+
+    let lender = env
+        .create_lender("accepted-lender", INITIAL_LENDER_BALANCE)
+        .await?;
+    env.submit_counter_offer(&lender, 900_000, &request).await?;
+
+    env.root
+        .call(env.vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": lender.id(),
+            "amount": U128(900_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let outcome = env
+        .root
+        .call(env.vault.id(), "accept_counter_offer")
+        .args_json(json!({
+            "proposer_id": lender.id(),
+            "amount": U128(900_000)
+        }))
+        .deposit(NearToken::from_yoctonear(1))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    let failure_text = format!("{:?}", outcome.failures());
+    assert!(
+        failure_text.contains("Liquidity request already accepted"),
+        "expected already-accepted guard, got: {failure_text}"
+    );
+
+    let state = env.vault_state().await?;
+    let accepted_offer = state
+        .accepted_offer
+        .context("accepted offer should remain recorded")?;
+    let lender_id = accepted_offer
+        .get("lender")
+        .and_then(|v| v.as_str())
+        .context("accepted offer lender missing")?;
+    assert_eq!(lender_id, lender.id().as_str());
+
+    let request_after = state
+        .liquidity_request
+        .context("liquidity request should remain present")?;
+    assert_eq!(request_after.amount.0, 900_000);
+
+    Ok(())
+}
