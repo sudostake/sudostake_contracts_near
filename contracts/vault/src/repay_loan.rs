@@ -89,7 +89,6 @@ impl Vault {
         // Loan was successfully repaid — clear loan state
         self.accepted_offer = None;
         self.liquidity_request = None;
-        self.pending_liquidity_request = None;
 
         // Log repay_loan_successful event
         log_event!(

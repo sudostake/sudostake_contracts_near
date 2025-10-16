@@ -549,6 +549,5 @@ impl Vault {
         self.liquidity_request = None;
         self.accepted_offer = None;
         self.liquidation = None;
-        self.pending_liquidity_request = None;
     }
 }

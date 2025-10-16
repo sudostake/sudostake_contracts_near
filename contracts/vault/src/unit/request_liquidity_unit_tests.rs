@@ -4,11 +4,13 @@ mod test_utils;
 use crate::{
     contract::Vault,
     types::{
-        AcceptedOffer, CounterOffer, LiquidityRequest, PendingLiquidityRequest, StorageKey,
+        AcceptedOffer, CounterOffer, LiquidityRequest, ProcessingState, StorageKey,
         MAX_LOAN_DURATION,
     },
 };
-use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
+use near_sdk::{
+    collections::UnorderedMap, env, json_types::U128, testing_env, AccountId, NearToken,
+};
 use test_utils::{alice, get_context, owner};
 
 #[test]
@@ -39,7 +41,8 @@ fn test_request_liquidity_success() {
     );
 
     // Assert vault state
-    assert!(vault.pending_liquidity_request.is_some());
+    assert_eq!(vault.processing_state, ProcessingState::RequestLiquidity);
+    assert_eq!(vault.processing_since, env::block_timestamp());
     assert!(vault.liquidity_request.is_none());
     assert!(vault.counter_offers.is_none());
 }
@@ -127,8 +130,8 @@ fn test_request_liquidity_fails_if_deposit_not_1_yocto() {
 }
 
 #[test]
-#[should_panic(expected = "A liquidity request is already in progress")]
-fn test_request_liquidity_fails_if_pending_request_exists() {
+#[should_panic(expected = "Vault busy with RequestLiquidity")]
+fn test_request_liquidity_fails_if_request_already_in_progress() {
     // Setup context
     let ctx = get_context(
         owner(),
@@ -145,16 +148,16 @@ fn test_request_liquidity_fails_if_pending_request_exists() {
         .active_validators
         .insert(&"validator1.near".parse::<AccountId>().unwrap());
 
-    // Manually insert a pending request
-    vault.pending_liquidity_request = Some(PendingLiquidityRequest {
-        token: "usdc.token.near".parse().unwrap(),
-        amount: U128(1_000_000),
-        interest: U128(100_000),
-        collateral: NearToken::from_near(5),
-        duration: 60 * 60 * 24,
-    });
+    // First call acquires the lock
+    vault.request_liquidity(
+        "usdc.token.near".parse().unwrap(),
+        U128(1_000_000),
+        U128(100_000),
+        NearToken::from_near(5),
+        60 * 60 * 24,
+    );
 
-    // Attempting to call request_liquidity again should panic
+    // Second call should panic because the lock is still held
     vault.request_liquidity(
         "usdc.token.near".parse().unwrap(),
         U128(1_000_000),
@@ -367,24 +370,6 @@ fn test_request_liquidity_fails_if_duration_is_zero() {
 }
 
 #[test]
-#[should_panic(expected = "Expected a pending liquidity request")]
-fn test_on_check_total_staked_fails_if_no_pending_request() {
-    // Setup context
-    let ctx = get_context(
-        owner(),
-        NearToken::from_near(10),
-        Some(NearToken::from_yoctonear(1)),
-    );
-    testing_env!(ctx);
-
-    // Vault without pending_liquidity_request
-    let mut vault = Vault::new(owner(), 0, 1);
-
-    // Call on_check_total_staked → should panic
-    vault.on_check_total_staked(vec![]);
-}
-
-#[test]
 #[should_panic(expected = "Vault busy with RequestLiquidity")]
 fn test_request_liquidity_fails_if_vault_already_locked() {
     // Simulate a timestamp of 1_000_000_000_000_000_000 (e.g. 1s)
@@ -411,7 +396,7 @@ fn test_request_liquidity_fails_if_vault_already_locked() {
         .insert(&"validator1.near".parse().unwrap());
 
     // Simulate a stale-inactive lock is not yet expired
-    vault.processing_state = crate::types::ProcessingState::RequestLiquidity;
+    vault.processing_state = ProcessingState::RequestLiquidity;
     vault.processing_since = locked_at;
 
     // Attempt to request liquidity while lock is still valid → should panic

@@ -57,7 +57,6 @@ Contracts
    - version: u64 — code version at deployment
    - active_validators: Set<AccountId> — validators with delegated stake
    - unstake_entries: Map<AccountId, UnstakeEntry { amount, epoch_height }>
-   - pending_liquidity_request: Option<PendingLiquidityRequest>
    - liquidity_request: Option<LiquidityRequest { token, amount, interest, collateral, duration, created_at }>
    - counter_offers: Option<Map<AccountId, CounterOffer { proposer, amount, timestamp }>> (capacity capped)
    - accepted_offer: Option<AcceptedOffer { lender, accepted_at }>

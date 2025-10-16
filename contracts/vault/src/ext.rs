@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use near_sdk::{ext_contract, json_types::U128, AccountId, NearToken, Promise};
 
-use crate::types::{RefundBatchItem, RefundEntry};
+use crate::types::{PendingLiquidityRequest, RefundBatchItem, RefundEntry};
 
 #[ext_contract(ext_self)]
 pub trait VaultExt {
@@ -25,7 +25,11 @@ pub trait VaultExt {
         #[callback_result] result: Result<(), near_sdk::PromiseError>,
     ) -> Promise;
 
-    fn on_check_total_staked(&mut self, validator_ids: Vec<AccountId>);
+    fn on_check_total_staked(
+        &mut self,
+        validator_ids: Vec<AccountId>,
+        request: PendingLiquidityRequest,
+    );
 
     fn on_refund_complete(
         &mut self,
