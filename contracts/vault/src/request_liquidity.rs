@@ -32,10 +32,6 @@ impl Vault {
             "Only the vault owner can request liquidity"
         );
         require!(
-            self.pending_liquidity_request.is_none(),
-            "A liquidity request is already in progress"
-        );
-        require!(
             self.liquidity_request.is_none(),
             "A request is already open"
         );
@@ -64,32 +60,31 @@ impl Vault {
         // Lock the vault for **RequestLiquidity** workflow
         self.acquire_processing_lock(ProcessingState::RequestLiquidity);
 
-        // Temporarily store the request until stake is verified
-        self.pending_liquidity_request = Some(PendingLiquidityRequest {
+        // Prepare the request details to be verified once staking balances return
+        let request = PendingLiquidityRequest {
             token,
             amount,
             interest,
             collateral,
             duration,
-        });
+        };
 
         // Batch query total staked balance across all active validators
         let validators = self.get_ordered_validator_list();
-        let cb = Self::ext(env::current_account_id())
-            .with_static_gas(GAS_FOR_CALLBACK)
-            .on_check_total_staked(validators.clone());
-        self.batch_query_total_staked(&validators, cb)
+        self.batch_query_total_staked(validators, |validator_ids| {
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_FOR_CALLBACK)
+                .on_check_total_staked(validator_ids, request)
+        })
     }
 
     #[private]
-    pub fn on_check_total_staked(&mut self, validator_ids: Vec<AccountId>) {
+    pub fn on_check_total_staked(
+        &mut self,
+        validator_ids: Vec<AccountId>,
+        pending: PendingLiquidityRequest,
+    ) {
         self.log_gas_checkpoint("on_check_total_staked");
-
-        // Retrieve and remove the pending request
-        let pending = self
-            .pending_liquidity_request
-            .take()
-            .expect("Expected a pending liquidity request");
 
         // Initialize total staked to zero
         let mut total_staked_yocto: u128 = 0;

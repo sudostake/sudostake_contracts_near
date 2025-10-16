@@ -1,7 +1,7 @@
 use crate::log_event;
 use crate::types::{
-    AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, PendingLiquidityRequest,
-    ProcessingState, RefundEntry, StorageKey, UnstakeEntry,
+    AcceptedOffer, CounterOffer, Liquidation, LiquidityRequest, ProcessingState, RefundEntry,
+    StorageKey, UnstakeEntry,
 };
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{UnorderedMap, UnorderedSet};
@@ -22,8 +22,6 @@ pub struct Vault {
     pub active_validators: UnorderedSet<AccountId>,
     /// Tracks unstaked NEAR and the epoch in which each unstake was requested, grouped per validator.
     pub unstake_entries: UnorderedMap<AccountId, UnstakeEntry>,
-    /// Temporary placeholder for a liquidity request before validator balances are verified.
-    pub pending_liquidity_request: Option<PendingLiquidityRequest>,
     /// Current active liquidity request posted by the vault owner. Only one may exist at a time.
     pub liquidity_request: Option<LiquidityRequest>,
     /// Active counter offers submitted by lenders in response to the open liquidity request.
@@ -72,7 +70,6 @@ impl Vault {
             version,
             active_validators: UnorderedSet::new(StorageKey::ActiveValidators),
             unstake_entries: UnorderedMap::new(StorageKey::UnstakeEntries),
-            pending_liquidity_request: None,
             liquidity_request: None,
             counter_offers: None,
             accepted_offer: None,
