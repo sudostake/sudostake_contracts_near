@@ -17,7 +17,7 @@ Runtime and Tooling Stack
   - Integration tests: near-workspaces = 0.19.0 (sandbox); gating via feature = "integration-test"
 - Build tooling:
   - Binaryen (wasm-opt) for size optimization (required by build.sh)
-  - Scripts: build.sh, factory_test.sh, vault_test.sh
+- Scripts: build.sh, test_contract.sh
   - Reproducible build metadata (cargo-near container) is recorded in crate metadata
 
 
@@ -155,9 +155,10 @@ Security & Safety Considerations
 Build & Test
 - Build all contracts: ./scripts/build.sh (requires wasm-opt)
   - Copies pinned third-party Wasm into res/, produces res/vault.wasm + res/factory.wasm (wasm-opt -Oz), copies their ABI artifacts (`*_abi.json`, `*_abi.zst`), and records matching `.sha256` hash files for reproducibility checks
-- Run unit/integration tests: ./scripts/factory_test.sh && ./scripts/vault_test.sh
-  - scripts/factory_test.sh enables the `integration-test` feature so the async sandbox tests are compiled and executed.
-  - scripts/vault_test.sh also builds a test-only wasm (feature = integration-test) at vault_res/vault.wasm for near-workspaces sandbox tests.
+- Run unit/integration tests:
+  - Vault: `./scripts/test_contract.sh --module vault [--unit|--integration]`
+  - Factory: `./scripts/test_contract.sh --module factory [--unit|--integration]`
+  - The script rebuilds the appropriate Wasm (including dependencies) before integration tests and forwards extra arguments to `cargo test`.
 
 
 Repository Structure (selected)

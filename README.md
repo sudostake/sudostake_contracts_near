@@ -7,7 +7,7 @@ Repository layout
 - contracts/vault — staking + peer‑to‑peer liquidity/loans logic
 - res/ — locally generated Wasm artifacts (gitignored; populated by build scripts)
 - third_party/wasm — pinned Wasm dependencies copied into `res/`
-- scripts/ — helper tooling (`build.sh`, `test_contract.sh`, `vault_test.sh`, `factory_test.sh`, setup utilities)
+- scripts/ — helper tooling (`build.sh`, `test_contract.sh`, setup utilities)
 
 Further reading
 - docs/TECHNICAL_ARCHITECTURE_AND_STACK.md — deep-dive into architecture, stack, and integration
@@ -48,7 +48,7 @@ Complete these steps in order before building or running tests:
   ```
    This downloads `near-sandbox` into `bin/` and points near-workspaces at it. Add the export to your shell profile to avoid repeated downloads. Set `SANDBOX_VERSION` or `SANDBOX_FORCE=1` when calling `scripts/setup.sh` to choose a different build.
 
-Helper scripts (`scripts/test_contract.sh`, `scripts/vault_test.sh`, `scripts/factory_test.sh`) honour the optional environment variable `CARGO_NEAR_TOOLCHAIN_OVERRIDE`. Set it to a toolchain that matches the sandbox requirements (e.g. `CARGO_NEAR_TOOLCHAIN_OVERRIDE=1.86.0-aarch64-apple-darwin`) if you need to avoid the newest Rust features when building locally. When the active `rustc` is 1.87 or newer, the scripts automatically look for an installed 1.86 toolchain and fall back to it.
+Helper scripts (`scripts/test_contract.sh`, `scripts/build.sh`) honour the optional environment variable `CARGO_NEAR_TOOLCHAIN_OVERRIDE`. Set it to a toolchain that matches the sandbox requirements (e.g. `CARGO_NEAR_TOOLCHAIN_OVERRIDE=1.86.0-aarch64-apple-darwin`) if you need to avoid the newest Rust features when building locally. When the active `rustc` is 1.87 or newer, the scripts automatically look for an installed 1.86 toolchain and fall back to it.
 
 
 ## Step 2: Build Contracts
@@ -152,12 +152,6 @@ All contract tests are orchestrated through `scripts/test_contract.sh`. It rebui
    scripts/test_contract.sh --module vault --integration
    ```
    Export `NEAR_SANDBOX_BIN_PATH` once and reuse it for both invocations.
-
-The legacy wrappers remain available and now delegate to the unified script if you prefer the previous entry points:
-```bash
-scripts/vault_test.sh          # equivalent to --module vault --integration
-scripts/factory_test.sh        # equivalent to --module factory --integration
-```
 
 
 ## Value flows (how funds move)
