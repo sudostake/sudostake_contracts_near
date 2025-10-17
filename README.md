@@ -7,7 +7,7 @@ Repository layout
 - contracts/vault — staking + peer‑to‑peer liquidity/loans logic
 - res/ — locally generated Wasm artifacts (gitignored; populated by build scripts)
 - third_party/wasm — pinned Wasm dependencies copied into `res/`
-- scripts/ — helper tooling (`build.sh`, `factory_test.sh`, `vault_test.sh`, setup utilities)
+- scripts/ — helper tooling (`build.sh`, `test_contract.sh`, setup utilities)
 
 Further reading
 - docs/TECHNICAL_ARCHITECTURE_AND_STACK.md — deep-dive into architecture, stack, and integration
@@ -48,7 +48,7 @@ Complete these steps in order before building or running tests:
   ```
    This downloads `near-sandbox` into `bin/` and points near-workspaces at it. Add the export to your shell profile to avoid repeated downloads. Set `SANDBOX_VERSION` or `SANDBOX_FORCE=1` when calling `scripts/setup.sh` to choose a different build.
 
-Helper scripts (`scripts/factory_test.sh`, `scripts/vault_test.sh`) honour the optional environment variable `CARGO_NEAR_TOOLCHAIN_OVERRIDE`. Set it to a toolchain that matches the sandbox requirements (e.g. `CARGO_NEAR_TOOLCHAIN_OVERRIDE=1.86.0-aarch64-apple-darwin`) if you need to avoid the newest Rust features when building locally. When the active `rustc` is 1.87 or newer, the scripts automatically look for an installed 1.86 toolchain and fall back to it.
+Helper scripts (`scripts/test_contract.sh`, `scripts/build.sh`) honour the optional environment variable `CARGO_NEAR_TOOLCHAIN_OVERRIDE`. Set it to a toolchain that matches the sandbox requirements (e.g. `CARGO_NEAR_TOOLCHAIN_OVERRIDE=1.86.0-aarch64-apple-darwin`) if you need to avoid the newest Rust features when building locally. When the active `rustc` is 1.87 or newer, the scripts automatically look for an installed 1.86 toolchain and fall back to it.
 
 
 ## Step 2: Build Contracts
@@ -98,61 +98,60 @@ To confirm reproducibility for a given commit, rerun `./scripts/build.sh` and co
     - Views: get_vault_state(), get_active_validators(), get_unstake_entry(validator), view_available_balance(), view_storage_cost(), get_refund_entries(owner?)
 
 
-## Step 3: Run Vault Integration Tests
+## Step 3: Run Tests
 
-Follow these steps whenever you want to exercise the full near-workspaces flow with the vault contract.
+All contract tests are orchestrated through `scripts/test_contract.sh`. It rebuilds the necessary Wasm (including dependencies) before running integration tests and forwards any additional `cargo test` arguments you provide.
 
-1. Ensure the sandbox binary is available (skip if you let near-workspaces download it on demand):
+1. **Check sandbox availability for integration runs** (skip if near-workspaces should download it on the fly):
    ```bash
    export NEAR_SANDBOX_BIN_PATH="$(pwd)/bin/near-sandbox"
    echo "${NEAR_SANDBOX_BIN_PATH:-not set}"
    ```
-   Running `./scripts/setup.sh` during Step&nbsp;1 downloads the default sandbox build into `bin/near-sandbox`. Use `echo "${NEAR_SANDBOX_BIN_PATH:?NEAR_SANDBOX_BIN_PATH is not set}"` if you want the shell to error when the variable is missing.
-2. Build the integration-test Wasm and execute the suite:
-   ```bash
-   chmod +x scripts/vault_test.sh   # first run only
-   ./scripts/vault_test.sh
-   ```
-   The script rebuilds `vault_res/vault.wasm` via `cargo near build non-reproducible-wasm --features integration-test` and refreshes `res/` with the pinned third-party Wasm. If your default toolchain is Rust 1.87+, it automatically falls back to Rust 1.86 (installed in Step&nbsp;1). Because `cargo near` generates ABI metadata by default, ensure any structs returned from view methods derive `schemars::JsonSchema`. Export `RUST_TEST_THREADS=1` if you prefer to run the tests single-threaded.
-3. Focus on a single vault test once `vault_res/vault.wasm` is up to date:
-   ```bash
-   RUST_TEST_THREADS=1 cargo test -p vault --release --features integration-test delegate_tests
-   ```
-   Rebuild the Wasm first if you modify contract code.
+   Running `./scripts/setup.sh` during Step&nbsp;1 caches the binary at `bin/near-sandbox`. Add the export to your shell profile so the tests can launch the sandbox offline.
 
+2. **Run vault tests**  
+   - Unit only:
+     ```bash
+     scripts/test_contract.sh --module vault --unit
+     ```
+   - Integration only (rebuilds `vault_res/vault.wasm` with `--features integration-test` and refreshes `res/`):
+     ```bash
+     scripts/test_contract.sh --module vault --integration
+     ```
+     The script pins `RUST_TEST_THREADS=1` by default to avoid sandbox port conflicts. Because `cargo near` emits ABI metadata, ensure view structs derive `schemars::JsonSchema` before running.
+   - Both unit and integration (default when no flag is provided):
+     ```bash
+     scripts/test_contract.sh --module vault
+     ```
 
-## Step 4: Run Factory Integration Tests
+3. **Run factory tests**  
+   - Unit only:
+     ```bash
+     scripts/test_contract.sh --module factory --unit
+     ```
+   - Integration only (rebuilds `res/factory.wasm` and, if missing, `res/vault.wasm` for deployments inside the suite):
+     ```bash
+     scripts/test_contract.sh --module factory --integration
+     ```
+     Factory integration runs also use `RUST_TEST_THREADS=1` unless you override the environment variable.
+   - Both unit and integration:
+     ```bash
+     scripts/test_contract.sh --module factory
+     ```
 
-Factory tests follow the same pattern as the vault instructions above:
-
-1. Confirm the environment prep from Step&nbsp;1 (kernel params, Binaryen, optional sandbox binary) is still in place.
-2. Refresh the pinned Wasm and rebuild `res/factory.wasm` if you want to run tests manually:
+4. **Filter to a single test or group**  
+   Use `--suite <pattern>` to pass a substring to `cargo test`:
    ```bash
-   ./scripts/prepare_res_dirs.sh
-   cargo near build non-reproducible-wasm \
-     --manifest-path contracts/factory/Cargo.toml \
-     --out-dir res
+   scripts/test_contract.sh --module vault --integration --suite cancel_counter_offer
    ```
-   (The helper script below performs this step automatically.)
-3. Execute the factory suite:
-   ```bash
-   chmod +x scripts/factory_test.sh   # first run only
-   ./scripts/factory_test.sh   # Automatically refreshes res/ and runs cargo test -p factory --features integration-test
-   ```
-   The script sets `RUST_TEST_THREADS=1` by default to avoid port conflicts inside the NEAR sandbox.
-4. Target specific factory tests after the Wasm is rebuilt:
-   ```bash
-   RUST_TEST_THREADS=1 cargo test -p factory --release --features integration-test mint_vault_success
-   ```
+   Any extra arguments after `--` go straight to `cargo test`, e.g. `-- --nocapture`.
 
-### Run both suites together
-```
-# Runs unit + integration tests for both contracts (requires the native Rust target).
-# Ensure NEAR_SANDBOX_BIN_PATH is exported before invoking these scripts.
-# Each script refreshes res/ and vault_res/ so the Wasm artifacts match the latest code.
-chmod +x scripts/factory_test.sh scripts/vault_test.sh   # first run only
-./scripts/factory_test.sh && ./scripts/vault_test.sh
-```
+5. **Run both modules in sequence**
+   ```bash
+   scripts/test_contract.sh --module factory --integration
+   scripts/test_contract.sh --module vault --integration
+   ```
+   Export `NEAR_SANDBOX_BIN_PATH` once and reuse it for both invocations.
 
 
 ## Value flows (how funds move)

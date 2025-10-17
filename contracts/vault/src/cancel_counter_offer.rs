@@ -8,48 +8,46 @@ use near_sdk::{assert_one_yocto, env, near_bindgen, require};
 
 #[near_bindgen]
 impl Vault {
+    /// Cancels the counter offer submitted by the caller.
+    ///
+    /// Requirements:
+    /// * Exactly 1 yoctoNEAR must be attached (prevents access-key calls).
+    /// * A liquidity request must still be open.
+    /// * No offer must have been accepted yet.
+    /// * The caller must have an active counter offer recorded in the vault.
     #[payable]
     pub fn cancel_counter_offer(&mut self) {
-        // Require 1 yoctoNEAR for access control
         assert_one_yocto();
 
-        // Vault must have an open liquidity request
         require!(
             self.liquidity_request.is_some(),
             "No liquidity request open"
         );
 
-        // Request must not have been accepted
         require!(
             self.accepted_offer.is_none(),
             "Cannot cancel after offer is accepted"
         );
 
-        // Counter offers must exist
-        let mut offers_map = self.counter_offers.take().expect("No counter offers found");
-
-        // Caller must have an active counter offer
         let caller = env::predecessor_account_id();
-        let offer = offers_map
-            .remove(&caller)
-            .expect("No active offer to cancel");
 
-        // Reset counter_offers to None when empty
-        if offers_map.is_empty() {
-            // Explicitly clear storage of counter offers when map becomes empty.
-            offers_map.clear();
-            self.counter_offers = None;
+        // Remove caller's offer and persist remaining offers (if any).
+        let mut offers = self.counter_offers.take().expect("No counter offers found");
+        let offer = offers.remove(&caller).expect("No active offer to cancel");
+        self.counter_offers = if offers.is_empty() {
+            None
         } else {
-            self.counter_offers = Some(offers_map);
-        }
+            Some(offers)
+        };
 
-        let liquidity_request = self
+        let request_snapshot = self
             .liquidity_request
             .as_ref()
             .expect("No liquidity request available")
             .clone();
+        let token_id = request_snapshot.token.clone();
 
-        // Log counter_offer_cancelled event
+        // Emit structured event for indexers/clients.
         log_event!(
             "counter_offer_cancelled",
             near_sdk::serde_json::json!({
@@ -57,16 +55,16 @@ impl Vault {
                 "proposer": caller,
                 "amount": offer.amount,
                 "request": {
-                    "token": liquidity_request.token,
-                    "amount": liquidity_request.amount,
-                    "interest": liquidity_request.interest,
-                    "collateral": liquidity_request.collateral,
-                    "duration": liquidity_request.duration
+                    "token": token_id.clone(),
+                    "amount": request_snapshot.amount,
+                    "interest": request_snapshot.interest,
+                    "collateral": request_snapshot.collateral,
+                    "duration": request_snapshot.duration
                 }
             })
         );
 
-        // Attempt refund
-        let _ = self.refund_counter_offer(liquidity_request.token.clone(), offer);
+        // Kick off refund to return the locked funds to the proposer.
+        let _ = self.refund_counter_offer(token_id, offer);
     }
 }

@@ -1,4 +1,7 @@
-use near_sdk::{collections::UnorderedMap, json_types::U128, testing_env, AccountId, NearToken};
+use near_sdk::{
+    collections::UnorderedMap, json_types::U128, test_utils::get_logs, testing_env, AccountId,
+    NearToken,
+};
 use test_utils::{
     apply_counter_offer_message_from, create_valid_liquidity_request, get_context, owner,
 };
@@ -55,6 +58,93 @@ fn test_cancel_counter_offer_succeeds() {
 }
 
 #[test]
+fn test_cancel_counter_offer_emits_event() {
+    let ctx = get_context(
+        alice(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(ctx);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+
+    let token: AccountId = "usdc.test.near".parse().unwrap();
+    let request = create_valid_liquidity_request(token.clone());
+    vault.liquidity_request = Some(request.clone());
+
+    let msg = apply_counter_offer_message_from(&request);
+
+    vault
+        .try_add_counter_offer(alice(), U128(800_000), msg, token)
+        .expect("offer creation should succeed");
+
+    vault.cancel_counter_offer();
+
+    let logs = get_logs();
+    let event_log = logs
+        .iter()
+        .rev()
+        .find(|log| log.contains("counter_offer_cancelled"))
+        .expect("Expected counter_offer_cancelled log entry");
+
+    let payload = event_log
+        .strip_prefix("EVENT_JSON:")
+        .expect("Log entry should start with EVENT_JSON:");
+    let payload: serde_json::Value =
+        serde_json::from_str(payload).expect("Log entry should be valid JSON");
+
+    assert_eq!(
+        payload.get("event").and_then(|v| v.as_str()),
+        Some("counter_offer_cancelled")
+    );
+
+    let data = payload
+        .get("data")
+        .expect("counter_offer_cancelled log missing data field");
+    assert!(
+        data.get("vault")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false),
+        "vault field should be a non-empty string"
+    );
+
+    let proposer = alice().to_string();
+    assert_eq!(
+        data.get("proposer").and_then(|v| v.as_str()),
+        Some(proposer.as_str())
+    );
+    assert_eq!(data.get("amount").and_then(|v| v.as_str()), Some("800000"));
+
+    let request_data = data
+        .get("request")
+        .and_then(|v| v.as_object())
+        .expect("counter_offer_cancelled log missing request payload");
+    assert_eq!(
+        request_data.get("token").and_then(|v| v.as_str()),
+        Some("usdc.test.near")
+    );
+    assert_eq!(
+        request_data.get("amount").and_then(|v| v.as_str()),
+        Some("1000000")
+    );
+    assert_eq!(
+        request_data.get("interest").and_then(|v| v.as_str()),
+        Some("100000")
+    );
+
+    let expected_collateral = NearToken::from_near(5).as_yoctonear().to_string();
+    assert_eq!(
+        request_data.get("collateral").and_then(|v| v.as_str()),
+        Some(expected_collateral.as_str())
+    );
+    assert_eq!(
+        request_data.get("duration").and_then(|v| v.as_u64()),
+        Some(86400)
+    );
+}
+
+#[test]
 fn test_cancel_counter_offer_clears_underlying_storage_when_last_offer() {
     // Set up test context as alice
     let ctx = get_context(
@@ -85,6 +175,16 @@ fn test_cancel_counter_offer_clears_underlying_storage_when_last_offer() {
         0,
         "Counter offer storage prefix should be empty after final cancel"
     );
+}
+
+#[test]
+#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+fn test_cancel_counter_offer_requires_one_yocto() {
+    let ctx = get_context(alice(), NearToken::from_near(10), None);
+    testing_env!(ctx);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.cancel_counter_offer();
 }
 
 #[test]
