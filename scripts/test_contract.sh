@@ -90,6 +90,7 @@ WASM_FILE=""
 INTEGRATION_BUILD_FEATURES=()
 INTEGRATION_TEST_FEATURES=()
 NEEDS_PREPARE_RES=false
+INTEGRATION_TEST_TARGETS=()
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "❌ cargo is required to run tests." >&2
@@ -120,6 +121,15 @@ case "${MODULE}" in
     exit 1
     ;;
 esac
+
+TESTS_DIR="contracts/${MODULE}/tests"
+if [[ -n "${SUITE_PATTERN}" && -d "${TESTS_DIR}" ]]; then
+  while IFS= read -r test_path; do
+    test_file="$(basename "${test_path}")"
+    test_name="${test_file%.rs}"
+    INTEGRATION_TEST_TARGETS+=("${test_name}")
+  done < <(find "${TESTS_DIR}" -maxdepth 1 -type f -iname "*${SUITE_PATTERN}*.rs" | sort)
+fi
 
 detect_toolchain_override() {
   if [[ -n "${CARGO_NEAR_TOOLCHAIN_OVERRIDE:-}" ]]; then
@@ -159,6 +169,20 @@ EOF
       fi
     fi
   fi
+}
+
+run_cargo_near() {
+  local description="$1"
+  shift
+  local logfile
+  logfile="$(mktemp -t cargo_near.XXXXXX)"
+  if ! "$@" >"$logfile" 2>&1; then
+    echo "❌ ${description} failed. Full output:" >&2
+    cat "$logfile" >&2
+    rm -f "$logfile"
+    exit 1
+  fi
+  rm -f "$logfile"
 }
 
 if "${RUN_UNIT}"; then
@@ -215,7 +239,7 @@ EOF
     if [[ -n "${TOOLCHAIN_OVERRIDE}" ]]; then
       dep_build_cmd+=(--override-toolchain "${TOOLCHAIN_OVERRIDE}")
     fi
-    "${dep_build_cmd[@]}"
+    run_cargo_near "Rebuilding res/vault.wasm" "${dep_build_cmd[@]}"
     echo "✅ Dependency res/vault.wasm rebuilt."
   fi
 
@@ -233,7 +257,7 @@ EOF
   if [[ -n "${TOOLCHAIN_OVERRIDE}" ]]; then
     build_cmd+=(--override-toolchain "${TOOLCHAIN_OVERRIDE}")
   fi
-  "${build_cmd[@]}"
+  run_cargo_near "Rebuilding ${WASM_OUT_DIR}/${WASM_FILE}" "${build_cmd[@]}"
   echo "✅ ${WASM_OUT_DIR}/${WASM_FILE} rebuilt."
 
   NATIVE_TARGET="$(rustc -vV | awk '/host:/ {print $2}')"
@@ -243,11 +267,17 @@ EOF
     -p "${CRATE}"
     --release
     --target "${NATIVE_TARGET}"
-    --tests
   )
   if ((${#INTEGRATION_TEST_FEATURES[@]} > 0)); then
     test_features="$(IFS=,; echo "${INTEGRATION_TEST_FEATURES[*]}")"
     test_cmd+=(--features "${test_features}")
+  fi
+  if ((${#INTEGRATION_TEST_TARGETS[@]} > 0)); then
+    for target in "${INTEGRATION_TEST_TARGETS[@]}"; do
+      test_cmd+=(--test "${target}")
+    done
+  else
+    test_cmd+=(--tests)
   fi
   if [[ -n "${SUITE_PATTERN}" ]]; then
     test_cmd+=("${SUITE_PATTERN}")
