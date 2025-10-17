@@ -5,7 +5,12 @@ use crate::{
     contract::Vault,
     types::{ProcessingState, UnstakeEntry},
 };
-use near_sdk::{env, test_utils::get_logs, testing_env, AccountId, NearToken};
+use near_sdk::{
+    env,
+    mock::{MockAction, Receipt},
+    test_utils::{get_created_receipts, get_logs},
+    testing_env, AccountId, NearToken,
+};
 use test_utils::{alice, get_context, get_context_with_timestamp, owner};
 
 #[test]
@@ -277,5 +282,50 @@ fn test_claim_unstaked_allows_after_epoch_passed() {
     );
 
     // Call claim_unstaked — should not panic
-    let _ = vault.claim_unstaked(validator);
+    let _ = vault.claim_unstaked(validator.clone());
+
+    // Lock should remain engaged until callback completes
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::ClaimUnstaked,
+        "Processing lock must be held during withdraw_all"
+    );
+
+    // Verify promise chain schedules withdraw_all followed by on_withdraw_all
+    let receipts = get_created_receipts();
+    assert!(
+        contains_function_call(&receipts, "withdraw_all"),
+        "claim_unstaked must call withdraw_all on the validator staking pool"
+    );
+    assert!(
+        contains_function_call(&receipts, "on_withdraw_all"),
+        "claim_unstaked must schedule its on_withdraw_all callback"
+    );
+
+    // Simulate successful callback to complete the flow
+    let mut callback_context = get_context(owner(), NearToken::from_near(10), None);
+    callback_context.epoch_height = 10;
+    testing_env!(callback_context);
+
+    vault.on_withdraw_all(validator.clone(), Ok(()));
+
+    assert!(
+        vault.unstake_entries.get(&validator).is_none(),
+        "Entry should be cleared after successful callback"
+    );
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::Idle,
+        "Processing lock should be released after successful callback"
+    );
+}
+
+fn contains_function_call(receipts: &[Receipt], method: &str) -> bool {
+    receipts
+        .iter()
+        .flat_map(|receipt| receipt.actions.iter())
+        .any(|action| match action {
+            MockAction::FunctionCallWeight { method_name, .. } => method_name == method.as_bytes(),
+            _ => false,
+        })
 }
