@@ -81,7 +81,7 @@ if [[ "${RUN_UNIT}" = false && "${RUN_INTEGRATION}" = false ]]; then
   RUN_INTEGRATION=true
 fi
 
-MODULE="$(echo "${MODULE}" | tr '[:upper:]' '[:lower:]')"
+MODULE="${MODULE,,}"
 
 RUST_FALLBACK_VERSION="1.86.0"
 TOOLCHAIN_OVERRIDE=""
@@ -89,6 +89,10 @@ CRATE=""
 MANIFEST=""
 WASM_OUT_DIR=""
 WASM_FILE=""
+MODULE_DEPENDENCY_NAMES=()
+MODULE_DEPENDENCY_MANIFESTS=()
+MODULE_DEPENDENCY_OUT_DIRS=()
+MODULE_DEPENDENCY_WASM_FILES=()
 INTEGRATION_BUILD_FEATURES=()
 INTEGRATION_TEST_FEATURES=()
 NEEDS_PREPARE_RES=false
@@ -118,6 +122,10 @@ case "${MODULE}" in
     INTEGRATION_BUILD_FEATURES=()
     INTEGRATION_TEST_FEATURES=("integration-test")
     NEEDS_PREPARE_RES=true
+    MODULE_DEPENDENCY_NAMES=("vault")
+    MODULE_DEPENDENCY_MANIFESTS=("contracts/vault/Cargo.toml")
+    MODULE_DEPENDENCY_OUT_DIRS=("res")
+    MODULE_DEPENDENCY_WASM_FILES=("vault.wasm")
     ;;
   *)
     echo "❌ Unsupported module '${MODULE}'." >&2
@@ -202,7 +210,7 @@ run_cargo_near() {
   local description="$1"
   shift
   local logfile
-  logfile="$(mktemp -t cargo_near.XXXXXX)"
+  logfile="$(mktemp -t cargo_near.XXXXXXXXXX)"
   if ! "$@" >"$logfile" 2>&1; then
     echo "❌ ${description} failed. Full output:" >&2
     cat "$logfile" >&2
@@ -266,19 +274,35 @@ EOF
 
   detect_toolchain_override
 
-  if [[ "${MODULE}" == "factory" ]] && [[ ! -f "res/vault.wasm" ]]; then
-    echo "ℹ️  res/vault.wasm not found; rebuilding vault dependency..."
-    dep_build_cmd=(
-      cargo near build non-reproducible-wasm
-      --locked
-      --manifest-path contracts/vault/Cargo.toml
-      --out-dir res
-    )
-    if [[ -n "${TOOLCHAIN_OVERRIDE}" ]]; then
-      dep_build_cmd+=(--override-toolchain "${TOOLCHAIN_OVERRIDE}")
-    fi
-    run_cargo_near "Rebuilding res/vault.wasm" "${dep_build_cmd[@]}"
-    echo "✅ Dependency res/vault.wasm rebuilt."
+  if ((${#MODULE_DEPENDENCY_NAMES[@]} > 0)); then
+    for idx in "${!MODULE_DEPENDENCY_NAMES[@]}"; do
+      dep_name="${MODULE_DEPENDENCY_NAMES[$idx]}"
+      dep_manifest="${MODULE_DEPENDENCY_MANIFESTS[$idx]}"
+      dep_out_dir="${MODULE_DEPENDENCY_OUT_DIRS[$idx]}"
+      dep_wasm_file="${MODULE_DEPENDENCY_WASM_FILES[$idx]}"
+      if [[ -n "${dep_out_dir}" ]]; then
+        dep_wasm_path="${dep_out_dir%/}/${dep_wasm_file}"
+      else
+        dep_wasm_path="${dep_wasm_file}"
+      fi
+      if [[ ! -f "${dep_wasm_path}" ]]; then
+        echo "ℹ️  ${dep_wasm_path} not found; rebuilding ${dep_name} dependency..."
+        dep_build_cmd=(
+          cargo near build non-reproducible-wasm
+          --locked
+          --manifest-path "${dep_manifest}"
+        )
+        if [[ -n "${dep_out_dir}" ]]; then
+          mkdir -p "${dep_out_dir}"
+          dep_build_cmd+=(--out-dir "${dep_out_dir}")
+        fi
+        if [[ -n "${TOOLCHAIN_OVERRIDE}" ]]; then
+          dep_build_cmd+=(--override-toolchain "${TOOLCHAIN_OVERRIDE}")
+        fi
+        run_cargo_near "Rebuilding ${dep_wasm_path}" "${dep_build_cmd[@]}"
+        echo "✅ Dependency ${dep_wasm_path} rebuilt."
+      fi
+    done
   fi
 
   echo "🔧 Rebuilding ${WASM_OUT_DIR}/${WASM_FILE} for integration tests..."
