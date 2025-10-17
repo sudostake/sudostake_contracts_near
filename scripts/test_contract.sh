@@ -167,7 +167,9 @@ if "${RUN_UNIT}"; then
   if [[ -n "${SUITE_PATTERN}" ]]; then
     unit_cmd+=("${SUITE_PATTERN}")
   fi
-  unit_cmd+=("${EXTRA_ARGS[@]}")
+  if ((${#EXTRA_ARGS[@]} > 0)); then
+    unit_cmd+=("${EXTRA_ARGS[@]}")
+  fi
   "${unit_cmd[@]}"
   echo "✅ Unit tests passed for ${CRATE}."
 fi
@@ -250,7 +252,9 @@ EOF
   if [[ -n "${SUITE_PATTERN}" ]]; then
     test_cmd+=("${SUITE_PATTERN}")
   fi
-  test_cmd+=("${EXTRA_ARGS[@]}")
+  if ((${#EXTRA_ARGS[@]} > 0)); then
+    test_cmd+=("${EXTRA_ARGS[@]}")
+  fi
   RUST_TEST_THREADS="${RUST_TEST_THREADS:-1}" \
     RUSTFLAGS="-C panic=unwind" \
     "${test_cmd[@]}"
