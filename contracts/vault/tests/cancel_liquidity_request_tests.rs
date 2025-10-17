@@ -126,12 +126,7 @@ async fn cancel_liquidity_request_requires_exact_yocto() -> anyhow::Result<()> {
 #[tokio::test]
 async fn cancel_liquidity_request_rejects_non_owner() -> anyhow::Result<()> {
     let _guard = test_lock::acquire_test_mutex().await;
-    let CancelLiquidityTestEnv {
-        mut worker,
-        root,
-        vault,
-        ..
-    } = setup_cancel_liquidity_env().await?;
+    let CancelLiquidityTestEnv { worker, vault, .. } = setup_cancel_liquidity_env().await?;
 
     let alice = worker.dev_create_account().await?;
 
@@ -199,6 +194,9 @@ async fn cancel_liquidity_request_refunds_all_counter_offers() -> anyhow::Result
         .await?
         .into_result()?;
 
+    let initial_balance_a = get_usdc_balance(&token, lender_a.id()).await?;
+    let initial_balance_b = get_usdc_balance(&token, lender_b.id()).await?;
+
     let state: VaultViewState = vault.view("get_vault_state").await?.json()?;
     let request = state
         .liquidity_request
@@ -232,8 +230,16 @@ async fn cancel_liquidity_request_refunds_all_counter_offers() -> anyhow::Result
         .await?
         .into_result()?;
 
-    let balance_a_before = get_usdc_balance(&token, lender_a.id()).await?;
-    let balance_b_before = get_usdc_balance(&token, lender_b.id()).await?;
+    let balance_a_before_refund = get_usdc_balance(&token, lender_a.id()).await?;
+    let balance_b_before_refund = get_usdc_balance(&token, lender_b.id()).await?;
+    assert_eq!(
+        balance_a_before_refund.0, 0,
+        "Lender A should have transferred full balance to the vault"
+    );
+    assert_eq!(
+        balance_b_before_refund.0, 0,
+        "Lender B should have transferred full balance to the vault"
+    );
 
     let result = root
         .call(vault.id(), "cancel_liquidity_request")
@@ -268,11 +274,11 @@ async fn cancel_liquidity_request_refunds_all_counter_offers() -> anyhow::Result
     let balance_a_after = get_usdc_balance(&token, lender_a.id()).await?;
     let balance_b_after = get_usdc_balance(&token, lender_b.id()).await?;
     assert_eq!(
-        balance_a_after, balance_a_before,
+        balance_a_after, initial_balance_a,
         "Lender A should receive their full refund"
     );
     assert_eq!(
-        balance_b_after, balance_b_before,
+        balance_b_after, initial_balance_b,
         "Lender B should receive their full refund"
     );
 
