@@ -3,7 +3,12 @@ use crate::{
     contract::Vault,
     types::{ApplyCounterOfferMessage, LiquidityRequest, RefundEntry, APPLY_COUNTER_OFFER_ACTION},
 };
-use near_sdk::{json_types::U128, test_utils::VMContextBuilder, AccountId, NearToken};
+use near_sdk::{
+    json_types::U128,
+    mock::{MockAction, Receipt},
+    test_utils::VMContextBuilder,
+    AccountId, NearToken,
+};
 
 pub const YOCTO_NEAR: u128 = 10u128.pow(24);
 
@@ -97,4 +102,18 @@ pub fn apply_counter_offer_msg_string(request: &LiquidityRequest) -> String {
 /// Inserts a test refund entry into the vault's refund list
 pub fn insert_refund_entry(vault: &mut Vault, id: u64, entry: RefundEntry) {
     vault.refund_list.insert(&id, &entry);
+}
+
+/// Returns true when any receipt schedules a call to `method`.
+pub fn contains_function_call(receipts: &[Receipt], method: &str) -> bool {
+    let needle = method.as_bytes();
+
+    receipts
+        .iter()
+        .flat_map(|receipt| receipt.actions.iter())
+        .any(|action| match action {
+            MockAction::FunctionCall { method_name, .. } => method_name == needle,
+            MockAction::FunctionCallWeight { method_name, .. } => method_name == needle,
+            _ => false,
+        })
 }

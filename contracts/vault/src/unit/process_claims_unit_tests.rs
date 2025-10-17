@@ -18,7 +18,9 @@ use near_sdk::{
     test_utils::{get_created_receipts, VMContextBuilder},
     test_vm_config, testing_env, AccountId, NearToken, PromiseResult, RuntimeFeesConfig,
 };
-use test_utils::{alice, create_valid_liquidity_request, owner, YOCTO_NEAR};
+use test_utils::{
+    alice, contains_function_call, create_valid_liquidity_request, owner, YOCTO_NEAR,
+};
 
 const VALIDATOR_A: &str = "validator-a.testnet";
 fn expiry_timestamp() -> u64 {
@@ -297,16 +299,6 @@ fn on_lender_payout_complete_records_partial_amount() {
 
 fn promise_success_result(value: &[u8]) -> PromiseResult {
     PromiseResult::Successful(value.to_vec())
-}
-
-fn contains_function_call(receipts: &[Receipt], method: &str) -> bool {
-    receipts
-        .iter()
-        .flat_map(|r| r.actions.iter())
-        .any(|action| match action {
-            MockAction::FunctionCallWeight { method_name, .. } => method_name == method.as_bytes(),
-            _ => false,
-        })
 }
 
 fn find_transfer_to(receipts: &[Receipt], receiver: &AccountId) -> Option<NearToken> {

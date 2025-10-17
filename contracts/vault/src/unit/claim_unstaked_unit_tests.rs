@@ -7,11 +7,10 @@ use crate::{
 };
 use near_sdk::{
     env,
-    mock::{MockAction, Receipt},
     test_utils::{get_created_receipts, get_logs},
     testing_env, AccountId, NearToken,
 };
-use test_utils::{alice, get_context, get_context_with_timestamp, owner};
+use test_utils::{alice, contains_function_call, get_context, get_context_with_timestamp, owner};
 
 #[test]
 #[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
@@ -318,14 +317,4 @@ fn test_claim_unstaked_allows_after_epoch_passed() {
         ProcessingState::Idle,
         "Processing lock should be released after successful callback"
     );
-}
-
-fn contains_function_call(receipts: &[Receipt], method: &str) -> bool {
-    receipts
-        .iter()
-        .flat_map(|receipt| receipt.actions.iter())
-        .any(|action| match action {
-            MockAction::FunctionCallWeight { method_name, .. } => method_name == method.as_bytes(),
-            _ => false,
-        })
 }
