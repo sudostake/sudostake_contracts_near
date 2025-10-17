@@ -156,6 +156,7 @@ detect_toolchain_override() {
 
   if ! command -v rustup >/dev/null 2>&1; then
     echo "⚠️  rustup not found; skipping automatic Rust ${RUST_FALLBACK_VERSION} fallback."
+    echo "   You can manually set the toolchain override by exporting CARGO_NEAR_TOOLCHAIN_OVERRIDE=<toolchain> before running this script."
     return
   fi
 
