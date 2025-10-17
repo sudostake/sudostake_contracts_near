@@ -59,12 +59,8 @@ fn vault_with_counter_offers(
         });
     }
 
-    if counter_map.is_empty() {
-        (vault, expected_refunds)
-    } else {
-        vault.counter_offers = Some(counter_map);
-        (vault, expected_refunds)
-    }
+    vault.counter_offers = Some(counter_map);
+    (vault, expected_refunds)
 }
 
 #[test]
@@ -173,7 +169,6 @@ fn test_cancel_liquidity_request_succeeds_with_empty_counter_offers() {
 
     // Create a vault owned by the caller
     let (mut vault, _) = vault_with_counter_offers(Vec::<(AccountId, u128)>::new());
-    vault.counter_offers = Some(UnorderedMap::new(StorageKey::CounterOffers));
 
     // Call cancel_liquidity_request — should succeed
     vault.cancel_liquidity_request();

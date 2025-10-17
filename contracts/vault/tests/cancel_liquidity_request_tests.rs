@@ -143,7 +143,6 @@ async fn cancel_liquidity_request_rejects_non_owner() -> anyhow::Result<()> {
         "Expected panic for non-owner cancellation. Got: {failure_text}"
     );
 
-    drop(worker);
     Ok(())
 }
 
