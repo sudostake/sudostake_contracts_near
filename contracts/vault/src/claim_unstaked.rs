@@ -34,12 +34,12 @@ impl Vault {
         // Ensure the required number of epochs has passed
         let current_epoch = env::epoch_height();
         let entry = entry.unwrap();
+        let required_epoch = entry.epoch_height.saturating_add(NUM_EPOCHS_TO_UNLOCK);
         require!(
-            current_epoch >= entry.epoch_height + NUM_EPOCHS_TO_UNLOCK,
+            current_epoch >= required_epoch,
             format!(
                 "Unstaked funds not yet claimable (current_epoch: {}, required_epoch: {})",
-                current_epoch,
-                entry.epoch_height + NUM_EPOCHS_TO_UNLOCK
+                current_epoch, required_epoch
             )
         );
 
