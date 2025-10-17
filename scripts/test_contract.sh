@@ -245,7 +245,7 @@ EOF
   fi
 
   if ! command -v wasm-opt >/dev/null 2>&1; then
-    echo "❌ wasm-opt not found. Install Binaryen (e.g. 'brew install binaryen')." >&2
+    echo "❌ wasm-opt not found. Install Binaryen (e.g. 'brew install binaryen' on macOS, or 'sudo apt install binaryen' on Ubuntu/Debian)." >&2
     exit 1
   fi
 
