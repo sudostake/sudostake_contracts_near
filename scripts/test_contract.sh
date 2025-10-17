@@ -245,7 +245,12 @@ EOF
   fi
 
   if ! command -v wasm-opt >/dev/null 2>&1; then
-    echo "❌ wasm-opt not found. Install Binaryen (e.g. 'brew install binaryen' on macOS, or 'sudo apt install binaryen' on Ubuntu/Debian)." >&2
+    echo "❌ wasm-opt not found. Install Binaryen using your package manager:" >&2
+    echo "    macOS:                 brew install binaryen" >&2
+    echo "    Ubuntu/Debian:         sudo apt install binaryen" >&2
+    echo "    Fedora/RHEL/CentOS:    sudo dnf install binaryen" >&2
+    echo "    RHEL/CentOS (legacy):  sudo yum install binaryen" >&2
+    echo "    Arch Linux:            sudo pacman -S binaryen" >&2
     exit 1
   fi
 
