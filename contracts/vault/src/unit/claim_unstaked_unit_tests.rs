@@ -92,6 +92,34 @@ fn test_claim_unstaked_fails_if_epoch_not_ready() {
 }
 
 #[test]
+#[should_panic(expected = "Unstaked funds not yet claimable")]
+fn test_claim_unstaked_resists_epoch_wraparound() {
+    // Prepare context with 1 yoctoNEAR but low epoch height
+    let mut context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    context.epoch_height = 10;
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    let validator: AccountId = "validator.poolv1.near".parse().unwrap();
+
+    // Insert entry that would overflow without saturating add
+    vault.unstake_entries.insert(
+        &validator,
+        &UnstakeEntry {
+            amount: NearToken::from_near(1).as_yoctonear(),
+            epoch_height: u64::MAX - 1,
+        },
+    );
+
+    // Claim should still be blocked, verifying overflow fix
+    vault.claim_unstaked(validator);
+}
+
+#[test]
 #[should_panic(expected = "Cannot claim unstaked NEAR while liquidation is in progress")]
 fn test_claim_unstaked_fails_if_liquidation_active() {
     // Set up a context with 1 yoctoNEAR and valid epoch
