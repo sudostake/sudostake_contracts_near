@@ -22,6 +22,8 @@ EOF
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+ORIGINAL_ARGS=("$@")
+
 MODULE=""
 RUN_UNIT=false
 RUN_INTEGRATION=false
@@ -177,10 +179,16 @@ detect_toolchain_override() {
         echo "ℹ️  Overriding cargo-near toolchain with ${alt_candidate}."
         TOOLCHAIN_OVERRIDE="${alt_candidate}"
       else
+        printf -v script_path_q '%q' "$0"
+        if ((${#ORIGINAL_ARGS[@]} > 0)); then
+          printf -v original_args_q ' %q' "${ORIGINAL_ARGS[@]}"
+        else
+          original_args_q=""
+        fi
         cat <<EOF
 ❌ rustc ${release} is incompatible with the current nearcore VM. Install Rust ${RUST_FALLBACK_VERSION} and rerun:
     rustup toolchain install ${RUST_FALLBACK_VERSION}
-    CARGO_NEAR_TOOLCHAIN_OVERRIDE=${RUST_FALLBACK_VERSION} ${ROOT_DIR}/scripts/test_contract.sh --module ${MODULE} --integration
+    CARGO_NEAR_TOOLCHAIN_OVERRIDE=${RUST_FALLBACK_VERSION} ${script_path_q}${original_args_q}
 EOF
         exit 1
       fi
