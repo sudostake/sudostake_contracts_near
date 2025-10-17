@@ -112,8 +112,7 @@ pub fn contains_function_call(receipts: &[Receipt], method: &str) -> bool {
         .iter()
         .flat_map(|receipt| receipt.actions.iter())
         .any(|action| match action {
-            MockAction::FunctionCall { method_name, .. }
-            | MockAction::FunctionCallWeight { method_name, .. } => method_name == needle,
+            MockAction::FunctionCallWeight { method_name, .. } => method_name == needle,
             _ => false,
         })
 }
