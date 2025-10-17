@@ -124,9 +124,18 @@ case "${MODULE}" in
 esac
 
 TESTS_DIR="contracts/${MODULE}/tests"
-if [[ -n "${SUITE_PATTERN}" && -d "${TESTS_DIR}" ]]; then
+if [[ -d "${TESTS_DIR}" ]]; then
   while IFS= read -r test_path; do
     test_file="$(basename "${test_path}")"
+    case "${test_file}" in
+      *_tests.rs|test_*.rs) ;;
+      *) continue ;;
+    esac
+
+    if [[ -n "${SUITE_PATTERN}" && "${test_file}" != *"${SUITE_PATTERN}"* ]]; then
+      continue
+    fi
+
     test_name="${test_file%.rs}"
     INTEGRATION_TEST_TARGETS+=("${test_name}")
     label="${test_name%_tests}"
@@ -135,7 +144,7 @@ if [[ -n "${SUITE_PATTERN}" && -d "${TESTS_DIR}" ]]; then
     else
       INTEGRATION_TEST_LABELS+=("${label}")
     fi
-  done < <(find "${TESTS_DIR}" -maxdepth 1 -type f -iname "*${SUITE_PATTERN}*.rs" | sort)
+  done < <(find "${TESTS_DIR}" -maxdepth 1 -type f -name "*.rs" | sort)
 fi
 
 detect_toolchain_override() {
