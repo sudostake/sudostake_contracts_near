@@ -114,10 +114,7 @@ fn test_cancel_counter_offer_emits_event() {
         data.get("proposer").and_then(|v| v.as_str()),
         Some(proposer.as_str())
     );
-    assert_eq!(
-        data.get("amount").and_then(|v| v.as_str()),
-        Some("800000")
-    );
+    assert_eq!(data.get("amount").and_then(|v| v.as_str()), Some("800000"));
 
     let request_data = data
         .get("request")
@@ -136,13 +133,9 @@ fn test_cancel_counter_offer_emits_event() {
         Some("100000")
     );
 
-    let expected_collateral = NearToken::from_near(5)
-        .as_yoctonear()
-        .to_string();
+    let expected_collateral = NearToken::from_near(5).as_yoctonear().to_string();
     assert_eq!(
-        request_data
-            .get("collateral")
-            .and_then(|v| v.as_str()),
+        request_data.get("collateral").and_then(|v| v.as_str()),
         Some(expected_collateral.as_str())
     );
     assert_eq!(

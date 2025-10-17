@@ -5,11 +5,11 @@ mod test_utils;
 
 use near_sdk::{json_types::U128, Gas, NearToken};
 use serde_json::json;
-use vault::types::APPLY_COUNTER_OFFER_ACTION;
 use test_utils::{
     create_test_validator, initialize_test_token, initialize_test_vault,
     register_account_with_token, UnstakeEntry, VaultViewState, VAULT_CALL_GAS,
 };
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 
 // TODO: Add integration coverage for undelegate lock contention once a mock validator that
 // delays callbacks is available.

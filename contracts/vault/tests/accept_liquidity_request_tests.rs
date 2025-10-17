@@ -3,11 +3,11 @@
 use near_sdk::{json_types::U128, NearToken};
 use near_workspaces::{network::Sandbox, Account, Worker};
 use serde_json::{json, Value};
-use vault::types::APPLY_COUNTER_OFFER_ACTION;
 use test_utils::{
     create_test_validator, get_usdc_balance, initialize_test_token, initialize_test_vault,
     make_apply_counter_offer_msg, register_account_with_token, VaultViewState, VAULT_CALL_GAS,
 };
+use vault::types::APPLY_COUNTER_OFFER_ACTION;
 
 #[path = "test_utils.rs"]
 mod test_utils;
