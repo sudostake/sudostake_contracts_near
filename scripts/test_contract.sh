@@ -91,6 +91,7 @@ INTEGRATION_BUILD_FEATURES=()
 INTEGRATION_TEST_FEATURES=()
 NEEDS_PREPARE_RES=false
 INTEGRATION_TEST_TARGETS=()
+INTEGRATION_TEST_LABELS=()
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "❌ cargo is required to run tests." >&2
@@ -128,6 +129,12 @@ if [[ -n "${SUITE_PATTERN}" && -d "${TESTS_DIR}" ]]; then
     test_file="$(basename "${test_path}")"
     test_name="${test_file%.rs}"
     INTEGRATION_TEST_TARGETS+=("${test_name}")
+    label="${test_name%_tests}"
+    if [[ -z "${label}" || "${label}" == "${test_name}" ]]; then
+      INTEGRATION_TEST_LABELS+=("${test_name}")
+    else
+      INTEGRATION_TEST_LABELS+=("${label}")
+    fi
   done < <(find "${TESTS_DIR}" -maxdepth 1 -type f -iname "*${SUITE_PATTERN}*.rs" | sort)
 fi
 
@@ -195,7 +202,11 @@ if "${RUN_UNIT}"; then
     unit_cmd+=("${EXTRA_ARGS[@]}")
   fi
   "${unit_cmd[@]}"
-  echo "✅ Unit tests passed for ${CRATE}."
+  if [[ -n "${SUITE_PATTERN}" ]]; then
+    echo "✅ Unit tests passed for ${CRATE} (${SUITE_PATTERN})."
+  else
+    echo "✅ Unit tests passed for ${CRATE}."
+  fi
 fi
 
 if "${RUN_INTEGRATION}"; then
@@ -288,5 +299,12 @@ EOF
   RUST_TEST_THREADS="${RUST_TEST_THREADS:-1}" \
     RUSTFLAGS="-C panic=unwind" \
     "${test_cmd[@]}"
-  echo "✅ Integration tests passed for ${CRATE}."
+  if ((${#INTEGRATION_TEST_TARGETS[@]} > 0)); then
+    targets_readable="$(IFS=,; echo "${INTEGRATION_TEST_LABELS[*]}")"
+    echo "✅ Integration tests passed for ${CRATE} (${targets_readable})."
+  elif [[ -n "${SUITE_PATTERN}" ]]; then
+    echo "✅ Integration tests passed for ${CRATE} (${SUITE_PATTERN})."
+  else
+    echo "✅ Integration tests passed for ${CRATE}."
+  fi
 fi
