@@ -81,7 +81,7 @@ if [[ "${RUN_UNIT}" = false && "${RUN_INTEGRATION}" = false ]]; then
   RUN_INTEGRATION=true
 fi
 
-MODULE="${MODULE,,}"
+MODULE="$(printf '%s' "${MODULE}" | tr '[:upper:]' '[:lower:]')"
 
 RUST_FALLBACK_VERSION="1.86.0"
 TOOLCHAIN_OVERRIDE=""
