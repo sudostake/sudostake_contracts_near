@@ -138,7 +138,7 @@ if [[ -d "${TESTS_DIR}" ]]; then
   while IFS= read -r test_path; do
     test_file="$(basename "${test_path}")"
     case "${test_file}" in
-      *_tests.rs|test_*.rs) ;;
+      *_tests.rs|*_test.rs|test_*.rs) ;;
       *) continue ;;
     esac
 
