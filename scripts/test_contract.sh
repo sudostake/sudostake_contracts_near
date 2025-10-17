@@ -157,8 +157,10 @@ detect_toolchain_override() {
   fi
 
   if ! command -v rustup >/dev/null 2>&1; then
-    echo "⚠️  rustup not found; skipping automatic Rust ${RUST_FALLBACK_VERSION} fallback."
-    echo "   You can manually set the toolchain override by exporting CARGO_NEAR_TOOLCHAIN_OVERRIDE=<toolchain> before running this script."
+    cat <<EOF
+⚠️  rustup not found; skipping automatic Rust ${RUST_FALLBACK_VERSION} fallback.
+   You can manually set the toolchain override by exporting CARGO_NEAR_TOOLCHAIN_OVERRIDE=<toolchain> before running this script.
+EOF
     return
   fi
 
@@ -245,12 +247,14 @@ EOF
   fi
 
   if ! command -v wasm-opt >/dev/null 2>&1; then
-    echo "❌ wasm-opt not found. Install Binaryen using your package manager:" >&2
-    echo "    macOS:                 brew install binaryen" >&2
-    echo "    Ubuntu/Debian:         sudo apt install binaryen" >&2
-    echo "    Fedora/RHEL/CentOS:    sudo dnf install binaryen" >&2
-    echo "    RHEL/CentOS (legacy):  sudo yum install binaryen" >&2
-    echo "    Arch Linux:            sudo pacman -S binaryen" >&2
+    cat >&2 <<'EOF'
+❌ wasm-opt not found. Install Binaryen using your package manager:
+    macOS:                 brew install binaryen
+    Ubuntu/Debian:         sudo apt install binaryen
+    Fedora/RHEL/CentOS:    sudo dnf install binaryen
+    RHEL/CentOS (legacy):  sudo yum install binaryen
+    Arch Linux:            sudo pacman -S binaryen
+EOF
     exit 1
   fi
 
