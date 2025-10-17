@@ -38,8 +38,6 @@ impl Vault {
                 .expect("No active offer to cancel");
 
             if offers_map.is_empty() {
-                // Explicitly clear storage of counter offers when map becomes empty.
-                offers_map.clear();
                 emptied = true;
             }
 
