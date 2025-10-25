@@ -173,3 +173,50 @@ async fn test_claim_vault_rejects_self_claim() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_claim_vault_cannot_be_claimed_twice() -> anyhow::Result<()> {
+    let (_, root, first_buyer) = setup_sandbox_and_accounts().await?;
+    let second_buyer = root
+        .create_subaccount("secondbuyer")
+        .initial_balance(NearToken::from_near(10))
+        .transact()
+        .await?
+        .into_result()?;
+
+    let vault = test_utils::initialize_test_vault_on_sub_account(&root)
+        .await?
+        .contract;
+
+    let storage_cost: U128 = vault.view("view_storage_cost").await?.json()?;
+
+    root.call(vault.id(), "list_for_takeover")
+        .deposit(NearToken::from_yoctonear(1))
+        .transact()
+        .await?
+        .into_result()?;
+
+    first_buyer
+        .call(vault.id(), "claim_vault")
+        .deposit(NearToken::from_yoctonear(storage_cost.0))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?
+        .into_result()?;
+
+    let outcome = second_buyer
+        .call(vault.id(), "claim_vault")
+        .deposit(NearToken::from_yoctonear(storage_cost.0))
+        .gas(VAULT_CALL_GAS)
+        .transact()
+        .await?;
+
+    assert!(outcome.is_failure(), "Second claim should be rejected");
+    let err = outcome.into_result().unwrap_err().to_string();
+    assert!(
+        err.contains("Vault is not listed for takeover"),
+        "Unexpected error message: {err}"
+    );
+
+    Ok(())
+}

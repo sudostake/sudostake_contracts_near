@@ -6,7 +6,7 @@ use crate::{
     types::{ProcessingState, RefundEntry},
 };
 use near_sdk::{test_utils::get_logs, testing_env, NearToken, PromiseError};
-use test_utils::{alice, get_context, owner};
+use test_utils::{alice, carol, get_context, owner};
 
 #[test]
 fn test_claim_vault_starts_promise_transfer() {
@@ -185,5 +185,53 @@ fn test_on_claim_vault_failed() {
         vault.processing_state,
         ProcessingState::Idle,
         "Processing lock should be released after failure"
+    );
+}
+
+#[test]
+fn test_on_claim_vault_stale_relists_and_refunds() {
+    let old_owner = owner();
+    let new_owner = alice();
+    let replacement_owner = carol();
+    let amount: u128 = 5_000_000_000_000_000_000_000;
+
+    let context = get_context(old_owner.clone(), NearToken::from_near(10), None);
+    testing_env!(context);
+
+    let mut vault = Vault::new(old_owner.clone(), 0, 1);
+    vault.is_listed_for_takeover = true;
+    vault.processing_state = ProcessingState::ClaimVault;
+
+    // Simulate an external ownership change while the transfer was in flight
+    vault.owner = replacement_owner.clone();
+
+    vault.on_claim_vault_complete(old_owner.clone(), new_owner.clone(), amount, Ok(()));
+
+    assert_eq!(
+        vault.owner, replacement_owner,
+        "Ownership should remain with the latest on-chain owner"
+    );
+    assert!(
+        vault.is_listed_for_takeover,
+        "Vault should be relisted after stale claim"
+    );
+
+    let refunds: Vec<(u64, RefundEntry)> = vault.refund_list.iter().collect();
+    assert_eq!(
+        refunds.len(),
+        1,
+        "Refund entry should be recorded for claimant"
+    );
+    let (_, refund) = &refunds[0];
+    assert_eq!(refund.proposer, new_owner, "Refund must target claimant");
+    assert_eq!(
+        refund.amount.0, amount,
+        "Refund amount should match takeover price"
+    );
+
+    assert_eq!(
+        vault.processing_state,
+        ProcessingState::Idle,
+        "Processing lock should be released after stale resolution"
     );
 }
