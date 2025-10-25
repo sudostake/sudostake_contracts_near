@@ -29,6 +29,8 @@ impl Vault {
         let caller = env::predecessor_account_id();
         assert_eq!(caller, self.owner, "Only the vault owner can withdraw");
 
+        self.ensure_processing_idle();
+
         // ✅ Enforce withdrawal rules based on liquidity state and token
         self.ensure_owner_can_withdraw(token_address.as_ref());
 
