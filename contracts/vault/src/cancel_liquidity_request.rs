@@ -32,6 +32,8 @@ impl Vault {
             "Cannot cancel after an offer has been accepted"
         );
 
+        self.ensure_processing_idle();
+
         // Refund all counter offers
         self.refund_all_counter_offers(token);
 

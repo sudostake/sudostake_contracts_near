@@ -1,7 +1,7 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::contract::Vault;
+use crate::{contract::Vault, types::ProcessingState};
 use near_sdk::{test_utils::get_logs, testing_env, NearToken};
 use test_utils::{alice, get_context, owner};
 
@@ -69,4 +69,20 @@ fn test_list_for_takeover_fails_if_already_listed() {
     let mut vault = Vault::new(owner(), 0, 1);
     vault.list_for_takeover();
     vault.list_for_takeover(); // triggers panic
+}
+
+#[test]
+#[should_panic(expected = "Vault busy with ClaimVault")]
+fn test_list_for_takeover_rejects_during_pending_takeover() {
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.processing_state = ProcessingState::ClaimVault;
+
+    vault.list_for_takeover();
 }

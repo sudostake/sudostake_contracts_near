@@ -11,7 +11,11 @@ use test_utils::{alice, get_context, insert_refund_entry, owner};
 #[test]
 fn owner_can_withdraw_near_successfully() {
     // Set up context with vault owner and 5 NEAR in balance
-    let context = get_context(owner(), NearToken::from_near(5), None);
+    let context = get_context(
+        owner(),
+        NearToken::from_near(5),
+        Some(NearToken::from_yoctonear(1)),
+    );
     testing_env!(context);
 
     // Initialize the vault
@@ -29,7 +33,11 @@ fn owner_can_withdraw_near_successfully() {
 #[should_panic(expected = "Not enough NEAR balance")]
 fn withdraw_near_insufficient_balance_should_panic() {
     // Set up context with 1 NEAR in the vault
-    let context = get_context(owner(), NearToken::from_near(1), None);
+    let context = get_context(
+        owner(),
+        NearToken::from_near(1),
+        Some(NearToken::from_yoctonear(1)),
+    );
     testing_env!(context);
 
     // Initialize the vault
@@ -48,7 +56,11 @@ fn withdraw_near_insufficient_balance_should_panic() {
 fn non_owner_cannot_withdraw_should_panic() {
     // Set up context with `alice` as the caller
     // Vault account has 10 NEAR in balance
-    let context = get_context(alice(), NearToken::from_near(10), None);
+    let context = get_context(
+        alice(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
     testing_env!(context);
 
     // Initialize the vault with a different owner (`owner`)
@@ -67,7 +79,11 @@ fn non_owner_cannot_withdraw_should_panic() {
 #[should_panic(expected = "Cannot withdraw while there are pending refund entries")]
 fn test_disallow_withdrawal_if_refund_list_not_empty() {
     // Setup context
-    let context = get_context(owner(), NearToken::from_near(5), None);
+    let context = get_context(
+        owner(),
+        NearToken::from_near(5),
+        Some(NearToken::from_yoctonear(1)),
+    );
     testing_env!(context);
 
     // Create vault

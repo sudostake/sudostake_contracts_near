@@ -29,6 +29,8 @@ impl Vault {
             "Cannot cancel after offer is accepted"
         );
 
+        self.ensure_processing_idle();
+
         let caller = env::predecessor_account_id();
 
         // Remove caller's offer and persist remaining offers (if any).

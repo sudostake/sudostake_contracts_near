@@ -25,4 +25,6 @@ pub enum ProcessingState {
     RepayLoan = 5,
     /// Vault is currently processing lender claims during liquidation.
     ProcessClaims = 6,
+    /// Vault takeover (claim_vault) is currently in flight.
+    ClaimVault = 7,
 }

@@ -14,6 +14,8 @@ impl FungibleTokenReceiver for Vault {
         amount: U128,
         msg: String,
     ) -> PromiseOrValue<U128> {
+        self.ensure_processing_idle();
+
         log_event!(
             "ft_on_transfer",
             near_sdk::serde_json::json!({

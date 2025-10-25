@@ -29,6 +29,8 @@ impl Vault {
             "Only the vault owner can accept a counter offer"
         );
 
+        self.ensure_processing_idle();
+
         require!(
             self.accepted_offer.is_none(),
             "Liquidity request already accepted"

@@ -278,6 +278,32 @@ impl Vault {
         self.unstake_entries.insert(&validator, &entry);
     }
 
+    fn refresh_processing_state_if_stale(&mut self, now: u64) {
+        if self.processing_state == ProcessingState::Idle {
+            return;
+        }
+
+        let elapsed = now.saturating_sub(self.processing_since);
+        if elapsed >= LOCK_TIMEOUT {
+            self.processing_state = ProcessingState::Idle;
+            self.processing_since = 0;
+        }
+    }
+
+    /// Ensures that no other long-running operation is currently holding the processing lock.
+    /// Releases stale locks automatically and returns the current block timestamp for reuse.
+    pub(crate) fn ensure_processing_idle(&mut self) -> u64 {
+        let now = env::block_timestamp();
+        self.refresh_processing_state_if_stale(now);
+
+        require!(
+            self.processing_state == ProcessingState::Idle,
+            format!("Vault busy with {:?}", self.processing_state)
+        );
+
+        now
+    }
+
     /// Attempts to acquire the global processing lock for a long-running operation (e.g., repay or claim).
     ///
     /// - Automatically releases stale locks if `LOCK_TIMEOUT` has passed.
@@ -286,20 +312,7 @@ impl Vault {
     pub(crate) fn acquire_processing_lock(&mut self, kind: ProcessingState) {
         assert!(kind != ProcessingState::Idle, "Cannot lock with Idle");
 
-        let now = env::block_timestamp();
-        // Saturating subtract guards against potential timestamp rollback, which would
-        // otherwise underflow and panic when block timestamps decrease.
-        let elapsed = now.saturating_sub(self.processing_since);
-
-        if self.processing_state != ProcessingState::Idle && elapsed >= LOCK_TIMEOUT {
-            self.processing_state = ProcessingState::Idle;
-            self.processing_since = 0;
-        }
-
-        require!(
-            self.processing_state == ProcessingState::Idle,
-            format!("Vault busy with {:?}", self.processing_state)
-        );
+        let now = self.ensure_processing_idle();
 
         self.processing_state = kind;
         self.processing_since = now;

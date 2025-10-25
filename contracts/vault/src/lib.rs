@@ -12,6 +12,7 @@ mod process_claims;
 mod repay_loan;
 mod request_liquidity;
 mod retry_refunds;
+mod takeover;
 mod transfer_ownership;
 pub mod types;
 mod undelegate;

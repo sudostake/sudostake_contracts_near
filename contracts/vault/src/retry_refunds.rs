@@ -103,6 +103,8 @@ impl Vault {
     pub fn retry_refunds(&mut self) {
         assert_one_yocto();
 
+        self.ensure_processing_idle();
+
         let caller = env::predecessor_account_id();
         let mut to_retry: Vec<(RefundId, RefundEntry)> = self
             .refund_list
