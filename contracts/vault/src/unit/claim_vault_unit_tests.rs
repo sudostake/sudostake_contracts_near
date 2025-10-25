@@ -1,7 +1,10 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::{contract::Vault, types::{ProcessingState, RefundEntry}};
+use crate::{
+    contract::Vault,
+    types::{ProcessingState, RefundEntry},
+};
 use near_sdk::{test_utils::get_logs, testing_env, NearToken, PromiseError};
 use test_utils::{alice, get_context, owner};
 
