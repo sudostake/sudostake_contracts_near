@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![cfg_attr(not(test), allow(dead_code))]
 
 use crate::contract::{Vault, VaultExt};
 use crate::log_event;
