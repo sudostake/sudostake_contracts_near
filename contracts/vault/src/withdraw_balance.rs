@@ -22,6 +22,9 @@ impl Vault {
         amount: U128,
         to: Option<AccountId>,
     ) -> Promise {
+        // Prevent access-key replays and enforce intent
+        assert_one_yocto();
+
         // Ensure that only the vault owner can call this method
         let caller = env::predecessor_account_id();
         assert_eq!(caller, self.owner, "Only the vault owner can withdraw");
@@ -37,9 +40,6 @@ impl Vault {
             let amount = NearToken::from_yoctonear(amount.0);
             return self.internal_withdraw_near(amount, recipient);
         }
-
-        // A NEP-141 token withdrawal is requested — require 1 yoctoNEAR
-        assert_one_yocto();
 
         // Extract the token contract address
         let token = token_address.unwrap();
