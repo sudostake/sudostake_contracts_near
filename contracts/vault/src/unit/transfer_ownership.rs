@@ -1,7 +1,7 @@
 #[path = "test_utils.rs"]
 mod test_utils;
 
-use crate::contract::Vault;
+use crate::{contract::Vault, types::ProcessingState};
 use near_sdk::{test_utils::get_logs, testing_env, NearToken};
 use test_utils::{alice, get_context, owner};
 
@@ -38,6 +38,22 @@ fn test_transfer_ownership_success() {
         "Expected 'ownership_transferred' log not found. Logs: {:?}",
         logs
     );
+}
+
+#[test]
+#[should_panic(expected = "Vault busy with ClaimVault")]
+fn test_transfer_ownership_rejects_during_takeover() {
+    let context = get_context(
+        owner(),
+        NearToken::from_near(10),
+        Some(NearToken::from_yoctonear(1)),
+    );
+    testing_env!(context);
+
+    let mut vault = Vault::new(owner(), 0, 1);
+    vault.processing_state = ProcessingState::ClaimVault;
+
+    vault.transfer_ownership(alice());
 }
 
 #[test]

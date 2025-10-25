@@ -20,6 +20,8 @@ impl Vault {
             "Only the vault owner can transfer ownership"
         );
 
+        self.ensure_processing_idle();
+
         // Prevent transferring to the same owner
         assert_ne!(
             new_owner, self.owner,
@@ -51,6 +53,8 @@ impl Vault {
             "Only the vault owner can list the vault for takeover"
         );
 
+        self.ensure_processing_idle();
+
         require!(
             !self.is_listed_for_takeover,
             "Vault is already listed for takeover"
@@ -79,6 +83,8 @@ impl Vault {
             self.is_listed_for_takeover,
             "Vault is not listed for takeover"
         );
+
+        self.ensure_processing_idle();
 
         self.is_listed_for_takeover = false;
 

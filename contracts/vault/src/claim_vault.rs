@@ -2,7 +2,7 @@
 
 use crate::contract::{Vault, VaultExt};
 use crate::log_event;
-use crate::types::GAS_FOR_CALLBACK;
+use crate::types::{ProcessingState, GAS_FOR_CALLBACK};
 
 use near_sdk::json_types::U128;
 use near_sdk::{env, near_bindgen, AccountId};
@@ -16,6 +16,8 @@ impl Vault {
             self.is_listed_for_takeover,
             "Vault is not listed for takeover"
         );
+
+        self.ensure_processing_idle();
 
         let caller = env::predecessor_account_id();
         require!(
@@ -33,6 +35,7 @@ impl Vault {
         let old_owner = self.owner.clone();
 
         // Prevent concurrent claims while the transfer is in flight
+        self.acquire_processing_lock(ProcessingState::ClaimVault);
         self.is_listed_for_takeover = false;
 
         // Proceed with transfer, and finalize in callback
@@ -53,6 +56,8 @@ impl Vault {
     ) {
         self.log_gas_checkpoint("on_claim_vault_complete");
 
+        let release_claim_lock = self.processing_state == ProcessingState::ClaimVault;
+
         if result.is_err() {
             log_event!(
                 "claim_vault_failed",
@@ -66,6 +71,9 @@ impl Vault {
             // Restore listing so another claimant can try again
             self.is_listed_for_takeover = true;
             let _ = self.add_refund_entry(None, new_owner, U128(amount), None, None);
+            if release_claim_lock {
+                self.release_processing_lock();
+            }
             return;
         }
 
@@ -83,6 +91,9 @@ impl Vault {
 
             self.is_listed_for_takeover = true;
             let _ = self.add_refund_entry(None, new_owner, U128(amount), None, None);
+            if release_claim_lock {
+                self.release_processing_lock();
+            }
             return;
         }
 
@@ -98,5 +109,9 @@ impl Vault {
                 "amount": amount.to_string()
             })
         );
+
+        if release_claim_lock {
+            self.release_processing_lock();
+        }
     }
 }
